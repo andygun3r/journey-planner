@@ -1,0 +1,1614 @@
+/* Mainline — "signalbox at dawn": dark control-room surface, amber live
+   readouts, violet as the operator's tool colour. Dark is the design target
+   (platform at 7am); light is a first-class alternative, not an afterthought. */
+
+:root {
+  /* Dark theme (default) */
+  --bg: oklch(0.1 0 0);
+  --surface: oklch(0.145 0.006 294);
+  --surface-2: oklch(0.185 0.008 294);
+  --border: oklch(0.28 0.01 294);
+  --ink: oklch(0.93 0.005 294);
+  --muted: oklch(0.7 0.012 294);
+  --primary: oklch(0.62 0.15 294);
+  --primary-strong: oklch(0.7 0.14 294);
+  --on-primary: oklch(0.985 0 0);
+  --accent: oklch(0.8 0.15 78); /* departure-board amber: live data only */
+  --ok: oklch(0.78 0.13 155);
+  --warn: oklch(0.79 0.14 75);
+  --danger: oklch(0.7 0.19 22);
+  --ring: oklch(0.7 0.14 294);
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-time: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: oklch(1 0 0);
+    --surface: oklch(0.965 0.004 294);
+    --surface-2: oklch(0.93 0.006 294);
+    --border: oklch(0.86 0.008 294);
+    --ink: oklch(0.19 0.012 294);
+    --muted: oklch(0.44 0.015 294);
+    --primary: oklch(0.47 0.16 294);
+    --primary-strong: oklch(0.4 0.16 294);
+    --on-primary: oklch(0.985 0 0);
+    --accent: oklch(0.52 0.13 75);
+    --ok: oklch(0.46 0.13 155);
+    --warn: oklch(0.5 0.13 70);
+    --danger: oklch(0.5 0.19 25);
+    --ring: oklch(0.47 0.16 294);
+    color-scheme: light;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+  margin: 0;
+}
+
+a {
+  color: var(--primary-strong);
+}
+
+/* ---- App shell ---- */
+
+.shell {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 0 1rem 4rem;
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 1.25rem;
+  padding: 1.1rem 0 1rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.75rem;
+}
+
+.wordmark {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.wordmark .glyph {
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.topbar-note {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+/* ---- Search panel ---- */
+
+.search-title {
+  font-size: 1.6rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-bottom: 1.25rem;
+}
+
+.search-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+.search-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+@media (max-width: 40rem) {
+  .search-grid {
+    grid-template-columns: 1fr;
+  }
+  .swap-btn {
+    justify-self: start;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  position: relative;
+}
+
+.field label {
+  font-size: 0.8125rem;
+  font-weight: 550;
+  color: var(--muted);
+}
+
+.field input {
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  min-height: 44px;
+  width: 100%;
+}
+
+.field input::placeholder {
+  color: var(--muted);
+}
+
+.field input:focus-visible,
+.btn:focus-visible,
+.swap-btn:focus-visible,
+.combo-option:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.search-row-2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: end;
+  margin-top: 0.9rem;
+}
+
+.swap-btn {
+  min-height: 44px;
+  min-width: 44px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--ink);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 150ms ease-out;
+}
+
+.swap-btn:hover {
+  background: var(--border);
+}
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0 1.4rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: var(--primary);
+  color: var(--on-primary);
+  cursor: pointer;
+  transition:
+    background 150ms ease-out,
+    transform 150ms ease-out;
+}
+
+.btn:hover {
+  background: var(--primary-strong);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ---- Typeahead combobox ---- */
+
+.combo-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  max-height: 17rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  box-shadow: 0 8px 24px oklch(0 0 0 / 0.35);
+}
+
+.combo-option {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+.combo-option[aria-selected="true"],
+.combo-option:hover {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.combo-option .crs {
+  font-family: var(--font-time);
+  font-size: 0.8125rem;
+  opacity: 0.75;
+}
+
+/* ---- Journey results ---- */
+
+.results-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.results-head h1 {
+  font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.results-head .when {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.journey-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.journey-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.journey-summary {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 0.4rem 1.1rem;
+  align-items: center;
+  padding: 0.85rem 0.25rem;
+  cursor: pointer;
+}
+
+.journey-summary::-webkit-details-marker {
+  display: none;
+}
+
+.journey-summary:hover {
+  background: var(--surface);
+}
+
+.jtime {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.35rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.jtime .live-late {
+  color: var(--warn);
+  font-size: 0.8125rem;
+  display: block;
+  font-weight: 600;
+}
+
+.jmid {
+  min-width: 0;
+}
+
+.jroute {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jmeta {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.jmeta-duration {
+  display: block;
+  margin-top: 0.1rem;
+}
+
+.day-offset {
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 650;
+  color: var(--muted);
+  vertical-align: super;
+  margin-left: 0.15rem;
+}
+
+.jmeta strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+@media (max-width: 40rem) {
+  .journey-summary {
+    grid-template-columns: auto 1fr auto;
+  }
+  .jmeta-duration {
+    grid-column: 1 / -1;
+    order: 4;
+  }
+}
+
+/* status chips — never colour alone: text always states the condition */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.chip-ok {
+  color: var(--ok);
+  border-color: color-mix(in oklch, var(--ok) 45%, transparent);
+  background: color-mix(in oklch, var(--ok) 12%, transparent);
+}
+
+.chip-warn {
+  color: var(--warn);
+  border-color: color-mix(in oklch, var(--warn) 45%, transparent);
+  background: color-mix(in oklch, var(--warn) 12%, transparent);
+}
+
+.chip-danger {
+  color: var(--danger);
+  border-color: color-mix(in oklch, var(--danger) 45%, transparent);
+  background: color-mix(in oklch, var(--danger) 14%, transparent);
+}
+
+.chip-muted {
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+/* ---- Journey detail (expanded legs) ---- */
+
+.journey-detail {
+  padding: 0.25rem 0.25rem 1.1rem;
+}
+
+.leg {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 0.9rem;
+  padding: 0.5rem 0;
+}
+
+.leg-times {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.leg-body {
+  border-left: none;
+  position: relative;
+  padding-left: 1rem;
+}
+
+.leg-body::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--primary);
+  opacity: 0.6;
+}
+
+.leg-walk .leg-body::before {
+  background: var(--muted);
+  opacity: 0.4;
+}
+
+.leg-station {
+  font-weight: 600;
+}
+
+.leg-operator {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  margin: 0.15rem 0;
+}
+
+.leg-calls {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.change-note {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  padding: 0.1rem 0 0.1rem 2rem;
+}
+
+/* ---- Notices / empty states ---- */
+
+.notice {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  padding: 1.25rem 1.4rem;
+  margin-top: 1.25rem;
+}
+
+.notice h2 {
+  font-size: 1rem;
+  font-weight: 650;
+  margin-bottom: 0.3rem;
+}
+
+.notice p {
+  margin: 0.2rem 0;
+  color: var(--muted);
+  max-width: 65ch;
+}
+
+.notice-danger {
+  border-color: color-mix(in oklch, var(--danger) 40%, transparent);
+}
+
+/* ---- Skeletons ---- */
+
+.skeleton-row {
+  height: 3.6rem;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-row::after {
+  content: "";
+  position: absolute;
+  inset: 0.9rem 0.25rem;
+  border-radius: 0.375rem;
+  background: linear-gradient(
+    100deg,
+    var(--surface) 40%,
+    var(--surface-2) 50%,
+    var(--surface) 60%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-out infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-row::after {
+    animation: none;
+    background: var(--surface);
+  }
+  .btn,
+  .swap-btn,
+  .journey-summary {
+    transition: none;
+  }
+}
+
+/* ---- Live departure board ---- */
+
+.board-intro {
+  color: var(--muted);
+  margin: -0.5rem 0 1.25rem;
+  max-width: 60ch;
+}
+
+.board-picker {
+  display: flex;
+  gap: 0.75rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.board-picker .field {
+  flex: 1 1 16rem;
+}
+
+.board-head h1 {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.board-crs {
+  font-family: var(--font-time);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.board-status-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.live-dot {
+  color: var(--ok);
+  font-weight: 650;
+  font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+}
+
+.board-refresh {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Board grid: time | destination | platform | expected */
+.board {
+  border-top: 1px solid var(--border);
+}
+
+.board-row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr 3rem 7rem;
+  gap: 0.4rem 1rem;
+  align-items: center;
+  padding: 0.7rem 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.board-row-head {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+
+.board-time {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.board-dest {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.board-dest-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-operator {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.board-plat {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: center;
+}
+
+.plat-changed {
+  color: var(--warn);
+}
+
+.plat-changed::after {
+  content: " ✱";
+  font-size: 0.7em;
+}
+
+.board-status-col {
+  text-align: right;
+  justify-self: end;
+}
+
+.board-status {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Amber is the live-data colour (departure-board flap aesthetic). */
+.status-delayed {
+  color: var(--accent);
+}
+
+.status-ontime {
+  color: var(--ok);
+}
+
+.status-cancelled {
+  color: var(--danger);
+}
+
+.status-scheduled {
+  color: var(--muted);
+}
+
+.board-row-cancelled .board-time,
+.board-row-cancelled .board-dest-name {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  opacity: 0.7;
+}
+
+@media (max-width: 34rem) {
+  .board-row {
+    grid-template-columns: 3.6rem 1fr 5.5rem;
+    grid-template-areas:
+      "time dest expected"
+      "time plat expected";
+    row-gap: 0.15rem;
+  }
+  .board-time {
+    grid-area: time;
+    align-self: center;
+    font-size: 1.15rem;
+  }
+  .board-dest {
+    grid-area: dest;
+  }
+  .board-plat-col {
+    grid-area: plat;
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .board-plat-col::before {
+    content: "Plat ";
+    font-weight: 400;
+  }
+  .board-row-head .board-plat-col::before {
+    content: none;
+  }
+  .board-status-col {
+    grid-area: expected;
+  }
+  .board-row-head {
+    grid-template-columns: 3.6rem 1fr 5.5rem;
+    grid-template-areas: "time dest expected";
+  }
+  .board-row-head .board-plat-col {
+    display: none;
+  }
+}
+
+.topnav {
+  margin-left: auto;
+  display: flex;
+  gap: 1.1rem;
+  font-size: 0.875rem;
+}
+
+.topnav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 550;
+  transition: color 150ms ease-out;
+}
+
+.topnav a:hover {
+  color: var(--ink);
+}
+
+.board-messages {
+  border: 1px solid color-mix(in oklch, var(--warn) 40%, transparent);
+  background: color-mix(in oklch, var(--warn) 8%, transparent);
+  border-radius: 0.6rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.board-messages p {
+  margin: 0.15rem 0;
+  font-size: 0.875rem;
+  color: var(--ink);
+}
+
+/* Clickable board rows (link to service details) */
+a.board-row-link {
+  text-decoration: none;
+  color: inherit;
+  transition: background 150ms ease-out;
+}
+
+a.board-row-link:hover {
+  background: var(--surface);
+}
+
+a.board-row-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.board-messages-danger {
+  border-color: color-mix(in oklch, var(--danger) 45%, transparent);
+  background: color-mix(in oklch, var(--danger) 10%, transparent);
+}
+
+/* ---- Service calling pattern ---- */
+
+.calls {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.call {
+  display: grid;
+  grid-template-columns: 4rem 1fr auto auto;
+  gap: 0.4rem 1rem;
+  align-items: center;
+  padding: 0.6rem 0.25rem;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.call-plat {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--ink);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.call-plat-label {
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.call-time {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.call-name {
+  font-weight: 550;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.call-here {
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+}
+
+.call-here .call-name {
+  font-weight: 700;
+}
+
+.call-here-tag {
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--primary-strong);
+}
+
+.call-cancelled .call-time,
+.call-cancelled .call-name {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.call-status-col {
+  justify-self: end;
+  text-align: right;
+}
+
+.call-status {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---- Disruptions ---- */
+
+.disruptions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.disruption {
+  border: 1px solid color-mix(in oklch, var(--warn) 40%, transparent);
+  background: color-mix(in oklch, var(--warn) 8%, transparent);
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.9rem;
+}
+
+.disruption[open] {
+  background: color-mix(in oklch, var(--warn) 5%, transparent);
+}
+
+.disruption-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.disruption-summary::-webkit-details-marker {
+  display: none;
+}
+
+.disruption-icon {
+  font-size: 0.9rem;
+}
+
+.disruption-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.disruption-title {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.disruption-ops {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.disruption-body {
+  margin: 0.6rem 0 0.2rem;
+  color: var(--ink);
+  font-size: 0.875rem;
+  max-width: 68ch;
+}
+
+.disruption-block {
+  margin: 0 0 0.6rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.disruption-block-heading {
+  margin: 0.8rem 0 0.25rem;
+  font-weight: 650;
+  color: var(--ink);
+  font-size: 0.8125rem;
+  letter-spacing: 0.01em;
+}
+
+.disruption-block a {
+  color: var(--primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.disruption-more {
+  display: inline-block;
+  margin-top: 0.3rem;
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+/* Per-operator service indicator chip on service pages */
+.service-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+}
+
+.service-indicator-good {
+  color: var(--ok);
+  border: 1px solid color-mix(in oklch, var(--ok) 40%, transparent);
+}
+
+.service-indicator-bad {
+  color: var(--warn);
+  border: 1px solid color-mix(in oklch, var(--warn) 45%, transparent);
+  background: color-mix(in oklch, var(--warn) 10%, transparent);
+}
+
+/* ---- Coach formation ---- */
+
+.formation {
+  margin: 1rem 0;
+}
+
+.formation-head {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+
+.coaches {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.coach {
+  min-width: 2.1rem;
+  height: 2.1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-family: var(--font-time);
+  background: var(--surface);
+  position: relative;
+  overflow: hidden;
+}
+
+.coach-first {
+  border-color: color-mix(in oklch, var(--accent) 50%, var(--border));
+}
+
+.coach-num {
+  font-weight: 600;
+  z-index: 1;
+}
+
+.coach-load {
+  font-size: 0.6rem;
+  color: var(--muted);
+  z-index: 1;
+}
+
+/* loading fill behind the number */
+.coach-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: color-mix(in oklch, var(--primary) 22%, transparent);
+}
+
+.board-reason {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--warn);
+  margin-top: 0.1rem;
+  max-width: 44ch;
+  line-height: 1.35;
+}
+
+.board-row-cancelled .board-reason {
+  color: var(--danger);
+}
+
+.formation-none {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+/* ---- Board 'calling at' filter ---- */
+
+.board-filter {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.board-filter .field {
+  flex: 1 1 20rem;
+  max-width: 26rem;
+}
+
+.board-filter-clear {
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  min-height: 44px;
+  padding: 0 0.9rem;
+  cursor: pointer;
+  transition: color 150ms ease-out;
+}
+
+.board-filter-clear:hover {
+  color: var(--ink);
+}
+
+.board-filter-note {
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.board-filter-note strong {
+  color: var(--ink);
+}
+
+/* ========================================================================== */
+/* Commute — editor, weekly grid, holidays, dashboard                         */
+/* ========================================================================== */
+
+.commute-page {
+  display: block;
+}
+
+/* Button variants (base .btn already carries the primary look) */
+.btn-primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.btn-danger-outline {
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+.btn-danger-outline:hover {
+  background: color-mix(in oklch, var(--danger) 12%, transparent);
+}
+.btn-link-danger {
+  background: none;
+  border: none;
+  color: var(--danger);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+  min-height: 44px;
+}
+.btn-link-danger:hover {
+  text-decoration: underline;
+}
+
+.form-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+  font-weight: 550;
+  margin-top: 0.9rem;
+}
+
+/* ---- Editor ---- */
+
+.commute-editor {
+  margin-top: 0.5rem;
+}
+.editor-top {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem;
+  align-items: end;
+}
+.editor-top .field:first-child {
+  grid-column: 1 / -1;
+}
+.editor-subhead {
+  font-size: 1rem;
+  font-weight: 650;
+  margin: 1.75rem 0 0.35rem;
+  color: var(--ink);
+}
+.editor-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+  max-width: 60ch;
+}
+.editor-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+/* ---- Weekly grid ---- */
+
+.weekly-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.day-row {
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  overflow: hidden;
+}
+.day-row.day-off {
+  background: transparent;
+}
+.day-head {
+  padding: 0.6rem 0.85rem;
+}
+.day-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  cursor: pointer;
+  min-height: 32px;
+}
+.day-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--primary);
+}
+.day-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.day-name-short {
+  display: none;
+}
+.day-body {
+  padding: 0 0.85rem 0.9rem;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 0.9rem;
+  padding-top: 0.85rem;
+}
+.day-work {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 0.75rem;
+  align-items: end;
+}
+.day-windows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.window {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.7rem 0.75rem;
+  margin: 0;
+}
+.window legend {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0 0.35rem;
+}
+.window-times {
+  display: flex;
+  gap: 0.6rem;
+}
+.window-times label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  flex: 1;
+}
+.window-times input[type="time"] {
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.5rem;
+  min-height: 44px;
+}
+
+/* ---- Holiday manager ---- */
+
+.holiday-manager {
+  display: grid;
+  grid-template-columns: minmax(0, 20rem) 1fr;
+  gap: 2rem;
+  align-items: start;
+  margin-top: 0.5rem;
+}
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+.cal-month {
+  font-weight: 650;
+  color: var(--ink);
+}
+.cal-nav {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--ink);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+.cal-nav:hover {
+  background: var(--border);
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+.cal-weekday {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding-bottom: 0.3rem;
+}
+.cal-cell {
+  aspect-ratio: 1;
+  min-height: 40px;
+  border: 1px solid transparent;
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 0.4rem;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.cal-cell:hover {
+  border-color: var(--primary);
+}
+.cal-blank {
+  background: transparent;
+  cursor: default;
+}
+.cal-today {
+  border-color: var(--border);
+  font-weight: 700;
+}
+.cal-selected {
+  background: var(--primary);
+  color: var(--on-primary);
+  border-color: var(--primary);
+}
+.holiday-add {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.holiday-rows {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.holiday-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+.holiday-dates {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.holiday-label-text {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.holiday-row .btn-link-danger {
+  margin-left: auto;
+}
+
+/* ---- Dashboard cards (interim) ---- */
+
+.commute-cards {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.commute-card {
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  padding: 0.9rem 1rem;
+}
+.commute-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.commute-card-head h2 {
+  font-size: 1.05rem;
+  font-weight: 650;
+  margin: 0;
+}
+.commute-card-home,
+.commute-card-days {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0.3rem 0 0;
+}
+
+@media (max-width: 40rem) {
+  .editor-top {
+    grid-template-columns: 1fr;
+  }
+  .day-work,
+  .day-windows {
+    grid-template-columns: 1fr;
+  }
+  .day-name-full {
+    display: none;
+  }
+  .day-name-short {
+    display: inline;
+  }
+  .holiday-manager {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Live service progress tracker ---- */
+
+.track-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid color-mix(in oklch, var(--ok) 40%, transparent);
+  background: color-mix(in oklch, var(--ok) 9%, transparent);
+  border-radius: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.track-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--ok);
+  flex: none;
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--ok) 60%, transparent);
+  animation: track-pulse 2s ease-out infinite;
+}
+
+@keyframes track-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--ok) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 0.5rem transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.track-text strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+/* Countdown pill */
+.countdown {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  font-size: 0.9rem;
+  color: var(--accent);
+}
+
+.countdown-due {
+  color: var(--ok);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.countdown-far {
+  color: var(--muted);
+}
+
+.status-departed {
+  color: var(--muted);
+}
+
+/* Progress rail: a vertical line with a node per stop */
+.calls-tracked .call {
+  grid-template-columns: 1.4rem 4rem 1fr auto auto;
+}
+
+.call-marker {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  justify-content: center;
+}
+
+/* the connecting line */
+.call-marker::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+
+.calls-tracked .call:first-child .call-marker::before {
+  top: 50%;
+}
+
+.calls-tracked .call:last-child .call-marker::before {
+  bottom: 50%;
+}
+
+.call-node {
+  position: relative;
+  z-index: 1;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  align-self: center;
+}
+
+/* departed stops: filled node + dimmed text; the line above them is "done" */
+.call-departed .call-node {
+  background: var(--muted);
+  border-color: var(--muted);
+}
+
+.call-departed .call-marker::before {
+  background: color-mix(in oklch, var(--muted) 55%, var(--border));
+}
+
+.call-departed .call-name,
+.call-departed .call-time {
+  color: var(--muted);
+}
+
+/* current stop: the live position, highlighted */
+.call-current .call-node {
+  background: var(--ok);
+  border-color: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ok) 22%, transparent);
+}
+
+.call-current {
+  background: color-mix(in oklch, var(--ok) 7%, transparent);
+}
+
+.call-current .call-name {
+  font-weight: 700;
+}
+
+/* the scheduled time shown small under an actual time */
+.call-sched-was {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-decoration: line-through;
+  font-weight: 400;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track-dot {
+    animation: none;
+  }
+}
+
+.track-nr {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.track-nr strong {
+  color: var(--ink);
+}

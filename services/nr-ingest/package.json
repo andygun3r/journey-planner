@@ -1,0 +1,26 @@
+{
+  "name": "@mainline/nr-ingest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "probe": "tsx src/probe.ts",
+    "start": "tsx src/index.ts",
+    "reference": "tsx src/index.ts reference",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@mainline/db": "workspace:*",
+    "@mainline/shared": "workspace:*",
+    "drizzle-orm": "^0.44.7",
+    "ioredis": "^5.6.0",
+    "stompit": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/stompit": "^0.26.6",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0"
+  }
+}

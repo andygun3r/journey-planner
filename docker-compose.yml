@@ -1,0 +1,146 @@
+name: mainline
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: mainline
+      POSTGRES_PASSWORD: mainline
+      POSTGRES_DB: mainline
+    ports:
+      # Host port 5434: 5432/5433 are held by other local projects.
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mainline"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      # Host port 6380: 6379 is held by another local project.
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      DATABASE_URL: postgres://mainline:mainline@postgres:5432/mainline
+      REDIS_URL: redis://redis:6379
+      MOTIS_URL: http://motis:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Enabled once the ETL has produced /data/gtfs/gb-rail.gtfs.zip:
+  #   docker compose --profile routing up -d motis
+  # VERIFY ON FIRST INTEGRATION: image tag pullability and the import/server
+  # invocation for this release (config.yml keys move between versions).
+  # GHCR has no v2 version tags (they stop at 0.8.x); v2 ships as :latest.
+  # Digest recorded below after first pull for reproducibility.
+  motis:
+    image: ghcr.io/motis-project/motis:latest
+    profiles: ["routing"]
+    # import writes ./data relative to config.yml (both live in /data),
+    # so the server must resolve them from that working directory.
+    working_dir: /data
+    command: ["/motis", "server"]
+    volumes:
+      - motis-data:/data
+      - ./data/gtfs:/input:ro
+    ports:
+      - "8080:8080"
+
+  # Run-to-completion ETL: docker compose --profile etl run --rm etl timetable
+  etl:
+    build:
+      context: .
+      dockerfile: services/etl/Dockerfile
+    profiles: ["etl"]
+    environment:
+      DATABASE_URL: postgres://mainline:mainline@postgres:5432/mainline
+      ETL_MYSQL_URL: mysql://root:etl@mariadb:3306/dtd
+      ETL_ARCHIVE_DIR: /data/dtd/archive
+      ETL_GTFS_OUT_DIR: /data/gtfs
+      NRDP_USERNAME: ${NRDP_USERNAME:-}
+      NRDP_PASSWORD: ${NRDP_PASSWORD:-}
+    volumes:
+      - ./data/dtd:/data/dtd
+      - ./data/gtfs:/data/gtfs
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  # MariaDB scratch for dtd2mysql only — canonical storage is Postgres.
+  mariadb:
+    image: mariadb:11
+    profiles: ["etl"]
+    environment:
+      MARIADB_ROOT_PASSWORD: etl
+      MARIADB_DATABASE: dtd
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Darwin real-time ingester (RDM Kafka -> Postgres + Redis pub/sub).
+  # The board works without it (LDBWS is primary); this is the deep feed for
+  # journey-wide live status and commute alerts. Needs RDM_KAFKA_* in .env.
+  darwin-ingest:
+    build:
+      context: .
+      dockerfile: services/darwin-ingest/Dockerfile
+    environment:
+      DATABASE_URL: postgres://mainline:mainline@postgres:5432/mainline
+      REDIS_URL: redis://redis:6379
+      RDM_KAFKA_BOOTSTRAP_SERVERS: ${RDM_KAFKA_BOOTSTRAP_SERVERS:-}
+      RDM_KAFKA_TOPIC: ${RDM_KAFKA_TOPIC:-}
+      RDM_KAFKA_GROUP_ID: ${RDM_KAFKA_GROUP_ID:-}
+      RDM_CONSUMER_KEY: ${RDM_CONSUMER_KEY:-}
+      RDM_CONSUMER_SECRET: ${RDM_CONSUMER_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Network Rail ingester (TRUST movements + Train Describer over STOMP ->
+  # Postgres). Adds between-station live positioning on top of Darwin.
+  # Needs NETWORKRAIL_* in .env. Load reference data first:
+  #   docker compose run --rm nr-ingest pnpm tsx src/index.ts reference
+  nr-ingest:
+    build:
+      context: .
+      dockerfile: services/nr-ingest/Dockerfile
+    environment:
+      DATABASE_URL: postgres://mainline:mainline@postgres:5432/mainline
+      REDIS_URL: redis://redis:6379
+      NETWORKRAIL_USERNAME: ${NETWORKRAIL_USERNAME:-}
+      NETWORKRAIL_PASSWORD: ${NETWORKRAIL_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  motis-data:

@@ -1,0 +1,21 @@
+{
+  "name": "mainline",
+  "private": true,
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "db:generate": "pnpm --filter @mainline/db generate",
+    "db:migrate": "pnpm --filter @mainline/db migrate",
+    "etl:timetable": "pnpm --filter @mainline/etl timetable"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.9.0"
+  }
+}
