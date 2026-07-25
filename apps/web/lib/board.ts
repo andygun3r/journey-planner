@@ -2,6 +2,7 @@ import { createEngine, type RawDeparture } from "@mainline/routing-adapter";
 import { normaliseCrs, operatorFromRouteName } from "@mainline/shared";
 import { enrichBoardWithDarwin } from "./darwin-board";
 import { enrichBoardWithFormation } from "./darwin-formation";
+import { enrichBoardWithPosition } from "./board-position";
 import { type Disruption, fetchStationDisruptions } from "./disruptions";
 import { fetchLdbwsBoard, ldbwsConfigured } from "./ldbws";
 import { stationName } from "./stations";
@@ -41,6 +42,20 @@ export interface BoardDeparture {
   coaches?: Coach[];
   /** True once real-time data has been applied to this row. */
   hasLive: boolean;
+  /** Live "where is it right now" from Network Rail (correlated by rid). */
+  position?: BoardPosition;
+}
+
+/** Live running position for a board row, from the Network Rail overlay. */
+export interface BoardPosition {
+  /** Human status: where the train physically is at the moment. */
+  label: string;
+  /** Seconds late (+) / early (−) at the last report. */
+  latenessMinutes?: number;
+  /** How long ago Network Rail last reported it, in seconds. */
+  reportedAgoSeconds?: number;
+  /** True while the train hasn't left its origin yet. */
+  approaching: boolean;
 }
 
 export interface BoardResult {
@@ -125,8 +140,10 @@ export async function getBoard(
           d.destinationName = await stationName(d.destinationCrs);
         }
       }
-      // Fill coach formation from Darwin where LDBWS didn't provide it.
-      const departures = await enrichBoardWithFormation(crs, ldbws.departures);
+      // Fill coach formation from Darwin where LDBWS didn't provide it, then
+      // overlay the live Network Rail running position (where the train is now).
+      const withFormation = await enrichBoardWithFormation(crs, ldbws.departures);
+      const departures = await enrichBoardWithPosition(crs, withFormation);
       return {
         ok: true,
         board: {

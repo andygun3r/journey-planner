@@ -49,6 +49,37 @@ function num(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+/**
+ * TRUST `actual_timestamp` is epoch-ms but expressed in UK LOCAL wall-clock,
+ * not true UTC — so during BST every timestamp reads one hour ahead (verified
+ * live: a report made at 06:45 UTC carries 07:46). Correct it to a true UTC
+ * instant by subtracting London's offset for that moment.
+ */
+function londonOffsetMs(utcApprox: number): number {
+  const d = new Date(utcApprox);
+  const p = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const g = (t: string) => Number(p.find((x) => x.type === t)!.value);
+  const asUtc = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour"), g("minute"), g("second"));
+  return asUtc - d.getTime();
+}
+
+/** Correct a TRUST local-wall-clock epoch-ms to a true UTC instant. */
+function trustTsToUtcMs(localMs: number): number {
+  // The stored value IS local-as-if-UTC; subtract the London offset at that
+  // wall time to recover the real instant. One iteration is exact except in the
+  // hour around a DST switch, which we accept.
+  return localMs - londonOffsetMs(localMs);
+}
+
 /** timetable_variation is minutes; variation_status gives the sign. */
 function lateness(body: Record<string, unknown>): number | undefined {
   const variation = num(body.timetable_variation);
@@ -84,7 +115,7 @@ export function parseMovements(value: string): NrEvent[] {
           trainId,
           eventType,
           stanox: String(stanox).trim(),
-          actualTimestampMs: ts,
+          actualTimestampMs: trustTsToUtcMs(ts),
           platform: (body.platform as string | undefined)?.trim() || undefined,
           latenessSeconds: lateness(body),
           nextStanox: (body.next_report_stanox as string | undefined)?.trim() || undefined,
@@ -127,7 +158,8 @@ export function parseTd(value: string): BerthStep[] {
       tdArea: m.area_id.trim(),
       fromBerth: m.from?.trim(),
       toBerth: m.to?.trim(),
-      timestampMs: Number.isFinite(ts) ? ts : Date.now(),
+      // TD `time` is the same UK-local-as-epoch as TRUST — correct to true UTC.
+      timestampMs: Number.isFinite(ts) ? trustTsToUtcMs(ts) : Date.now(),
     });
   }
   return steps;

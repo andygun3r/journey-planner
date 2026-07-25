@@ -175,7 +175,8 @@ function windowFor(leg: CommuteLegRecord, dir: Direction): { start: string; end:
   const start = dir === "am" ? leg.amWindowStart : leg.pmWindowStart;
   const end = dir === "am" ? leg.amWindowEnd : leg.pmWindowEnd;
   if (start == null || end == null) return null;
-  return { start, end };
+  // Postgres `time` columns come back as HH:MM:SS; normalise to HH:MM.
+  return { start: start.slice(0, 5), end: end.slice(0, 5) };
 }
 
 /**
@@ -251,7 +252,8 @@ export function resolveActiveLeg(
  * time — used to seed routing-engine `plan()` queries at a window's start.
  * Determines the London UTC offset for that date via Intl and applies it.
  */
-export function londonWallTimeToIso(ymd: string, hhmm: string): string {
+export function londonWallTimeToIso(ymd: string, time: string): string {
+  const hhmm = time.slice(0, 5); // tolerate HH:MM:SS from Postgres `time`
   const [h, m] = hhmm.split(":").map(Number);
   // Find London's offset (minutes) on that date by formatting a probe instant.
   const probe = new Date(`${ymd}T${hhmm}:00Z`);

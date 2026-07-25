@@ -41,3 +41,25 @@ export async function getStations(): Promise<StationEntry[]> {
 export async function stationName(crs: string): Promise<string> {
   return (await load()).byCrs.get(crs.toUpperCase()) ?? crs.toUpperCase();
 }
+
+/**
+ * All station coordinates, for the live map's static backdrop. Cached
+ * separately from the name list; returns [] if the table isn't ready.
+ */
+let coordCache: { pts: Array<[number, number]>; at: number } | null = null;
+
+export async function getStationCoords(): Promise<Array<[number, number]>> {
+  if (coordCache && Date.now() - coordCache.at < TTL_MS) return coordCache.pts;
+  try {
+    const rows = await getDb()
+      .select({ lat: station.lat, lon: station.lon })
+      .from(station);
+    const pts = rows
+      .filter((r): r is { lat: number; lon: number } => r.lat != null && r.lon != null)
+      .map((r) => [Number(r.lat.toFixed(4)), Number(r.lon.toFixed(4))] as [number, number]);
+    coordCache = { pts, at: Date.now() };
+    return pts;
+  } catch {
+    return [];
+  }
+}

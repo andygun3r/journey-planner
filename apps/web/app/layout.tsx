@@ -22,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav className="topnav" aria-label="Primary">
               <Link href="/">Plan a journey</Link>
               <Link href="/boards">Live departures</Link>
+              <Link href="/map">Live map</Link>
               <Link href="/commute">My commute</Link>
             </nav>
           </header>

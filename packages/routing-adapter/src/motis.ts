@@ -84,6 +84,18 @@ function fromEngineStopId(stopId: string): string {
   return stopId.startsWith(`${DATASET_TAG}_`) ? stopId.slice(DATASET_TAG.length + 1) : stopId;
 }
 
+/**
+ * MOTIS v2 returns a composite trip id, e.g. `20260725_06:44_gb-railgtfs_50711`
+ * (`<date>_<time>_<datasetTag>_<gtfsTripId>`). The bare GTFS trip id at the end
+ * is what joins to our `trip_mapping.gtfs_trip_id`. This extracts it; if the id
+ * isn't composite it's returned unchanged.
+ */
+export function gtfsTripIdFromEngine(tripId: string): string {
+  const marker = `_${DATASET_TAG}_`;
+  const at = tripId.lastIndexOf(marker);
+  return at >= 0 ? tripId.slice(at + marker.length) : tripId;
+}
+
 function toCall(place: z.infer<typeof MotisPlace>, kind: "departure" | "arrival") {
   const scheduled =
     kind === "departure"

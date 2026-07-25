@@ -205,8 +205,81 @@ export const nrTrainPosition = pgTable(
   (t) => [
     index("nr_pos_headcode_idx").on(t.headcode),
     index("nr_pos_rid_idx").on(t.rid),
+    // The live map scans for recently-reported trains.
+    index("nr_pos_reported_idx").on(t.lastReportedAt),
   ],
 );
+
+/**
+ * VSTP (Very Short Term Planning) schedules: trains planned too late for the
+ * CIF timetable (charters, engineering diversions, short-notice extras). Kept
+ * so board/journey lookups can recognise trains the static GTFS knows nothing
+ * about. `schedule` holds the full parsed location list as JSONB.
+ */
+export const nrVstpSchedule = pgTable(
+  "nr_vstp_schedule",
+  {
+    /** `${trainUid}|${startDate}|${stpIndicator}` — VSTP's natural identity. */
+    id: text("id").primaryKey(),
+    trainUid: text("train_uid").notNull(),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    stpIndicator: text("stp_indicator"),
+    /** Create | Update | Delete. */
+    transactionType: text("transaction_type"),
+    headcode: text("headcode"),
+    originTiploc: text("origin_tiploc"),
+    destTiploc: text("dest_tiploc"),
+    schedule: jsonb("schedule").notNull().default([]),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("nr_vstp_uid_idx").on(t.trainUid)],
+);
+
+/**
+ * Temporary Speed Restrictions, from the TSR feed (weekly batches per route
+ * group). Locations are STANOX — translate via nr_corpus for display.
+ */
+export const nrTsr = pgTable(
+  "nr_tsr",
+  {
+    tsrId: text("tsr_id").primaryKey(),
+    routeGroup: text("route_group"),
+    routeCode: text("route_code"),
+    fromStanox: text("from_stanox"),
+    toStanox: text("to_stanox"),
+    lineName: text("line_name"),
+    direction: text("direction"),
+    passengerSpeedMph: integer("passenger_speed_mph"),
+    freightSpeedMph: integer("freight_speed_mph"),
+    validFrom: timestamp("valid_from", { withTimezone: true }),
+    validTo: timestamp("valid_to", { withTimezone: true }),
+    reason: text("reason"),
+    raw: jsonb("raw"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("nr_tsr_route_idx").on(t.routeGroup)],
+);
+
+/**
+ * Real Time Public Performance Measure: per-operator punctuality, refreshed
+ * every minute by the RTPPM feed. Row "NATIONAL" carries the network-wide
+ * figure. `operatorCode` is Network Rail's numeric TOC id; match to Darwin
+ * operators by name.
+ */
+export const nrRtppm = pgTable("nr_rtppm", {
+  operatorCode: text("operator_code").primaryKey(),
+  operatorName: text("operator_name"),
+  total: integer("total"),
+  onTime: integer("on_time"),
+  late: integer("late"),
+  cancelVeryLate: integer("cancel_very_late"),
+  /** Today-so-far PPM percentage (0-100). */
+  ppm: real("ppm"),
+  /** Rolling last-hour PPM percentage. */
+  rollingPpm: real("rolling_ppm"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const kbIncident = pgTable("kb_incident", {
   id: text("id").primaryKey(),

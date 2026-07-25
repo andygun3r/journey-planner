@@ -1,5 +1,8 @@
 import { Redis } from "ioredis";
+import cron from "node-cron";
+import { invalidateTrackedUids, matchCancellation, matchDelay } from "./alerts.js";
 import { createKafka, kafkaTopic } from "./kafka.js";
+import { corridorsEmptyForToday, precomputeAllCorridors } from "./precompute.js";
 import { parseMessage } from "./pushport.js";
 import {
   applyDeactivation,
@@ -20,10 +23,12 @@ const redisUrl = process.env.REDIS_URL;
 const redis = redisUrl ? new Redis(redisUrl) : null;
 if (!redis) console.warn("REDIS_URL not set — running without live pub/sub");
 
-const kafka = createKafka();
 const groupId =
   process.env.RDM_KAFKA_GROUP_ID ?? process.env.RDM_CONSUMER_KEY ?? "mainline-darwin";
-const consumer = kafka.consumer({ groupId });
+
+// Created in main(); kept module-scoped so shutdown() can disconnect it. This
+// stays null on the --precompute-now path, which must not require Kafka env.
+let consumer: ReturnType<ReturnType<typeof createKafka>["consumer"]> | null = null;
 
 let processed = 0;
 let lastLog = Date.now();
@@ -38,11 +43,18 @@ async function handle(value: string): Promise<void> {
         }
         await redis.publish(`darwin:rid:${update.rid}`, "ts");
       }
+      // Commute alerting is best-effort; never let it break ingestion.
+      await matchDelay(update, redis).catch((err) =>
+        console.error("[alerts] delay match error:", (err as Error).message),
+      );
     } else if (update.kind === "schedule") {
       await applySchedule(update);
       if (redis && update.cancelled) {
         await redis.publish(`darwin:rid:${update.rid}`, "cancelled");
       }
+      await matchCancellation(update, redis).catch((err) =>
+        console.error("[alerts] cancellation match error:", (err as Error).message),
+      );
     } else if (update.kind === "deactivated") {
       await applyDeactivation(update);
     } else if (update.kind === "formation") {
@@ -60,7 +72,41 @@ async function handle(value: string): Promise<void> {
   }
 }
 
+/**
+ * Schedules the nightly commute-corridor precompute and runs it once on boot if
+ * today's corridors are missing. Isolated in its own try/catch so it can never
+ * take down the Kafka consumer — a MOTIS outage just leaves yesterday's rows.
+ */
+function scheduleCorridorPrecompute(): void {
+  if (!process.env.MOTIS_URL) {
+    console.warn("[precompute] MOTIS_URL not set — commute corridor precompute disabled");
+    return;
+  }
+
+  cron.schedule("30 2 * * *", () => {
+    void precomputeAllCorridors()
+      .then(() => invalidateTrackedUids())
+      .catch((err) => console.error("[precompute] nightly run failed:", (err as Error).message));
+  });
+
+  // Boot-time catch-up: if today has no corridors yet, compute them now.
+  void (async () => {
+    try {
+      if (await corridorsEmptyForToday()) {
+        console.log("[precompute] no corridors for today — running boot-time precompute");
+        await precomputeAllCorridors();
+        invalidateTrackedUids();
+      }
+    } catch (err) {
+      console.error("[precompute] boot-time run failed:", (err as Error).message);
+    }
+  })();
+}
+
 async function main(): Promise<void> {
+  scheduleCorridorPrecompute();
+
+  consumer = createKafka().consumer({ groupId });
   await consumer.connect();
   await consumer.subscribe({ topic: kafkaTopic(), fromBeginning: false });
   console.log(`[darwin] consuming ${kafkaTopic()} as group ${groupId}`);
@@ -82,7 +128,7 @@ async function main(): Promise<void> {
 async function shutdown(): Promise<void> {
   console.log("[darwin] shutting down…");
   try {
-    await consumer.disconnect();
+    await consumer?.disconnect();
   } catch {
     /* ignore */
   }
@@ -93,7 +139,21 @@ async function shutdown(): Promise<void> {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-main().catch((err) => {
-  console.error("[darwin] fatal:", err);
-  process.exit(1);
-});
+// `--precompute-now`: run the corridor precompute once and exit (no Kafka).
+// Handy for verifying corridors locally without the live feed.
+if (process.argv.includes("--precompute-now")) {
+  precomputeAllCorridors()
+    .then(() => {
+      console.log("[precompute] one-shot complete");
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error("[precompute] one-shot failed:", err);
+      process.exit(1);
+    });
+} else {
+  main().catch((err) => {
+    console.error("[darwin] fatal:", err);
+    process.exit(1);
+  });
+}

@@ -109,11 +109,17 @@ services:
     environment:
       DATABASE_URL: postgres://mainline:mainline@postgres:5432/mainline
       REDIS_URL: redis://redis:6379
+      # Corridor precompute resolves commute windows into serving trains via MOTIS.
+      MOTIS_URL: http://motis:8080
       RDM_KAFKA_BOOTSTRAP_SERVERS: ${RDM_KAFKA_BOOTSTRAP_SERVERS:-}
       RDM_KAFKA_TOPIC: ${RDM_KAFKA_TOPIC:-}
       RDM_KAFKA_GROUP_ID: ${RDM_KAFKA_GROUP_ID:-}
       RDM_CONSUMER_KEY: ${RDM_CONSUMER_KEY:-}
       RDM_CONSUMER_SECRET: ${RDM_CONSUMER_SECRET:-}
+      # Web Push (commute alerts). Generate once: npx web-push generate-vapid-keys
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:alerts@mainline.local}
     depends_on:
       postgres:
         condition: service_healthy

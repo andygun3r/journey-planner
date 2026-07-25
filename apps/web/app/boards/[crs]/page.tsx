@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BoardFilter } from "@/components/board-filter";
 import { BoardRefresher } from "@/components/board-refresher";
+import { LiveCountdown } from "@/components/live-countdown";
 import { getBoard, type BoardDeparture } from "@/lib/board";
 import { getStations, stationName } from "@/lib/stations";
 
@@ -19,17 +20,33 @@ function t(iso: string): string {
 }
 
 function StatusCell({ d }: { d: BoardDeparture }) {
+  // The instant we expect it to leave here: the live estimate, else scheduled.
+  const departsIso = d.live ?? d.scheduled;
+  // Show a ticking "N mins" only while the train is actually tracked live
+  // (Network Rail position present) and not cancelled — otherwise the board
+  // stays a scheduled/expected clock, as before.
+  const showCountdown = d.status !== "cancelled" && Boolean(d.position);
+
   switch (d.status) {
     case "cancelled":
       return <span className="board-status status-cancelled">Cancelled</span>;
     case "delayed":
       return (
         <span className="board-status status-delayed">
-          Exp. {d.live ? t(d.live) : `+${d.delayMinutes}m`}
+          {showCountdown && departsIso ? (
+            <LiveCountdown iso={departsIso} />
+          ) : (
+            <>Exp. {d.live ? t(d.live) : `+${d.delayMinutes}m`}</>
+          )}
+          {d.live && <span className="board-status-sub">exp. {t(d.live)}</span>}
         </span>
       );
     case "on-time":
-      return <span className="board-status status-ontime">On time</span>;
+      return (
+        <span className="board-status status-ontime">
+          {showCountdown && departsIso ? <LiveCountdown iso={departsIso} /> : "On time"}
+        </span>
+      );
     default:
       return <span className="board-status status-scheduled">—</span>;
   }
@@ -209,6 +226,17 @@ export default async function BoardPage({
                           {d.operator}
                           {d.operator && d.coachCount ? " · " : ""}
                           {d.coachCount ? `${d.coachCount} coaches` : ""}
+                        </span>
+                      )}
+                      {d.position && d.status !== "cancelled" && (
+                        <span className="board-position">
+                          <span className="board-position-dot" aria-hidden="true" />
+                          {d.position.label}
+                          {d.position.latenessMinutes && d.position.latenessMinutes > 1
+                            ? ` · ${d.position.latenessMinutes} late`
+                            : d.position.latenessMinutes && d.position.latenessMinutes < -1
+                              ? ` · ${-d.position.latenessMinutes} early`
+                              : ""}
                         </span>
                       )}
                       {d.reason && <span className="board-reason">{d.reason}</span>}
