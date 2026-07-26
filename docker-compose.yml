@@ -67,8 +67,6 @@ services:
     volumes:
       - motis-data:/data
       - gtfs-data:/input
-    ports:
-      - "8080:8080"
     restart: unless-stopped
     healthcheck:
       # MOTIS has no dedicated /health path; hitting any real API route and
@@ -82,19 +80,28 @@ services:
   # Run-to-completion ETL: docker compose --profile etl run --rm etl timetable
   # Writes into the same named `gtfs-data` volume MOTIS reads from, so on a
   # fresh host (Coolify included) this must be run at least once before MOTIS
-  # has anything to serve.
+  # has anything to serve. Source precedence (see src/index.ts): explicit
+  # local zip arg > SFTP (if DTD_SFTP_HOST is set) > NRDP HTTPS download.
   etl:
     build:
       context: .
       dockerfile: services/etl/Dockerfile
     profiles: ["etl"]
-    environment:
+    environment: &etl-env
       DATABASE_URL: postgres://mainline:mainline@postgres:5432/mainline
       ETL_MYSQL_URL: mysql://root:etl@mariadb:3306/dtd
       ETL_ARCHIVE_DIR: /data/dtd/archive
       ETL_GTFS_OUT_DIR: /data/gtfs
       NRDP_USERNAME: ${NRDP_USERNAME:-}
       NRDP_PASSWORD: ${NRDP_PASSWORD:-}
+      # RDG SFTP delivery — separate account from NRDP_USERNAME/PASSWORD.
+      # Set DTD_SFTP_HOST to switch the ETL from NRDP HTTPS to SFTP pull.
+      DTD_SFTP_HOST: ${DTD_SFTP_HOST:-}
+      DTD_SFTP_PORT: ${DTD_SFTP_PORT:-}
+      DTD_SFTP_USERNAME: ${DTD_SFTP_USERNAME:-}
+      DTD_SFTP_PASSWORD: ${DTD_SFTP_PASSWORD:-}
+      DTD_SFTP_TIMETABLE_DIR: ${DTD_SFTP_TIMETABLE_DIR:-}
+      DTD_SFTP_FARES_DIR: ${DTD_SFTP_FARES_DIR:-}
     volumes:
       - dtd-archive:/data/dtd
       - gtfs-data:/data/gtfs
@@ -104,18 +111,49 @@ services:
       postgres:
         condition: service_healthy
 
+  # Long-running counterpart to `etl` above: same image, but stays up and
+  # fires the timetable pipeline nightly at 2am via the crontab baked into
+  # the image (services/etl/cron/timetable-daily), then restarts motis via
+  # the mounted docker socket so it reimports the refreshed GTFS (MOTIS has
+  # no live-reload API). Enable once SFTP/NRDP credentials are in place —
+  # otherwise the nightly run just fails and retries the next night.
+  etl-cron:
+    build:
+      context: .
+      dockerfile: services/etl/Dockerfile
+    environment:
+      <<: *etl-env
+      # Must match the actual motis container name/id on this host — Coolify
+      # prefixes/suffixes compose project names, so verify with
+      # `docker compose ps motis` and override here if it doesn't match.
+      MOTIS_CONTAINER_NAME: ${MOTIS_CONTAINER_NAME:-mainline-motis-1}
+    entrypoint: ["crond", "-f", "-l", "2"]
+    volumes:
+      - dtd-archive:/data/dtd
+      - gtfs-data:/data/gtfs
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   # MariaDB scratch for dtd2mysql only — canonical storage is Postgres.
+  # Not profile-gated: etl-cron (a standing service) needs it always up.
   mariadb:
     image: mariadb:11
-    profiles: ["etl"]
     environment:
       MARIADB_ROOT_PASSWORD: etl
       MARIADB_DATABASE: dtd
+    volumes:
+      - mariadb-data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
 
   # Darwin real-time ingester (RDM Kafka -> Postgres + Redis pub/sub).
   # The board works without it (LDBWS is primary); this is the deep feed for
@@ -186,3 +224,4 @@ volumes:
   motis-data:
   gtfs-data:
   dtd-archive:
+  mariadb-data:

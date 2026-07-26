@@ -15,3 +15,7 @@ services:
     ports:
       # Host port 6380: 6379 is held by another local project.
       - "6380:6379"
+
+  motis:
+    ports:
+      - "8080:8080"

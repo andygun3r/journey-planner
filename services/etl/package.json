@@ -12,10 +12,12 @@
   "dependencies": {
     "@mainline/db": "workspace:*",
     "@mainline/shared": "workspace:*",
-    "mysql2": "^3.11.0"
+    "mysql2": "^3.11.0",
+    "ssh2-sftp-client": "^12.1.1"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/ssh2-sftp-client": "^9.0.6",
     "tsx": "^4.19.0",
     "typescript": "^5.9.0"
   }

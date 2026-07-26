@@ -131,6 +131,13 @@ Batch bulk data driving the routing engine and fares, **not** RDM APIs. Download
 - **Pipeline**: `services/etl` → dtd2mysql (MariaDB scratch) → GTFS (`gb-rail.gtfs.zip`) → MOTIS import + Postgres load. MariaDB is scratch only; **canonical storage is Postgres**.
 - **Env**: `NRDP_USERNAME`, `NRDP_PASSWORD` (register at opendata.nationalrail.co.uk); `NRDP_BASE_URL` optional. `ETL_MYSQL_URL` for the scratch DB.
 - RDM file-feed URLs can be substituted later; the ETL accepts an explicit local zip path as its source argument.
+- **SFTP delivery alternative**: RDG also offers push/pull SFTP delivery of the same
+  RJTTF/RJFAF products, on a separate account from `NRDP_USERNAME`/`PASSWORD`. Set
+  `DTD_SFTP_HOST` (+ `DTD_SFTP_USERNAME`/`PASSWORD`/`PORT`/`*_DIR` vars) to switch the ETL
+  from the NRDP HTTPS download to pulling the newest `.zip` over SFTP — see
+  `services/etl/src/sftp-download.ts`. The `etl-cron` compose service runs this nightly at
+  2am via a baked-in crontab (`services/etl/cron/timetable-daily`); `etl` stays the
+  profile-gated one-off runner for manual invocations.
 
 ## B. Network Rail Open Data (NROD) feeds
 

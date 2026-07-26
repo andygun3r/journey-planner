@@ -40,8 +40,8 @@ healthchecks + `restart: unless-stopped`.
    `docker-compose.yml`.
 2. Set env vars in Coolify's UI (these become the values `${VAR:-}` in the
    compose file resolve to) — see `.env.example` for the full list:
-   `RDM_KAFKA_*`, `NRDP_USERNAME`/`PASSWORD`, `LDBWS_*`, `DISRUPTIONS_API_KEY`,
-   `NETWORKRAIL_USERNAME`/`PASSWORD`, `VAPID_*`.
+   `RDM_KAFKA_*`, `NRDP_USERNAME`/`PASSWORD` (or `DTD_SFTP_*` — see below),
+   `LDBWS_*`, `DISRUPTIONS_API_KEY`, `NETWORKRAIL_USERNAME`/`PASSWORD`, `VAPID_*`.
 3. Expose only `web`'s port 3000 through Coolify's proxy/domain. `motis` (8080)
    only needs to be reachable from `web`/`darwin-ingest` on the compose
    network — don't route a public domain to it.
@@ -60,6 +60,13 @@ healthchecks + `restart: unless-stopped`.
 5. The board (LDBWS) and journey planning work without Darwin/NR live feeds —
    deploy incrementally and add `RDM_*`/`NETWORKRAIL_*` credentials as each
    feed subscription comes online.
+6. **Keeping the timetable current**: `etl-cron` runs in the default (non-profile)
+   service set and re-runs the timetable pipeline nightly at 2am using the
+   crontab in `services/etl/cron/timetable-daily`. Set `DTD_SFTP_HOST` (+
+   `DTD_SFTP_USERNAME`/`PASSWORD`/`PORT`/`*_DIR`) to pull via RDG's SFTP
+   delivery instead of the NRDP HTTPS API — see `.env.example`. After each
+   nightly run, restart `motis` (or add a Coolify post-hook) so it reimports
+   the refreshed GTFS zip; it doesn't watch the volume for changes.
 
 ## Data & licensing
 

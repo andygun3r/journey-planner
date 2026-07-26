@@ -1,5 +1,6 @@
 import path from "node:path";
 import { downloadFeed } from "./download.js";
+import { downloadFeedViaSftp } from "./sftp-download.js";
 import { prepareTimetableZip } from "./prepare.js";
 import { exportGtfs, importFares, importTimetable } from "./run-dtd2mysql.js";
 import { postprocessGtfs } from "./postprocess-gtfs.js";
@@ -9,9 +10,18 @@ import { loadIntoPostgres } from "./load-postgres.js";
 const ARCHIVE_DIR = process.env.ETL_ARCHIVE_DIR ?? "/data/dtd/archive";
 const GTFS_OUT_DIR = process.env.ETL_GTFS_OUT_DIR ?? "/data/gtfs";
 
+// SFTP is RDG's push/pull delivery alternative to the NRDP HTTPS staticfeed
+// API — separate account from NRDP_USERNAME/PASSWORD. Used automatically
+// when DTD_SFTP_HOST is set; otherwise falls back to the HTTPS download.
+function useSftp(): boolean {
+  return Boolean(process.env.DTD_SFTP_HOST);
+}
+
 async function timetable(source?: string): Promise<void> {
-  // Source precedence: explicit local zip path (RDM download) > NRDP fetch.
-  const rawZip = source ?? (await downloadFeed("timetable", ARCHIVE_DIR));
+  // Source precedence: explicit local zip path > SFTP > NRDP HTTPS fetch.
+  const rawZip =
+    source ??
+    (useSftp() ? await downloadFeedViaSftp("timetable", ARCHIVE_DIR) : await downloadFeed("timetable", ARCHIVE_DIR));
   const feedVersion = path.basename(rawZip, path.extname(rawZip));
   const zip = await prepareTimetableZip(rawZip, ARCHIVE_DIR);
   await importTimetable(zip);
@@ -32,7 +42,9 @@ async function postprocessOnly(feedVersion = "unknown"): Promise<void> {
 }
 
 async function fares(source?: string): Promise<void> {
-  const zip = source ?? (await downloadFeed("fares", ARCHIVE_DIR));
+  const zip =
+    source ??
+    (useSftp() ? await downloadFeedViaSftp("fares", ARCHIVE_DIR) : await downloadFeed("fares", ARCHIVE_DIR));
   await importFares(zip);
   await loadFares();
   console.log("Fares loaded into Postgres.");
