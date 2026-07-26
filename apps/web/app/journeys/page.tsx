@@ -1,4 +1,9 @@
 import Link from "next/link";
+import { isCrs, normaliseCrs } from "@mainline/shared";
+import { FavouriteToggle } from "@/components/favourite-toggle";
+import { requireDevice } from "@/lib/device";
+import { indicativeFare, formatFare } from "@/lib/fares";
+import { isFavourite, touchFavourite } from "@/lib/favourites";
 import { planJourneys, type JourneyView } from "@/lib/journeys";
 import { stationName } from "@/lib/stations";
 
@@ -78,14 +83,23 @@ function LegRows({ journey }: { journey: JourneyView }) {
             </div>
             <div className="leg-body">
               <p className="leg-station">{leg.originName}</p>
-              <p className="leg-operator">
-                {leg.mode === "walk"
-                  ? "Walk"
-                  : (leg.operator ?? "Rail service") +
-                    (leg.callCount > 0
-                      ? ` · ${leg.callCount} stop${leg.callCount === 1 ? "" : "s"}`
-                      : " · non-stop")}
-              </p>
+              {leg.mode === "walk" ? (
+                <p className="leg-operator">Walk</p>
+              ) : (
+                <p className="leg-operator">
+                  <Link
+                    className="leg-live-link"
+                    href={`/boards/${leg.originCrs}?callingAt=${leg.destCrs}`}
+                    aria-label={`Live departures from ${leg.originName} towards ${leg.destName}`}
+                  >
+                    {(leg.operator ?? "Rail service") +
+                      (leg.callCount > 0
+                        ? ` · ${leg.callCount} stop${leg.callCount === 1 ? "" : "s"}`
+                        : " · non-stop")}
+                    <span aria-hidden="true"> · live ›</span>
+                  </Link>
+                </p>
+              )}
               <p className="leg-station">{leg.destName}</p>
             </div>
           </div>
@@ -98,15 +112,35 @@ function LegRows({ journey }: { journey: JourneyView }) {
 export default async function JourneysPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; when?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; when?: string; arriveBy?: string }>;
 }) {
   const params = await searchParams;
   const from = params.from ?? "";
   const to = params.to ?? "";
   const when = params.when;
+  const arriveBy = params.arriveBy === "1";
 
-  const outcome = await planJourneys(from, to, when);
+  const outcome = await planJourneys(from, to, when, arriveBy);
   const [fromName, toName] = await Promise.all([stationName(from), stationName(to)]);
+
+  // Save/recall support: only for a valid station pair.
+  const validPair = isCrs(from.toUpperCase()) && isCrs(to.toUpperCase()) && from !== to;
+  let saved = false;
+  let fare: Awaited<ReturnType<typeof indicativeFare>> = null;
+  if (validPair) {
+    const deviceId = await requireDevice();
+    const fromC = normaliseCrs(from);
+    const toC = normaliseCrs(to);
+    saved = await isFavourite(deviceId, fromC, toC);
+    // Bump ordering if this journey is already saved (they're re-running it).
+    if (saved) await touchFavourite(deviceId, fromC, toC);
+    // Indicative fare (null when fares aren't loaded — UI just omits it).
+    fare = await indicativeFare(fromC, toC).catch(() => null);
+  }
+
+  const cheapestPence = fare
+    ? Math.min(fare.singlePence ?? Infinity, fare.returnPence ?? Infinity)
+    : Infinity;
 
   return (
     <main>
@@ -115,8 +149,25 @@ export default async function JourneysPage({
           {fromName} → {toName}
         </h1>
         <span className="when">
-          {when ? whenFmt.format(new Date(when)) : "leaving now"} ·{" "}
-          <Link href="/">change</Link>
+          {when
+            ? `${arriveBy ? "arrive by" : "leave"} ${whenFmt.format(new Date(when))}`
+            : "leaving now"}{" "}
+          · <Link href="/">change</Link>
+          {validPair && (
+            <>
+              {" · "}
+              <FavouriteToggle
+                fromCrs={normaliseCrs(from)}
+                toCrs={normaliseCrs(to)}
+                initialSaved={saved}
+              />
+            </>
+          )}
+          {Number.isFinite(cheapestPence) && (
+            <span className="fare-chip" title="Indicative walk-up fare — cheapest standard single/return">
+              from {formatFare(cheapestPence)}
+            </span>
+          )}
         </span>
       </div>
 

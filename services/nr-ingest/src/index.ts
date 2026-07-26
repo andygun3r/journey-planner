@@ -1,9 +1,10 @@
 import { Redis } from "ioredis";
 import { parseRtppm, parseTsr, parseVstp } from "./parse-feeds.js";
-import { parseMovements, parseTd } from "./parse.js";
-import { loadCorpus, loadSmart } from "./reference.js";
+import { parseMovements, parseSClass, parseTd } from "./parse.js";
+import { loadSop } from "./load-sop.js";
+import { loadCorpus, loadHeadcodes, loadSmart } from "./reference.js";
 import { applyRtppm, applyTsr, applyVstp } from "./store-feeds.js";
-import { applyActivation, applyBerthStep, applyMovement } from "./store.js";
+import { applyActivation, applyBerthStep, applyMovement, applySClass } from "./store.js";
 import { connect, nrConfig, TOPICS } from "./stomp.js";
 
 /**
@@ -18,8 +19,13 @@ import { connect, nrConfig, TOPICS } from "./stomp.js";
  * down positioning.
  *
  * Sub-commands:
- *   (default)  run the live ingester
- *   reference  download + load CORPUS + SMART, then exit
+ *   (default)   run the live ingester
+ *   reference   download + load CORPUS + SMART, then exit
+ *   headcodes   download + load the SCHEDULE feed's uid->headcode map, then
+ *               exit — a much larger, slower download (~127MB gzipped) than
+ *               `reference`, so it's kept as its own opt-in command rather
+ *               than folded into routine reference refreshes.
+ *   sop         load SOP/ECS signalling bit-maps from data/sop/, then exit
  */
 
 const redisUrl = process.env.REDIS_URL;
@@ -157,11 +163,14 @@ async function runIngest(): Promise<void> {
   });
 
   subscribe("td", TOPICS.trainDescriber, async (body) => {
+    // The TD stream carries both C-class (berth steps) and S-class (signalling
+    // state) messages; each parser ignores the other's message types.
     for (const step of parseTd(body)) {
       const crs = await applyBerthStep(step);
       if (redis && crs) await redis.publish(`nr:crs:${crs}`, step.headcode);
       processed++;
     }
+    await applySClass(parseSClass(body));
   });
 
   // Start the non-positioning feeds on their own connection, once (a
@@ -186,6 +195,14 @@ function maybeLog() {
 const command = process.argv[2];
 if (command === "reference") {
   await runReference();
+  process.exit(0);
+} else if (command === "headcodes") {
+  console.log("[nr] loading uid->headcode map from SCHEDULE (this can take a few minutes)…");
+  await loadHeadcodes();
+  process.exit(0);
+} else if (command === "sop") {
+  console.log("[nr] loading SOP signalling bit-maps…");
+  await loadSop();
   process.exit(0);
 } else {
   installShutdown();

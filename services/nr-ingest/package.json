@@ -7,6 +7,7 @@
     "probe": "tsx src/probe.ts",
     "start": "tsx src/index.ts",
     "reference": "tsx src/index.ts reference",
+    "headcodes": "tsx src/index.ts headcodes",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json"
   },

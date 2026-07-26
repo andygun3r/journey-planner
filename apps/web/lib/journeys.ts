@@ -87,6 +87,7 @@ export async function planJourneys(
   from: string,
   to: string,
   when?: string,
+  arriveBy = false,
 ): Promise<PlanOutcome> {
   let fromCrs: string;
   let toCrs: string;
@@ -104,6 +105,7 @@ export async function planJourneys(
       from: fromCrs,
       to: toCrs,
       when,
+      arriveBy,
       numItineraries: 6,
     });
   } catch {

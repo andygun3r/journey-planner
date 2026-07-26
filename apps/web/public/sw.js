@@ -1,4 +1,61 @@
-/* Mainline service worker — Web Push for commute disruption alerts. */
+/* Mainline service worker — Web Push (commute alerts) + a minimal offline shell.
+ *
+ * Caching policy is deliberately conservative because Mainline is a live product:
+ * we NEVER serve stale live data. Only static assets are cached, plus a
+ * navigation fallback so the app opens (into the search screen) when offline.
+ * API responses (boards, journeys, alerts, live-trains) are always network-only.
+ */
+
+const CACHE = "mainline-shell-v2";
+const SHELL = ["/", "/icon.png", "/icon-192.png", "/apple-touch-icon.png"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()),
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  // Never cache live data or streams — always go to network.
+  if (url.pathname.startsWith("/api/")) return;
+
+  // Navigations: network-first, fall back to the cached app shell offline.
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req).catch(() => caches.match("/").then((r) => r || Response.error())),
+    );
+    return;
+  }
+
+  // Static assets: cache-first.
+  if (["style", "script", "image", "font"].includes(req.destination)) {
+    event.respondWith(
+      caches.match(req).then(
+        (hit) =>
+          hit ||
+          fetch(req).then((res) => {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+            return res;
+          }),
+      ),
+    );
+  }
+});
 
 self.addEventListener("push", (event) => {
   let data = {};

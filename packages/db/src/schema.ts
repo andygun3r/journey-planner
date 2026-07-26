@@ -1,4 +1,5 @@
 import {
+  bigserial,
   boolean,
   date,
   index,
@@ -79,6 +80,15 @@ export const darwinTrain = pgTable(
   (t) => [index("darwin_train_uid_ssd_idx").on(t.uid, t.ssd)],
 );
 
+/**
+ * Keyed by (rid, tiploc), NOT (rid, seq): Darwin's TS messages carry only a
+ * shifting subset of a train's stops (the ones near its current position),
+ * so an index into any single TS message's location list is not a stable
+ * seq — two different TS messages can legitimately place unrelated stops at
+ * seq 0. `seq` here is instead assigned once, from the SC (schedule)
+ * message's full ordered calling pattern (applySchedule), and TS updates
+ * patch the existing row for that tiploc rather than inventing a new seq.
+ */
 export const darwinStopForecast = pgTable(
   "darwin_stop_forecast",
   {
@@ -100,9 +110,9 @@ export const darwinStopForecast = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.rid, t.seq] }),
+    primaryKey({ columns: [t.rid, t.tiploc] }),
     index("darwin_stop_crs_idx").on(t.crs),
-    index("darwin_stop_tiploc_idx").on(t.tiploc),
+    index("darwin_stop_seq_idx").on(t.rid, t.seq),
   ],
 );
 
@@ -175,6 +185,53 @@ export const nrSmart = pgTable(
 );
 
 /**
+ * Raw S-class signalling state from the TD feed. Each SF_MSG sets one address
+ * (a byte) within a TD area to a value; individual bits within that byte are
+ * signalling elements (signals, points, track circuits). We store the latest
+ * byte per (area, address); decoding to specific signals/aspects happens via
+ * sop_mapping. This is undecoded ground truth — last-writer-wins per address.
+ */
+export const nrSignallingState = pgTable(
+  "nr_signalling_state",
+  {
+    tdArea: text("td_area").notNull(),
+    /** Hex address within the area (e.g. "0B"). */
+    address: text("address").notNull(),
+    /** Current hex byte value at that address (e.g. "fa"). */
+    data: text("data").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.tdArea, t.address] })],
+);
+
+/**
+ * SOP / ECS bit-map reference: which signalling item each (area, address, bit)
+ * represents. Sourced per TD area from Open Rail Data SOP tables / ECS specs
+ * (not all areas are published — unmapped bits render as "unknown"). Joining
+ * nr_signalling_state × sop_mapping yields live per-signal aspects.
+ */
+export const sopMapping = pgTable(
+  "sop_mapping",
+  {
+    tdArea: text("td_area").notNull(),
+    address: text("address").notNull(),
+    /** Bit index 0-7 within the byte. */
+    bit: smallint("bit").notNull(),
+    /** signal | point | track | route. */
+    itemType: text("item_type").notNull(),
+    /** Signal number / points id / track-circuit id. */
+    itemId: text("item_id"),
+    /** For signal-aspect bits: what a set bit means (e.g. "red", "off"). */
+    aspect: text("aspect"),
+    description: text("description"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tdArea, t.address, t.bit] }),
+    index("sop_item_idx").on(t.tdArea, t.itemId),
+  ],
+);
+
+/**
  * Latest known live position per train, assembled from TRUST movement reports
  * and TD berth steps. Keyed by TRUST train_id (Network Rail's own id); we link
  * it to Darwin rid via headcode + origin where possible.
@@ -207,6 +264,60 @@ export const nrTrainPosition = pgTable(
     index("nr_pos_rid_idx").on(t.rid),
     // The live map scans for recently-reported trains.
     index("nr_pos_reported_idx").on(t.lastReportedAt),
+  ],
+);
+
+/**
+ * uid -> headcode, from Network Rail's SCHEDULE feed (JsonScheduleV1.CIF_train_uid
+ * + schedule_segment.signalling_id). Darwin's TS/activation messages carry a
+ * uid (darwin_train.uid); the live TD feed broadcasts a headcode, not a uid —
+ * this is the only stable link between the two, resolving service-progress
+ * ambiguity without needing "exactly one nearby TD headcode" guesswork (see
+ * enrichWithNrProgress in apps/web/lib/service-progress.ts).
+ * Replaced wholesale on each SCHEDULE load, same as nr_corpus/nr_smart — a
+ * uid can have several schedule variants (STP indicators) but its reporting
+ * headcode is effectively constant, so last-write-wins during the load.
+ */
+export const nrHeadcode = pgTable("nr_headcode", {
+  uid: text("uid").primaryKey(),
+  headcode: text("headcode").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Append-only log of every position report (TRUST movement or TD berth step),
+ * mirroring nr_train_position's current-state row at the moment it was written.
+ * Same trainId identity space (TRUST numeric id or "TD:{headcode}"), unified
+ * across both feeds. Powers the service-detail "advanced view" — a timestamped
+ * list of junctions/berths actually passed, joined against nr_smart/nr_corpus
+ * for names and darwin_stop_forecast for scheduled-vs-actual comparison.
+ * No FK to nr_train_position: TRUST train ids can be reused across service
+ * days, so history must survive independently of the live row's lifecycle.
+ * Pruned by services/nr-ingest on a retention window (see NR_POSITION_HISTORY_RETENTION_DAYS).
+ */
+export const nrTrainPositionHistory = pgTable(
+  "nr_train_position_history",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    trainId: text("train_id").notNull(),
+    headcode: text("headcode"),
+    rid: text("rid"),
+    lastStanox: text("last_stanox"),
+    lastTiploc: text("last_tiploc"),
+    lastCrs: text("last_crs"),
+    lastEventType: text("last_event_type"),
+    /** The feed's own event time (TD already UTC; TRUST corrected via trustTsToUtcMs). */
+    reportedAt: timestamp("reported_at", { withTimezone: true }).notNull(),
+    tdArea: text("td_area"),
+    berth: text("berth"),
+    lateness: integer("lateness"),
+    /** Ingest write time — used for pruning, independent of feed-reported time. */
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("nr_pos_hist_train_time_idx").on(t.trainId, t.reportedAt),
+    index("nr_pos_hist_rid_time_idx").on(t.rid, t.reportedAt),
+    index("nr_pos_hist_recorded_idx").on(t.recordedAt),
   ],
 );
 

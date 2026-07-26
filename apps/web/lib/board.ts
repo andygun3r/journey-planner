@@ -1,11 +1,15 @@
 import { createEngine, type RawDeparture } from "@mainline/routing-adapter";
 import { normaliseCrs, operatorFromRouteName } from "@mainline/shared";
+import { darwinStationMessage } from "@mainline/db";
+import { sql } from "drizzle-orm";
 import { enrichBoardWithDarwin } from "./darwin-board";
 import { enrichBoardWithFormation } from "./darwin-formation";
 import { enrichBoardWithPosition } from "./board-position";
 import { type Disruption, fetchStationDisruptions } from "./disruptions";
 import { fetchLdbwsBoard, ldbwsConfigured } from "./ldbws";
+import { getRtppmByOperatorName } from "./rtppm";
 import { stationName } from "./stations";
+import { getDb } from "./db";
 
 /** Where a board's data came from — drives the UI provenance badge. */
 export type BoardSource = "ldbws" | "darwin" | "timetable";
@@ -14,6 +18,8 @@ export type BoardSource = "ldbws" | "darwin" | "timetable";
 export interface Coach {
   number: string;
   first: boolean;
+  /** Raw class string from the feed, e.g. "First" / "Standard". */
+  coachClass?: string;
   /** Loading percentage (0-100) when the operator reports it. */
   loading?: number;
 }
@@ -44,6 +50,8 @@ export interface BoardDeparture {
   hasLive: boolean;
   /** Live "where is it right now" from Network Rail (correlated by rid). */
   position?: BoardPosition;
+  /** Operator's rolling last-hour punctuality (RTPPM), 0-100, when known. */
+  operatorPunctuality?: number;
 }
 
 /** Live running position for a board row, from the Network Rail overlay. */
@@ -77,6 +85,37 @@ export interface BoardResult {
 export type BoardOutcome =
   | { ok: true; board: BoardResult }
   | { ok: false; reason: "engine-offline" | "bad-request" | "unknown-station" };
+
+/** NRCC station messages for the MOTIS-fallback board path (LDBWS already carries its own). */
+async function fetchStationMessages(crs: string): Promise<string[]> {
+  const db = getDb();
+  try {
+    const rows = await db
+      .select({ html: darwinStationMessage.html })
+      .from(darwinStationMessage)
+      .where(sql`${darwinStationMessage.crsList} @> ARRAY[${crs}]::text[]`);
+    return rows.map((r) => r.html);
+  } catch {
+    return [];
+  }
+}
+
+function normaliseOperatorName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** Attach each row's operator's rolling punctuality figure, where matched. */
+async function withPunctuality(departures: BoardDeparture[]): Promise<BoardDeparture[]> {
+  if (departures.length === 0) return departures;
+  const rtppm = await getRtppmByOperatorName().catch(() => new Map());
+  if (rtppm.size === 0) return departures;
+  return departures.map((d) => {
+    if (!d.operator) return d;
+    const match = rtppm.get(normaliseOperatorName(d.operator));
+    if (!match?.rollingPpm) return d;
+    return { ...d, operatorPunctuality: Math.round(match.rollingPpm) };
+  });
+}
 
 function scheduledRow(raw: RawDeparture): BoardDeparture {
   return {
@@ -143,7 +182,8 @@ export async function getBoard(
       // Fill coach formation from Darwin where LDBWS didn't provide it, then
       // overlay the live Network Rail running position (where the train is now).
       const withFormation = await enrichBoardWithFormation(crs, ldbws.departures);
-      const departures = await enrichBoardWithPosition(crs, withFormation);
+      const withPosition = await enrichBoardWithPosition(crs, withFormation);
+      const departures = await withPunctuality(withPosition);
       return {
         ok: true,
         board: {
@@ -171,13 +211,19 @@ export async function getBoard(
   }
 
   const scheduled = raw.map(scheduledRow);
-  const { departures, live } = await enrichBoardWithDarwin(crs, scheduled);
+  const { departures: darwinDepartures, live } = await enrichBoardWithDarwin(crs, scheduled);
 
-  for (const d of departures) {
+  for (const d of darwinDepartures) {
     if (!d.destinationName && d.destinationCrs) {
       d.destinationName = await stationName(d.destinationCrs);
     }
   }
+
+  // Same formation/position enrichment as the LDBWS path — previously skipped
+  // here, leaving fallback boards without coach detail or live NR position.
+  const withFormation = await enrichBoardWithFormation(crs, darwinDepartures);
+  const withPosition = await enrichBoardWithPosition(crs, withFormation);
+  const departures = await withPunctuality(withPosition);
 
   return {
     ok: true,
@@ -187,7 +233,7 @@ export async function getBoard(
       generatedAt: new Date().toISOString(),
       live,
       source: live ? "darwin" : "timetable",
-      messages: [],
+      messages: await fetchStationMessages(crs),
       disruptions: await disruptionsPromise,
       departures,
     },

@@ -3,6 +3,7 @@ import { downloadFeed } from "./download.js";
 import { prepareTimetableZip } from "./prepare.js";
 import { exportGtfs, importFares, importTimetable } from "./run-dtd2mysql.js";
 import { postprocessGtfs } from "./postprocess-gtfs.js";
+import { loadFares } from "./load-fares.js";
 import { loadIntoPostgres } from "./load-postgres.js";
 
 const ARCHIVE_DIR = process.env.ETL_ARCHIVE_DIR ?? "/data/dtd/archive";
@@ -30,10 +31,11 @@ async function postprocessOnly(feedVersion = "unknown"): Promise<void> {
   console.log(`GTFS ready: ${result.gtfsZip}`);
 }
 
-async function fares(): Promise<void> {
-  const zip = await downloadFeed("fares", ARCHIVE_DIR);
+async function fares(source?: string): Promise<void> {
+  const zip = source ?? (await downloadFeed("fares", ARCHIVE_DIR));
   await importFares(zip);
-  console.log("Fares in MariaDB scratch. TODO(P5): load-fares.ts -> Postgres.");
+  await loadFares();
+  console.log("Fares loaded into Postgres.");
 }
 
 const command = process.argv[2];
@@ -45,9 +47,13 @@ switch (command) {
     await postprocessOnly(process.argv[3]);
     break;
   case "fares":
-    await fares();
+    await fares(process.argv[3]);
+    break;
+  case "load-fares":
+    // Re-load fares from the MariaDB scratch DB into Postgres (skips download/import).
+    await loadFares();
     break;
   default:
-    console.error("Usage: etl <timetable|fares>");
+    console.error("Usage: etl <timetable|fares|load-fares|postprocess>");
     process.exit(1);
 }

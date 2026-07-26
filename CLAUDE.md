@@ -1,0 +1,187 @@
+# CLAUDE.md
+
+Guidance for Claude Code when working in this repository.
+
+## What this is
+
+**Mainline** — a fast, self-reliant UK rail journey & commute planner. It runs its
+own routing engine (MOTIS) over the national timetable, layers live status from
+Darwin and Network Rail, and computes indicative fares. It exists because the owner
+has RDG data access but **no National Rail journey-planner licence** — so it computes
+everything itself rather than proxying nationalrail.co.uk.
+
+Product intent, brand and design principles live in [PRODUCT.md](PRODUCT.md); read it
+before touching UI. Short version: departure-board energy, tabular density, dark-first,
+WCAG 2.2 AA, one-hand/five-second use. Status is never colour-only.
+
+## Monorepo layout
+
+pnpm + Turbo workspace, Node ≥ 22, TypeScript everywhere.
+
+- `apps/web` — Next.js 16 app: pages, API routes, and the SSE live-update stream.
+- `services/darwin-ingest` — RDM Darwin Push Port Kafka consumer → Postgres/Redis, plus commute-alert matching and nightly corridor precompute.
+- `services/nr-ingest` — Network Rail STOMP consumer (TRUST movements + Train Describer + VSTP/TSR/RTPPM) → Postgres, publishes CRS deltas to Redis.
+- `services/etl` — batch DTD timetable/fares download → GTFS conversion (dtd2mysql) → MOTIS + Postgres. Run-to-completion, not a daemon.
+- `packages/shared` — domain types (zod) + CRS/TIPLOC/NLC/STANOX code utilities.
+- `packages/db` — Drizzle schema, migrations, client.
+- `packages/routing-adapter` — engine-agnostic `plan()`/`departures()`; MOTIS v2 (nigiri) implementation.
+
+## Common commands
+
+```sh
+pnpm install
+pnpm dev                       # turbo dev across the workspace
+pnpm --filter web dev          # web only → http://localhost:3000
+pnpm build | lint | typecheck  # via turbo
+pnpm db:generate               # drizzle-kit generate (after schema.ts edits)
+pnpm db:migrate                # apply migrations
+pnpm etl:timetable             # run the timetable ETL
+
+docker compose up -d postgres redis   # host ports 5434 (pg) / 6380 (redis)
+docker compose --profile etl run --rm etl timetable
+docker compose --profile routing up -d motis
+```
+
+**Host ports are non-standard on purpose**: Postgres is `5434` and Redis is `6380`
+(5432/5433 and 6379 are held by other local projects). `DATABASE_URL` for local work is
+`postgres://mainline:mainline@localhost:5434/mainline`.
+
+Health check: `curl localhost:3000/api/health` → `{ ok, postgres, redis }`.
+
+## Conventions & gotchas
+
+- **Config is env-only** (12-factor). Copy `.env.example` → `.env`; never commit secrets.
+- Ingest services have **no dotenv loader** — start them with env injected, e.g.
+  `node --env-file=../../.env --import tsx src/index.ts` from the service dir.
+- **Drizzle migration ordering**: the generator sometimes emits `ADD PRIMARY KEY` before
+  `ADD COLUMN`. Reorder the generated SQL before applying, or the migration fails.
+- **TRUST/TD timestamps are UK-local wall-clock expressed as epoch-ms**, not true UTC —
+  during BST they read one hour ahead. `nr-ingest` corrects them via `trustTsToUtcMs`;
+  do the same for any new NR timestamp field.
+- **LDBWS is the board's primary live source**; Darwin/NR are the deeper feeds. The board
+  still works if the ingest services are down.
+- **After a long darwin-ingest outage**, the committed Kafka offset ages out and it resumes
+  from live. Schedule (SC) messages already sent earlier that day are *not* re-broadcast, so
+  live progress/tracking stays sparse until each train sends a fresh TS/SC. Expected recovery,
+  not a bug.
+- MOTIS namespaces GTFS stop ids with a dataset tag (`gb-railgtfs_KGX`); the routing adapter
+  adds/strips it so the rest of the app speaks bare CRS. Trip ids are composite
+  (`<date>_<time>_<tag>_<gtfsTripId>`) — join on the bare GTFS trip id.
+
+---
+
+# Data feeds reference
+
+Two providers, two very different access models. **RDG Rail Data Marketplace (RDM)** and
+**National Rail Data Portal (NRDP)** cover timetable, fares, live boards and disruptions.
+**Network Rail Open Data (NROD)** covers train positioning and signalling. Every feed is
+configured purely through env vars — the tables below give the exact ones.
+
+## A. RDG / National Rail feeds
+
+### 1. Darwin — Real-Time Push Port (v18) *(via RDM, Kafka)*
+The deep real-time feed: schedule (SC), train status/forecast (TS), formations, loading,
+deactivations for every GB passenger service. Powers journey-wide live status, the SSE
+delta layer, and commute alerting.
+
+- **Transport**: Kafka on **Confluent Cloud**, `SASL_SSL` + `PLAIN`.
+- **Auth**: subscription **consumer key = SASL username**, **secret = SASL password**.
+- **Consumer**: `services/darwin-ingest` (kafkajs). Parser in `pushport.ts`; writes `darwin_*` tables.
+- **Env**: `RDM_KAFKA_BOOTSTRAP_SERVERS`, `RDM_KAFKA_TOPIC`, `RDM_KAFKA_GROUP_ID` (optional), `RDM_CONSUMER_KEY`, `RDM_CONSUMER_SECRET`.
+
+### 2. LDBWS — Live Departure Board *(RDM REST)*
+**Primary** board source: one call per station gives real platforms, live estimates,
+cancellations, operator and NRCC messages. Staff-style `GetDepBoardWithDetails`.
+
+- **Auth**: consumer key in the **`x-apikey`** header.
+- **Client**: `apps/web/lib/ldbws.ts` → `GET {base}/GetDepBoardWithDetails/{CRS}` (`filterCrs`/`filterType` for "calling at").
+- **Env**: `LDBWS_API_KEY`, `LDBWS_BASE_URL` (`…/1010-live-departure-board-dep1_2/LDBWS/api/20220120`).
+
+### 3. Service Details *(RDM REST — separate product/key)*
+Per-train calling pattern for a single service id. Distinct RDM product from LDBWS, so it
+has its own key even though the base URL shape matches.
+
+- **Auth**: consumer key in `x-apikey`.
+- **Env**: `LDBWS_SERVICE_API_KEY`, `LDBWS_SERVICE_BASE_URL` (`…/1010-service-details1_2/LDBWS/api/20220120`).
+
+### 4. National Rail Disruptions *(RDM REST)*
+Two views: station incidents (`/stations/disruptions/incidents?crsCode=…`) and per-TOC
+service indicators (`/tocs/serviceIndicators`).
+
+- **Auth**: consumer key in `x-apikey`.
+- **Client**: `apps/web/lib/disruptions.ts`.
+- **Env**: `DISRUPTIONS_API_KEY`, `DISRUPTIONS_BASE_URL` (`…/1010-disruptions-experience-api-11_1`).
+
+### 5. Knowledgebase *(planned)*
+Static/near-static reference (station facilities, incident KB). Wired but unused.
+
+- **Env**: `KB_FEED_URL`.
+
+### 6. DTD static feeds — Timetable & Fares *(NRDP downloads)*
+Batch bulk data driving the routing engine and fares, **not** RDM APIs. Downloaded from
+`opendata.nationalrail.co.uk`: `POST /authenticate` → token → `GET` staticfeed with an
+`X-Auth-Token` header. Versioned filenames arrive via `Content-Disposition` (e.g. `RJTTF512.ZIP`).
+
+| Feed | NRDP path | Product code |
+|------|-----------|--------------|
+| Timetable | `/api/staticfeeds/3.0/timetable` | **RJTTF** |
+| Fares | `/api/staticfeeds/2.0/fares` | **RJFAF** |
+| Routeing | `/api/staticfeeds/2.0/routeing` | **RJRG** |
+
+- **Pipeline**: `services/etl` → dtd2mysql (MariaDB scratch) → GTFS (`gb-rail.gtfs.zip`) → MOTIS import + Postgres load. MariaDB is scratch only; **canonical storage is Postgres**.
+- **Env**: `NRDP_USERNAME`, `NRDP_PASSWORD` (register at opendata.nationalrail.co.uk); `NRDP_BASE_URL` optional. `ETL_MYSQL_URL` for the scratch DB.
+- RDM file-feed URLs can be substituted later; the ETL accepts an explicit local zip path as its source argument.
+
+## B. Network Rail Open Data (NROD) feeds
+
+Different account and auth model from RDG. **No API key** — use your
+`datafeeds.networkrail.co.uk` **account email as the STOMP login** and **account password
+as the passcode**. You must also *tick each feed on the "My Feeds" page*, or the broker
+authenticates but returns "not authorized to read from topic".
+
+- **Broker**: `publicdatafeeds.networkrail.co.uk:61618` (STOMP). Overridable via `NR_STOMP_HOST` / `NR_STOMP_PORT`.
+- **Consumer**: `services/nr-ingest` (`stompit`). Durable subscriptions keyed by a stable client id (`NR_CLIENT_ID`), so a reconnect resumes rather than restarts.
+- **Env**: `NETWORKRAIL_USERNAME`, `NETWORKRAIL_PASSWORD`.
+- **Connection design**: positioning (movements + TD) runs on one STOMP connection; VSTP/TSR/RTPPM run on a **second** connection — an unsubscribed feed errors the *whole* connection, and that must never take down positioning.
+
+### Live STOMP topics (`services/nr-ingest/src/stomp.ts` → `TOPICS`)
+
+| Topic | Purpose | Parsed messages |
+|-------|---------|-----------------|
+| `/topic/TRAIN_MVT_ALL_TOC` | **TRUST** train movements | `0001` activation, `0002` cancellation, `0003` arrival/departure (STANOX, platform, lateness) |
+| `/topic/TD_ALL_SIG_AREA` | **Train Describer** | C-class `CA_MSG`/`CC_MSG` berth steps (position) **and** S-class `SF_MSG`/`SG_MSG`/`SH_MSG` signalling state |
+| `/topic/VSTP_ALL` | Very Short Term Planning schedules | short-notice schedule inserts |
+| `/topic/TSR_ALL_ROUTE` | Temporary Speed Restrictions | active TSRs by route |
+| `/topic/RTPPM_ALL` | Real-Time Public Performance Measure | network/operator punctuality |
+
+### NROD supporting reference files (`services/nr-ingest/src/reference.ts`)
+Gzipped JSON behind the same account auth (HTTP Basic), `/ntrod/SupportingFileAuthenticate?type=…`.
+Load once before the live feed means anything: `nr-ingest reference`.
+
+- **CORPUS** — STANOX ↔ TIPLOC ↔ CRS ↔ NLC map. Movements report STANOX; this translates to CRS/TIPLOC to line up with Darwin. → `nr_corpus`.
+- **SMART** — TD berth steps → STANOX + event, so "berth A→B" becomes "train passed <location>". Also provides berth topology (`from_berth→to_berth`) for signalling-diagram auto-layout. → `nr_smart`.
+- **SOP / ECS** — per-TD-area bit→signal/aspect maps for decoding S-class. Load via `nr-ingest sop` from `data/sop/`. **Not** a live feed; sourced manually per area (Open Rail Data Wiki blocks automated fetch). Coverage is partial; unmapped areas degrade to track-occupancy only.
+
+### Signalling data note
+**Real signal aspects come only from TD S-class `SF_MSG` decoded against per-area SOP maps.**
+RDG/RDM feeds carry **no** signalling data at all. The nr-ingest feed already receives SF_MSG;
+see `parse.ts` `parseSClass`.
+
+## Feed → capability map
+
+| Capability | Feed(s) |
+|------------|---------|
+| Journey routing / planning | DTD Timetable (RJTTF) → GTFS → MOTIS |
+| Fares | DTD Fares (RJFAF) |
+| Live departure board | **LDBWS** (primary) |
+| Per-train calling pattern | Service Details |
+| Journey-wide live status, SSE deltas, commute alerts | **Darwin** Push Port |
+| Between-station positioning / moving-train icon | Network Rail TRUST + TD (with CORPUS/SMART) |
+| Disruptions & TOC service status | Disruptions API |
+| Signalling diagram (aspects) | Network Rail TD S-class + SOP maps |
+
+## Licensing
+
+Timetable, fares and Darwin data © RDG / National Rail under the relevant Rail Data
+Marketplace licences; Network Rail data under NROD terms. This is a personal project —
+**check each feed's licence before any public deployment.**

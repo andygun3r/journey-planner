@@ -14,6 +14,21 @@ import { getDb } from "./db";
  * reported DEPARTURE is drawn heading toward its next call.
  */
 
+/** One ordered calling point on a train's route, with coordinates for drawing. */
+export interface PathStop {
+  crs: string;
+  name: string;
+  lat: number;
+  lon: number;
+  /** Scheduled public time (dep for the origin, arr elsewhere), HH:MM. */
+  scheduled?: string;
+  /** Best-known actual/estimated time, HH:MM. */
+  expected?: string;
+  /** Whether `expected` is an actual report vs a forecast. */
+  actual?: boolean;
+  status: "departed" | "current" | "upcoming";
+}
+
 export interface LiveTrain {
   id: string;
   headcode?: string;
@@ -32,6 +47,11 @@ export interface LiveTrain {
   reportedAgoSeconds: number;
   /** Darwin rid, when correlated — lets the map link to the service page. */
   rid?: string;
+  /**
+   * Ordered calling points with coordinates — the train's route line and the
+   * detail panel's calling list. Only correlated (rid-bearing) trains have one.
+   */
+  path?: PathStop[];
 }
 
 export interface LiveTrainsResult {
@@ -52,6 +72,13 @@ function titleCase(raw: string): string {
     .replace(/^./, (c) => c.toUpperCase());
 }
 
+/** Darwin supplies HH:MM or HH:MM:SS; the panel only wants HH:MM. */
+function trimTime(t: string | null | undefined): string | undefined {
+  if (!t) return undefined;
+  const m = /^(\d{2}:\d{2})/.exec(t);
+  return m ? m[1] : t;
+}
+
 /** Small nudge from A toward B so departed trains sit between stations. */
 function nudge(
   from: { lat: number; lon: number },
@@ -65,7 +92,7 @@ function nudge(
   };
 }
 
-export async function getLiveTrains(limit = 800): Promise<LiveTrainsResult> {
+export async function getLiveTrains(limit = 800, ridFilter?: string): Promise<LiveTrainsResult> {
   const db = getDb();
   const since = new Date(Date.now() - FRESH_SECONDS * 1000);
 
@@ -102,6 +129,7 @@ export async function getLiveTrains(limit = 800): Promise<LiveTrainsResult> {
           isNotNull(nrTrainPosition.lastReportedAt),
           gte(nrTrainPosition.lastReportedAt, since),
           isNotNull(station.lat),
+          ridFilter ? eq(nrTrainPosition.rid, ridFilter) : undefined,
         ),
       )
       .orderBy(sql`${nrTrainPosition.lastReportedAt} desc`)
@@ -114,17 +142,23 @@ export async function getLiveTrains(limit = 800): Promise<LiveTrainsResult> {
     return { generatedAt: new Date().toISOString(), count: 0, trains: [] };
   }
 
-  // For correlated trains, look up the next scheduled stop (for the nudge and
-  // the destination label) in one query.
+  // For correlated trains, load the full ordered calling pattern. It drives the
+  // nudge (next stop), the destination label, the route line, and the detail
+  // panel's calling list — all from this one query.
   const rids = [...new Set(rows.map((r) => r.rid).filter(Boolean) as string[])];
   const nextStopByRid = new Map<string, { crs: string; name?: string; lat?: number; lon?: number }>();
   const destByRid = new Map<string, string>();
+  const pathByRid = new Map<string, PathStop[]>();
   if (rids.length > 0) {
     const forecasts = await db
       .select({
         rid: darwinStopForecast.rid,
         seq: darwinStopForecast.seq,
         crs: darwinStopForecast.crs,
+        schedArr: darwinStopForecast.schedArr,
+        schedDep: darwinStopForecast.schedDep,
+        estArr: darwinStopForecast.estArr,
+        estDep: darwinStopForecast.estDep,
         actArr: darwinStopForecast.actArr,
         actDep: darwinStopForecast.actDep,
       })
@@ -137,23 +171,26 @@ export async function getLiveTrains(limit = 800): Promise<LiveTrainsResult> {
       list.push(f);
       byRid.set(f.rid, list);
     }
-    // Collect the CRS values whose coordinates we'll need for the next stop.
-    const nextCrsNeeded = new Set<string>();
+
+    // First pass: order each route, pick next stop + destination, and gather
+    // every CRS we'll need coordinates for (the whole path, not just endpoints).
+    const orderedByRid = new Map<string, typeof forecasts>();
     const pendingNext = new Map<string, string>(); // rid -> next crs
+    const allCrsNeeded = new Set<string>();
     for (const [rid, list] of byRid) {
       const ordered = list.filter((s) => s.crs).sort((a, b) => a.seq - b.seq);
       const last = ordered[ordered.length - 1];
       if (!last) continue;
+      orderedByRid.set(rid, ordered);
+      for (const s of ordered) if (s.crs) allCrsNeeded.add(s.crs);
       if (last.crs) destByRid.set(rid, last.crs);
       // The first stop with no actual time is "next".
       const next = ordered.find((s) => !s.actArr && !s.actDep);
-      if (next?.crs) {
-        pendingNext.set(rid, next.crs);
-        nextCrsNeeded.add(next.crs);
-      }
+      if (next?.crs) pendingNext.set(rid, next.crs);
     }
-    // Coordinates + names for the next-stop and destination CRS values.
-    const crsNeeded = [...new Set([...nextCrsNeeded, ...destByRid.values()])];
+
+    // Coordinates + names for every calling point on every correlated route.
+    const crsNeeded = [...allCrsNeeded];
     const coords = new Map<string, { name: string; lat: number | null; lon: number | null }>();
     if (crsNeeded.length > 0) {
       const st = await db
@@ -162,6 +199,40 @@ export async function getLiveTrains(limit = 800): Promise<LiveTrainsResult> {
         .where(inArray(station.crs, crsNeeded));
       for (const s of st) coords.set(s.crs, { name: s.name, lat: s.lat, lon: s.lon });
     }
+
+    // Build the drawable path per rid (only stops with coordinates).
+    for (const [rid, ordered] of orderedByRid) {
+      const firstUpcomingSeq = ordered.find((s) => !s.actArr && !s.actDep)?.seq;
+      const path: PathStop[] = [];
+      for (const s of ordered) {
+        if (!s.crs) continue;
+        const c = coords.get(s.crs);
+        if (!c || c.lat == null || c.lon == null) continue;
+        const departed = !!(s.actArr || s.actDep);
+        const isCurrent = firstUpcomingSeq !== undefined && s.seq === firstUpcomingSeq;
+        const status: PathStop["status"] = departed
+          ? "departed"
+          : isCurrent
+            ? "current"
+            : "upcoming";
+        // Prefer the public arrival face; fall back to departure (origin has no arr).
+        const sched = trimTime(s.schedArr ?? s.schedDep);
+        const act = trimTime(s.actArr ?? s.actDep);
+        const est = trimTime(s.estArr ?? s.estDep);
+        path.push({
+          crs: s.crs,
+          name: titleCase(c.name),
+          lat: c.lat,
+          lon: c.lon,
+          scheduled: sched,
+          expected: act ?? est,
+          actual: !!act,
+          status,
+        });
+      }
+      if (path.length > 1) pathByRid.set(rid, path);
+    }
+
     for (const [rid, crs] of pendingNext) {
       const c = coords.get(crs);
       nextStopByRid.set(rid, {
@@ -207,6 +278,7 @@ export async function getLiveTrains(limit = 800): Promise<LiveTrainsResult> {
           ? Math.max(0, Math.round((now - r.lastReportedAt.getTime()) / 1000))
           : 0,
         rid: r.rid ?? undefined,
+        path: r.rid ? pathByRid.get(r.rid) : undefined,
       };
     });
 

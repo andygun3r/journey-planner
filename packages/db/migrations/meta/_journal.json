@@ -36,6 +36,34 @@
       "when": 1784929316680,
       "tag": "0004_illegal_magma",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784983877149,
+      "tag": "0005_salty_dorian_gray",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785001962278,
+      "tag": "0006_tearful_sauron",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785003577282,
+      "tag": "0007_polite_terrax",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785006329783,
+      "tag": "0008_flawless_franklin_storm",
+      "breakpoints": true
     }
   ]
 }

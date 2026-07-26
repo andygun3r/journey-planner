@@ -1,0 +1,12 @@
+{
+  "tdArea": "Q0",
+  "_note": "ILLUSTRATIVE SAMPLE DATA — not a real signalling map. See README.md.",
+  "rows": [
+    { "address": "0b", "bit": 0, "itemType": "signal", "itemId": "Q101", "aspect": "off", "description": "Signal Q101 (set bit = off/proceed)" },
+    { "address": "0b", "bit": 1, "itemType": "signal", "itemId": "Q103", "aspect": "off", "description": "Signal Q103 (set bit = off/proceed)" },
+    { "address": "0b", "bit": 2, "itemType": "signal", "itemId": "Q105", "aspect": "off", "description": "Signal Q105 (set bit = off/proceed)" },
+    { "address": "0b", "bit": 3, "itemType": "track", "itemId": "Q101T", "description": "Track circuit ahead of Q101 (set bit = occupied)" },
+    { "address": "0c", "bit": 0, "itemType": "signal", "itemId": "Q107", "aspect": "off", "description": "Signal Q107 (set bit = off/proceed)" },
+    { "address": "0c", "bit": 1, "itemType": "point", "itemId": "Q201", "description": "Points Q201 (set bit = reverse)" }
+  ]
+}

@@ -8,3 +8,4 @@ data/dtd/archive/
 data/gtfs/
 *.log
 .DS_Store
+.dev-logs/

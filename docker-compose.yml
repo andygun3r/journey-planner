@@ -131,6 +131,10 @@ services:
   # Postgres). Adds between-station live positioning on top of Darwin.
   # Needs NETWORKRAIL_* in .env. Load reference data first:
   #   docker compose run --rm nr-ingest pnpm tsx src/index.ts reference
+  # Then the uid->headcode map (SCHEDULE feed, ~127MB, several minutes;
+  # re-run periodically — daily is reasonable — since NR reissues SCHEDULE
+  # daily and this table is a point-in-time snapshot):
+  #   docker compose run --rm nr-ingest pnpm tsx src/index.ts headcodes
   nr-ingest:
     build:
       context: .

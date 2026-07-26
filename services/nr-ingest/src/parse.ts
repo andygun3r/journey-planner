@@ -41,6 +41,21 @@ export interface BerthStep {
   timestampMs: number;
 }
 
+/**
+ * A train describer S-class report: the state of one signalling address (a byte)
+ * within a TD area. Individual bits are signals/points/track circuits, decoded
+ * later against the SOP bit-map. SF = full byte value; SG/SH = refresh/scan.
+ */
+export interface SClassReport {
+  kind: "sclass";
+  tdArea: string;
+  /** Hex address within the area. */
+  address: string;
+  /** Hex byte value at that address. */
+  data: string;
+  timestampMs: number;
+}
+
 export type NrEvent = MovementReport | Activation | Cancellation | BerthStep;
 
 function num(v: unknown): number | undefined {
@@ -158,9 +173,71 @@ export function parseTd(value: string): BerthStep[] {
       tdArea: m.area_id.trim(),
       fromBerth: m.from?.trim(),
       toBerth: m.to?.trim(),
-      // TD `time` is the same UK-local-as-epoch as TRUST — correct to true UTC.
-      timestampMs: Number.isFinite(ts) ? trustTsToUtcMs(ts) : Date.now(),
+      // TD `time` is already a true UTC epoch-ms (unlike TRUST's local-as-UTC
+      // quirk); use it as-is. Applying the TRUST correction here pushed every
+      // berth step one hour into the past during BST.
+      timestampMs: Number.isFinite(ts) ? ts : Date.now(),
     });
   }
   return steps;
+}
+
+/**
+ * Parse S-class signalling messages off the same TD stream. SF_MSG carries one
+ * address/data byte pair; SG_MSG/SH_MSG are refresh scans whose `data` is a run
+ * of consecutive bytes starting at `address` — we expand those into one report
+ * per byte so downstream storage is uniform (one row per address).
+ */
+export function parseSClass(value: string): SClassReport[] {
+  let arr: Array<
+    Record<string, { area_id?: string; address?: string; data?: string; time?: string }>
+  >;
+  try {
+    arr = JSON.parse(value);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(arr)) return [];
+
+  const reports: SClassReport[] = [];
+  for (const msg of arr) {
+    const sf = msg.SF_MSG;
+    const refresh = msg.SG_MSG ?? msg.SH_MSG;
+    const m = sf ?? refresh;
+    if (!m || !m.area_id || m.address === undefined || m.data === undefined) continue;
+    const tdArea = m.area_id.trim();
+    const ts = Number(m.time);
+    // S-class rides the same TD stream as berth steps: `time` is already true
+    // UTC epoch-ms, so use it as-is (the TRUST local-as-UTC correction would
+    // wrongly shift it an hour during BST — see parseTd).
+    const timestampMs = Number.isFinite(ts) ? ts : Date.now();
+    const startAddr = parseInt(m.address, 16);
+    const hex = m.data.trim();
+
+    if (sf) {
+      // Single address, single byte.
+      reports.push({ kind: "sclass", tdArea, address: normAddr(startAddr), data: normByte(hex), timestampMs });
+    } else if (Number.isFinite(startAddr)) {
+      // Refresh scan: split `data` into bytes across consecutive addresses.
+      for (let i = 0; i * 2 + 2 <= hex.length; i++) {
+        const byte = hex.slice(i * 2, i * 2 + 2);
+        reports.push({
+          kind: "sclass",
+          tdArea,
+          address: normAddr(startAddr + i),
+          data: normByte(byte),
+          timestampMs,
+        });
+      }
+    }
+  }
+  return reports;
+}
+
+/** Two-digit lowercase hex address, so lookups are stable across messages. */
+function normAddr(n: number): string {
+  return n.toString(16).toLowerCase().padStart(2, "0");
+}
+function normByte(hex: string): string {
+  return hex.toLowerCase().padStart(2, "0").slice(-2);
 }

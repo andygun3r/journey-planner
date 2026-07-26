@@ -19,6 +19,14 @@ function t(iso: string): string {
   return timeFmt.format(new Date(iso));
 }
 
+/** "12 coaches · 3 First" — a compact class breakdown, full per-coach detail lives on the service page. */
+function coachSummary(d: BoardDeparture): string {
+  if (!d.coachCount) return "";
+  const firstCount = d.coaches?.filter((c) => c.first).length ?? 0;
+  const base = `${d.coachCount} coach${d.coachCount === 1 ? "" : "es"}`;
+  return firstCount > 0 ? `${base} · ${firstCount} First` : base;
+}
+
 function StatusCell({ d }: { d: BoardDeparture }) {
   // The instant we expect it to leave here: the live estimate, else scheduled.
   const departsIso = d.live ?? d.scheduled;
@@ -224,8 +232,11 @@ export default async function BoardPage({
                       {(d.operator || d.coachCount) && (
                         <span className="board-operator">
                           {d.operator}
+                          {d.operator && d.operatorPunctuality !== undefined
+                            ? ` (${d.operatorPunctuality}% on time)`
+                            : ""}
                           {d.operator && d.coachCount ? " · " : ""}
-                          {d.coachCount ? `${d.coachCount} coaches` : ""}
+                          {coachSummary(d)}
                         </span>
                       )}
                       {d.position && d.status !== "cancelled" && (

@@ -4,10 +4,11 @@ import { getStations } from "@/lib/stations";
 export const dynamic = "force-dynamic";
 
 export default async function BoardsIndex() {
-  let stations: Awaited<ReturnType<typeof getStations>> = [];
+  // Only need the count for the empty-state; the picker fetches via /api/stations.
+  let stationCount = 0;
   let unavailable = false;
   try {
-    stations = await getStations();
+    stationCount = (await getStations()).length;
   } catch {
     unavailable = true;
   }
@@ -19,9 +20,9 @@ export default async function BoardsIndex() {
         Pick a station to see what’s leaving — like the boards on the platform.
       </p>
       <div className="search-panel">
-        <BoardPicker stations={stations} />
+        <BoardPicker />
       </div>
-      {(unavailable || stations.length === 0) && (
+      {(unavailable || stationCount === 0) && (
         <div className="notice">
           <h2>Station data not loaded yet</h2>
           <p>Load the timetable into the database, then refresh.</p>

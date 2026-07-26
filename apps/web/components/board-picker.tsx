@@ -5,7 +5,7 @@ import { useState } from "react";
 import { StationInput, type StationOption } from "./station-input";
 
 /** Standalone "check a station's departures" entry point. */
-export function BoardPicker({ stations }: { stations: StationOption[] }) {
+export function BoardPicker({ stations }: { stations?: StationOption[] }) {
   const router = useRouter();
   const [station, setStation] = useState<StationOption | null>(null);
 

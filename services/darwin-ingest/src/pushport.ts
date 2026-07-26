@@ -35,6 +35,14 @@ export interface ParsedTS {
   stops: ParsedStopForecast[];
 }
 
+/** One stop in a schedule's ordered calling pattern (no live times — just the plan). */
+export interface ParsedScheduleStop {
+  tiploc: string;
+  seq: number;
+  wta?: string;
+  wtd?: string;
+}
+
 export interface ParsedSchedule {
   kind: "schedule";
   rid: string;
@@ -43,6 +51,13 @@ export interface ParsedSchedule {
   toc?: string;
   cancelled: boolean;
   cancelReason?: string;
+  /**
+   * The full, stably-ordered calling pattern from the SC message. This is the
+   * authoritative seq source: TS messages only carry a shifting subset of
+   * stops near the train's current position, so an index into a TS message's
+   * own location list is NOT a stable seq (see applyTS in store.ts).
+   */
+  stops: ParsedScheduleStop[];
 }
 
 export interface ParsedDeactivation {
@@ -156,6 +171,22 @@ function parseTS(ts: Record<string, unknown>): ParsedTS | null {
   };
 }
 
+/**
+ * The SC message's calling pattern arrives as separate OR/OPOR (origin),
+ * IP/OPIP (intermediate), and DT/OPDT (destination) arrays, each holding
+ * Location-shaped stops in schedule order. Concatenating OR -> IP -> DT gives
+ * the full, stably-ordered pattern; the "OP" (operational, non-public)
+ * variants are passenger-invisible stops we still want for seq stability.
+ */
+function scheduleLocations(sch: Record<string, unknown>): RawLocation[] {
+  const keys = ["OR", "OPOR", "IP", "OPIP", "PP", "DT", "OPDT"];
+  const locs: RawLocation[] = [];
+  for (const key of keys) {
+    locs.push(...asArray(sch[key] as RawLocation | RawLocation[] | undefined));
+  }
+  return locs;
+}
+
 function parseSchedule(sch: Record<string, unknown>): ParsedSchedule | null {
   const rid = sch.rid as string | undefined;
   const uid = sch.uid as string | undefined;
@@ -168,6 +199,16 @@ function parseSchedule(sch: Record<string, unknown>): ParsedSchedule | null {
     | undefined;
   const reasonCode =
     typeof cancelReason === "string" ? cancelReason : (cancelReason?.[""] as string | undefined);
+
+  const stops: ParsedScheduleStop[] = scheduleLocations(sch)
+    .filter((loc) => loc.tpl)
+    .map((loc, seq) => ({
+      tiploc: loc.tpl!,
+      seq,
+      wta: loc.wta,
+      wtd: loc.wtd,
+    }));
+
   return {
     kind: "schedule",
     rid,
@@ -176,6 +217,7 @@ function parseSchedule(sch: Record<string, unknown>): ParsedSchedule | null {
     toc: sch.toc as string | undefined,
     cancelled: cancelReason !== undefined,
     cancelReason: reasonCode,
+    stops,
   };
 }
 

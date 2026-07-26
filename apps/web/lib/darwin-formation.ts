@@ -75,6 +75,7 @@ export async function enrichBoardWithFormation(
     const coaches: Coach[] = stored.map((c) => ({
       number: c.number,
       first: c.first,
+      coachClass: c.coachClass,
       loading: c.loading,
     }));
     return { ...d, rid, coachCount: coaches.length, coaches };

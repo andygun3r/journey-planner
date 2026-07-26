@@ -41,15 +41,31 @@ export async function applyTS(ts: ParsedTS): Promise<string[]> {
       set: { lateReason: ts.lateReason ?? null, updatedAt: new Date() },
     });
 
+  // seq is not reliable from a TS message alone (see darwin_stop_forecast's
+  // schema comment): TS only ever carries a shifting subset of stops, so a
+  // message-local index restarts from 0 every time and collides with seq
+  // values already assigned (by applySchedule, or an earlier TS). For a stop
+  // this rid has never seen before, assign a seq that sorts after everything
+  // already known for this rid — a running per-rid counter seeded from the
+  // current max, not the message's own index — so new stops append instead
+  // of colliding with existing ones.
+  const existingRows = await db
+    .select({ tiploc: darwinStopForecast.tiploc, seq: darwinStopForecast.seq })
+    .from(darwinStopForecast)
+    .where(eq(darwinStopForecast.rid, ts.rid));
+  const existingSeqByTiploc = new Map(existingRows.map((r) => [r.tiploc, r.seq]));
+  let nextSeq = existingRows.reduce((max, r) => Math.max(max, r.seq), -1) + 1;
+
   const touchedCrs = new Set<string>();
   for (const stop of ts.stops) {
     const crs = tiplocToCrs.get(stop.tiploc) ?? null;
     if (crs) touchedCrs.add(crs);
+    const seq = existingSeqByTiploc.get(stop.tiploc) ?? nextSeq++;
     await db
       .insert(darwinStopForecast)
       .values({
         rid: ts.rid,
-        seq: stop.seq,
+        seq,
         tiploc: stop.tiploc,
         crs,
         schedArr: normaliseTime(stop.wta),
@@ -64,8 +80,11 @@ export async function applyTS(ts: ParsedTS): Promise<string[]> {
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
-        target: [darwinStopForecast.rid, darwinStopForecast.seq],
+        target: [darwinStopForecast.rid, darwinStopForecast.tiploc],
         set: {
+          // seq intentionally NOT overwritten here: once a row exists (seeded
+          // by applySchedule with the authoritative order, or by an earlier
+          // TS), a later TS message must not reshuffle its position.
           crs,
           estArr: normaliseTime(stop.arrEt),
           estDep: normaliseTime(stop.depEt),
@@ -82,6 +101,8 @@ export async function applyTS(ts: ParsedTS): Promise<string[]> {
 }
 
 export async function applySchedule(sch: ParsedSchedule): Promise<void> {
+  await ensureTiplocMap();
+
   await db
     .insert(darwinTrain)
     .values({
@@ -101,6 +122,38 @@ export async function applySchedule(sch: ParsedSchedule): Promise<void> {
         updatedAt: new Date(),
       },
     });
+
+  // Seed the authoritative, stably-ordered calling pattern from the SC
+  // message itself — the only Darwin message that carries the full route in
+  // one shot. TS messages (applyTS) only ever patch existing rows by tiploc
+  // from here on; they never get to assign seq for a row this seeded.
+  for (const stop of sch.stops) {
+    const crs = tiplocToCrs.get(stop.tiploc) ?? null;
+    await db
+      .insert(darwinStopForecast)
+      .values({
+        rid: sch.rid,
+        seq: stop.seq,
+        tiploc: stop.tiploc,
+        crs,
+        schedArr: normaliseTime(stop.wta),
+        schedDep: normaliseTime(stop.wtd),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [darwinStopForecast.rid, darwinStopForecast.tiploc],
+        set: {
+          // A later SC re-issue (e.g. after a VSTP amendment) is itself
+          // authoritative for ordering — safe to overwrite seq/crs/sched here,
+          // unlike TS updates.
+          seq: stop.seq,
+          crs,
+          schedArr: normaliseTime(stop.wta),
+          schedDep: normaliseTime(stop.wtd),
+          updatedAt: new Date(),
+        },
+      });
+  }
 }
 
 export async function applyDeactivation(d: ParsedDeactivation): Promise<void> {

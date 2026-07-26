@@ -10,7 +10,8 @@ export interface StationOption {
 interface Props {
   label: string;
   name: string;
-  stations: StationOption[];
+  /** Embedded station list. When empty, options are fetched from /api/stations?q=. */
+  stations?: StationOption[];
   value: StationOption | null;
   onChange: (station: StationOption | null) => void;
   placeholder?: string;
@@ -34,14 +35,48 @@ function rank(stations: StationOption[], query: string): StationOption[] {
   return [...exactCrs, ...prefix, ...word, ...contains].slice(0, 8);
 }
 
-export function StationInput({ label, name, stations, value, onChange, placeholder }: Props) {
+export function StationInput({
+  label,
+  name,
+  stations,
+  value,
+  onChange,
+  placeholder,
+}: Props) {
   const id = useId();
   const [query, setQuery] = useState(value?.name ?? "");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const [remote, setRemote] = useState<StationOption[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const options = useMemo(() => rank(stations, query), [stations, query]);
+  // When no local list is provided, fetch a ranked shortlist from the API
+  // (debounced) so we don't ship the whole ~2,500-station list to the client.
+  const useRemote = !stations || stations.length === 0;
+  useEffect(() => {
+    if (!useRemote) return;
+    const q = query.trim();
+    if (q.length < 2) {
+      setRemote([]);
+      return;
+    }
+    const ctl = new AbortController();
+    const timer = setTimeout(() => {
+      fetch(`/api/stations?q=${encodeURIComponent(q)}`, { signal: ctl.signal })
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data: StationOption[]) => setRemote(Array.isArray(data) ? data : []))
+        .catch(() => {});
+    }, 150);
+    return () => {
+      clearTimeout(timer);
+      ctl.abort();
+    };
+  }, [query, useRemote]);
+
+  const options = useMemo(
+    () => (useRemote ? remote.slice(0, 8) : rank(stations ?? [], query)),
+    [useRemote, remote, stations, query],
+  );
 
   useEffect(() => {
     setQuery(value?.name ?? "");

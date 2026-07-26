@@ -1,7 +1,7 @@
-import { darwinStopForecast } from "@mainline/db";
-import { inArray } from "drizzle-orm";
+import { darwinFormation, darwinStopForecast } from "@mainline/db";
+import { eq, inArray } from "drizzle-orm";
 import { getDb } from "./db";
-import { enrichWithDarwinProgress } from "./service-progress";
+import { enrichWithDarwinProgress, enrichWithNrProgress } from "./service-progress";
 
 /**
  * Client for the RDG "Service Details" REST API (LDBWS GetServiceDetails).
@@ -51,6 +51,8 @@ interface RawServiceDetails {
 export interface ServiceCoach {
   number: string;
   first: boolean;
+  /** Raw class string from the feed, e.g. "First" / "Standard". */
+  coachClass?: string;
   loading?: number;
   toilet?: string;
 }
@@ -118,6 +120,8 @@ export interface ServiceDetails {
   length?: number;
   calls: ServiceCall[];
   progress: ServiceProgress;
+  /** Darwin run id, once resolved — powers the live position map and advanced view. */
+  rid?: string;
 }
 
 export function serviceDetailsConfigured(): boolean {
@@ -179,6 +183,40 @@ async function enrichCallsWithDarwinPlatforms(calls: ServiceCall[]): Promise<Ser
   });
 }
 
+interface StoredCoach {
+  number: string;
+  coachClass?: string;
+  first: boolean;
+  loading?: number;
+}
+
+/**
+ * Fills coach formation from Darwin (darwin_formation) when LDBWS's own
+ * GetServiceDetails returned none — mirrors the board's fallback
+ * (enrichBoardWithFormation), which some TOCs/services need since LDBWS
+ * doesn't always carry formation data. Toilet status stays unset here: it's
+ * not present anywhere in the Darwin Push Port formation/loading messages.
+ */
+async function fallbackFormation(rid: string): Promise<ServiceCoach[] | null> {
+  try {
+    const rows = await getDb()
+      .select({ coaches: darwinFormation.coaches })
+      .from(darwinFormation)
+      .where(eq(darwinFormation.rid, rid))
+      .limit(1);
+    const stored = rows[0]?.coaches as StoredCoach[] | undefined;
+    if (!stored || stored.length === 0) return null;
+    return stored.map((c) => ({
+      number: c.number,
+      first: c.first,
+      coachClass: c.coachClass,
+      loading: c.loading,
+    }));
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchServiceDetails(serviceId: string): Promise<ServiceDetails | null> {
   const key = process.env.LDBWS_SERVICE_API_KEY;
   const base = process.env.LDBWS_SERVICE_BASE_URL;
@@ -216,23 +254,40 @@ export async function fetchServiceDetails(serviceId: string): Promise<ServiceDet
   // Resolve the service to a live Darwin train and overlay progress + platforms
   // (LDBWS calling points carry no downstream platforms; Darwin does).
   const origin = calls[0];
-  const { calls: withProgress, progress } = await enrichWithDarwinProgress(
+  const { calls: withProgress, progress, rid } = await enrichWithDarwinProgress(
     calls,
     origin?.crs,
     origin?.scheduled,
   );
   calls = withProgress;
+  let finalProgress = progress;
+  // Darwin couldn't resolve this service (its one-time schedule/activation was
+  // missed — common after a feed outage). Fall back to the Network Rail TD feed,
+  // which keeps flowing and positions trains by live headcode. Only overrides
+  // when NR is confident about a single unambiguous match.
+  // NR_FORCE=1 (debug) forces the NR path even when Darwin resolved, to test it.
+  if (!progress.tracking || process.env.NR_FORCE === "1") {
+    const nr = await enrichWithNrProgress(calls).catch(() => null);
+    if (nr) {
+      calls = nr.calls;
+      finalProgress = nr.progress;
+    }
+  }
   // Backstop: fill any still-missing platforms by (crs, time), in case the
   // service didn't resolve to a single rid.
-  if (!progress.tracking) calls = await enrichCallsWithDarwinPlatforms(calls);
+  if (!finalProgress.tracking) calls = await enrichCallsWithDarwinPlatforms(calls);
 
-  const coaches: ServiceCoach[] = (d.formation?.coaches ?? []).map((c) => ({
+  let coaches: ServiceCoach[] = (d.formation?.coaches ?? []).map((c) => ({
     number: c.number ?? "",
     first: /first/i.test(c.coachClass ?? ""),
+    coachClass: c.coachClass,
     loading: c.loadingSpecified ? c.loading : undefined,
     toilet:
       typeof c.toilet === "string" ? c.toilet : (c.toilet?.value ?? c.toilet?.status),
   }));
+  if (coaches.length === 0 && rid) {
+    coaches = (await fallbackFormation(rid)) ?? coaches;
+  }
 
   return {
     stationName: d.locationName ?? d.crs ?? "",
@@ -248,6 +303,7 @@ export async function fetchServiceDetails(serviceId: string): Promise<ServiceDet
     coaches,
     length: d.length && d.length > 0 ? d.length : undefined,
     calls,
-    progress,
+    progress: finalProgress,
+    rid,
   };
 }
