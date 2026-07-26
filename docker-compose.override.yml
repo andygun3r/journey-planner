@@ -1,0 +1,17 @@
+# Local dev only — auto-loaded by `docker compose` alongside docker-compose.yml,
+# but never used in a server/Coolify deploy (Coolify deploys docker-compose.yml
+# directly, not this override). Publishes host ports so native (non-Docker)
+# processes — `pnpm --filter web dev`, dev-up.sh's ingest workers — can reach
+# postgres/redis at localhost.
+name: mainline
+
+services:
+  postgres:
+    ports:
+      # Host port 5434: 5432/5433 are held by other local projects.
+      - "5434:5432"
+
+  redis:
+    ports:
+      # Host port 6380: 6379 is held by another local project.
+      - "6380:6379"

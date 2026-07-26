@@ -1,15 +1,17 @@
 name: mainline
 
 services:
+  # No host ports published here on purpose — this file is deployed as-is on
+  # servers (Coolify included), where Postgres/Redis must stay off the public
+  # network. For local host access (psql, redis-cli from the host) use
+  # docker-compose.override.yml, auto-loaded by `docker compose` locally but
+  # never picked up by a server deploy (Coolify points at this file directly).
   postgres:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: mainline
       POSTGRES_PASSWORD: mainline
       POSTGRES_DB: mainline
-    ports:
-      # Host port 5434: 5432/5433 are held by other local projects.
-      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,17 +19,16 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   redis:
     image: redis:8-alpine
-    ports:
-      # Host port 6380: 6379 is held by another local project.
-      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   web:
     build:
@@ -44,27 +45,44 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
 
-  # Enabled once the ETL has produced /data/gtfs/gb-rail.gtfs.zip:
-  #   docker compose --profile routing up -d motis
   # VERIFY ON FIRST INTEGRATION: image tag pullability and the import/server
   # invocation for this release (config.yml keys move between versions).
   # GHCR has no v2 version tags (they stop at 0.8.x); v2 ships as :latest.
-  # Digest recorded below after first pull for reproducibility.
+  # Needs GTFS data at ./data/gtfs/gb-rail.gtfs.zip before it can serve —
+  # run the etl profile once against this same host/volume first.
   motis:
     image: ghcr.io/motis-project/motis:latest
-    profiles: ["routing"]
     # import writes ./data relative to config.yml (both live in /data),
     # so the server must resolve them from that working directory.
     working_dir: /data
     command: ["/motis", "server"]
     volumes:
       - motis-data:/data
-      - ./data/gtfs:/input:ro
+      - gtfs-data:/input
     ports:
       - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      # MOTIS has no dedicated /health path; hitting any real API route and
+      # accepting non-5xx confirms the HTTP server came up after import.
+      test: ["CMD-SHELL", "wget -q -S -O /dev/null http://localhost:8080/api/v1/geocode?text=x 2>&1 | grep -qE 'HTTP/[0-9.]+ [1-4][0-9][0-9]'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Run-to-completion ETL: docker compose --profile etl run --rm etl timetable
+  # Writes into the same named `gtfs-data` volume MOTIS reads from, so on a
+  # fresh host (Coolify included) this must be run at least once before MOTIS
+  # has anything to serve.
   etl:
     build:
       context: .
@@ -78,8 +96,8 @@ services:
       NRDP_USERNAME: ${NRDP_USERNAME:-}
       NRDP_PASSWORD: ${NRDP_PASSWORD:-}
     volumes:
-      - ./data/dtd:/data/dtd
-      - ./data/gtfs:/data/gtfs
+      - dtd-archive:/data/dtd
+      - gtfs-data:/data/gtfs
     depends_on:
       mariadb:
         condition: service_healthy
@@ -125,6 +143,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'tsx src/index.ts' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
   # Network Rail ingester (TRUST movements + Train Describer over STOMP ->
@@ -149,8 +173,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'tsx src/index.ts' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
 volumes:
   pgdata:
   motis-data:
+  gtfs-data:
+  dtd-archive:
