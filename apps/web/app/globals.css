@@ -598,6 +598,20 @@ a {
   border-color: color-mix(in oklch, var(--danger) 40%, transparent);
 }
 
+.etl-log {
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  padding: 1rem 1.25rem;
+  margin-top: 1.25rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 24rem;
+  overflow-y: auto;
+}
+
 /* ---- Skeletons ---- */
 
 .skeleton-row {

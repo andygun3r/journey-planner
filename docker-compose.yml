@@ -38,8 +38,22 @@ services:
       DATABASE_URL: postgres://mainline:mainline@postgres:5432/mainline
       REDIS_URL: redis://redis:6379
       MOTIS_URL: http://motis:8080
+      ETL_GTFS_OUT_DIR: /data/gtfs
+      # Gates POST /api/etl/upload (see /settings/timetable) — required to
+      # accept a bundle produced locally by `etl package`. Unset disables the
+      # endpoint entirely (returns 503).
+      ETL_UPLOAD_TOKEN: ${ETL_UPLOAD_TOKEN:-}
+      # Must match the actual motis container name/id on this host — Coolify
+      # prefixes/suffixes compose project names, so verify with
+      # `docker compose ps motis` and override here if it doesn't match.
+      MOTIS_CONTAINER_NAME: ${MOTIS_CONTAINER_NAME:-mainline-motis-1}
     ports:
       - "3000:3000"
+    volumes:
+      - gtfs-data:/data/gtfs
+      # Needed to restart motis after applying an uploaded timetable bundle
+      # (MOTIS has no live-reload API) — same pattern as etl-cron's restart.
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy

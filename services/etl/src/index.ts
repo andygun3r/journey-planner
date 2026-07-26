@@ -6,6 +6,7 @@ import { exportGtfs, importFares, importTimetable } from "./run-dtd2mysql.js";
 import { postprocessGtfs } from "./postprocess-gtfs.js";
 import { loadFares } from "./load-fares.js";
 import { loadIntoPostgres } from "./load-postgres.js";
+import { packageBundle } from "./package-bundle.js";
 
 const ARCHIVE_DIR = process.env.ETL_ARCHIVE_DIR ?? "/data/dtd/archive";
 const GTFS_OUT_DIR = process.env.ETL_GTFS_OUT_DIR ?? "/data/gtfs";
@@ -33,6 +34,28 @@ async function timetable(source?: string): Promise<void> {
   console.log("Next: docker compose --profile routing up -d motis (reimports on restart).");
 }
 
+/**
+ * Runs the full timetable pipeline (download -> dtd2mysql -> postprocess) but,
+ * instead of writing to Postgres, packages the derived station/trip_mapping
+ * rows and GTFS zip into one bundle for upload via the web app's
+ * /settings/timetable page — so a low-memory server never has to run
+ * dtd2mysql itself. Run this locally: `docker compose --profile etl run --rm etl package`.
+ */
+async function packageCommand(source?: string): Promise<void> {
+  const rawZip =
+    source ??
+    (useSftp() ? await downloadFeedViaSftp("timetable", ARCHIVE_DIR) : await downloadFeed("timetable", ARCHIVE_DIR));
+  const feedVersion = path.basename(rawZip, path.extname(rawZip));
+  const zip = await prepareTimetableZip(rawZip, ARCHIVE_DIR);
+  await importTimetable(zip);
+  const rawGtfs = path.join(GTFS_OUT_DIR, "gb-rail.raw.gtfs.zip");
+  await exportGtfs(rawGtfs);
+  const result = await postprocessGtfs(rawGtfs, GTFS_OUT_DIR);
+  const bundlePath = await packageBundle(result, feedVersion, GTFS_OUT_DIR);
+  console.log(`Bundle ready: ${bundlePath}`);
+  console.log("Upload it at /settings/timetable on the running web app.");
+}
+
 /** Resume from an already-exported raw GTFS zip (skips download + dtd2mysql). */
 async function postprocessOnly(feedVersion = "unknown"): Promise<void> {
   const rawGtfs = path.join(GTFS_OUT_DIR, "gb-rail.raw.gtfs.zip");
@@ -55,6 +78,9 @@ switch (command) {
   case "timetable":
     await timetable(process.argv[3]);
     break;
+  case "package":
+    await packageCommand(process.argv[3]);
+    break;
   case "postprocess":
     await postprocessOnly(process.argv[3]);
     break;
@@ -66,6 +92,6 @@ switch (command) {
     await loadFares();
     break;
   default:
-    console.error("Usage: etl <timetable|fares|load-fares|postprocess>");
+    console.error("Usage: etl <timetable|package|fares|load-fares|postprocess>");
     process.exit(1);
 }

@@ -9,6 +9,7 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm exec turbo build --filter=web
 
 FROM node:22-alpine AS runner
+RUN apk add --no-cache docker-cli
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
