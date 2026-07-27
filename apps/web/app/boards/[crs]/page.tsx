@@ -43,8 +43,12 @@ function StatusCell({ d }: { d: BoardDeparture }) {
         <span className="board-status status-delayed">
           {showCountdown && departsIso ? (
             <LiveCountdown iso={departsIso} />
+          ) : d.live ? (
+            <>Exp. {t(d.live)}</>
+          ) : typeof d.delayMinutes === "number" ? (
+            <>Exp. +{d.delayMinutes}m</>
           ) : (
-            <>Exp. {d.live ? t(d.live) : `+${d.delayMinutes}m`}</>
+            "Delayed"
           )}
           {d.live && <span className="board-status-sub">exp. {t(d.live)}</span>}
         </span>
@@ -56,7 +60,7 @@ function StatusCell({ d }: { d: BoardDeparture }) {
         </span>
       );
     default:
-      return <span className="board-status status-scheduled">—</span>;
+      return <span className="board-status status-scheduled">{d.reason || "—"}</span>;
   }
 }
 

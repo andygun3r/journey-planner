@@ -152,13 +152,19 @@ function parseService(svc: LdbwsService, reference: Date): BoardDeparture | null
   } else if (/delay/i.test(etd)) {
     status = "delayed"; // "Delayed" with no estimate yet
   } else {
-    status = "on-time";
+    // No etd, or unrecognised LDBWS text ("No report", "Bus", "Starts here")
+    // — not a confirmed on-time status, so don't claim one.
+    status = "scheduled";
   }
 
   const coachCount = svc.formation?.coaches?.length || svc.length || undefined;
   // LDBWS gives a full human sentence for cancellations and delays, available
   // for every operator (unlike coach formation). Prefer the relevant one.
-  const reason = cancelled ? svc.cancelReason : status === "delayed" ? svc.delayReason : undefined;
+  const reason =
+    cancelled ? svc.cancelReason
+    : status === "delayed" ? svc.delayReason
+    : status === "scheduled" && etd ? etd
+    : undefined;
 
   return {
     tripId: svc.serviceID,

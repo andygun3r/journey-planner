@@ -47,6 +47,10 @@ services:
       # prefixes/suffixes compose project names, so verify with
       # `docker compose ps motis` and override here if it doesn't match.
       MOTIS_CONTAINER_NAME: ${MOTIS_CONTAINER_NAME:-mainline-motis-1}
+      # Target for POST /api/etl/sftp-sync's on-demand SFTP pull (see
+      # lib/etl-sftp-sync.ts) — same Coolify naming caveat as above, verify
+      # with `docker compose ps etl-cron`.
+      ETL_CRON_CONTAINER_NAME: ${ETL_CRON_CONTAINER_NAME:-mainline-etl-cron-1}
     ports:
       - "3000:3000"
     volumes:
@@ -141,7 +145,10 @@ services:
       # prefixes/suffixes compose project names, so verify with
       # `docker compose ps motis` and override here if it doesn't match.
       MOTIS_CONTAINER_NAME: ${MOTIS_CONTAINER_NAME:-mainline-motis-1}
-    entrypoint: ["crond", "-f", "-l", "2"]
+    # dcron's setpgid(0,0) call at startup fails with EPERM when crond runs
+    # as PID 1 (a session leader may never change its own process group).
+    # Backgrounding it under a shell keeps crond as a non-leader child.
+    entrypoint: ["sh", "-c", "crond -f -l 2 & wait"]
     volumes:
       - dtd-archive:/data/dtd
       - gtfs-data:/data/gtfs

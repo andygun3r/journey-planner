@@ -1,4 +1,4 @@
-import { darwinStopForecast, nrCorpus, nrTrainPositionHistory, station } from "@mainline/db";
+import { darwinStopForecast, darwinTrain, nrCorpus, nrHeadcode, nrTrainPositionHistory, station } from "@mainline/db";
 import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { getDb } from "./db";
 
@@ -11,6 +11,20 @@ import { getDb } from "./db";
  * time for comparison. Most berth passes have no scheduled match — SMART is
  * far more granular than the timetable — and render as "passed, no schedule"
  * rather than being hidden.
+ *
+ * TD berth-step rows (the actual junction/berth detail — see nr-ingest's
+ * applyBerthStep) are written keyed by headcode only, never rid: TD doesn't
+ * carry one. A rid-only query here would silently miss all of them. When the
+ * caller only has a rid, resolve it to this train's headcode the same way
+ * service-progress.ts does (rid -> uid -> nr_headcode) so TD rows are found.
+ *
+ * A resolved headcode is NOT unique to this run: the same 4-character
+ * headcode is reassigned to different physical trains across the day (seen
+ * in practice: a Waterloo-Guildford service's history showing an unrelated
+ * Moorgate-line run's berth passes from earlier that afternoon, spliced onto
+ * the front). Once a headcode is known, its matched rows are filtered to
+ * only those whose location is actually on this rid's own route — same
+ * discipline as the live-position guards in service-progress.ts / board-position.ts.
  */
 
 export interface PositionHistoryEntry {
@@ -32,20 +46,36 @@ export async function getPositionHistory(opts: {
   rid?: string;
   headcode?: string;
 }): Promise<PositionHistoryEntry[]> {
-  const { trainId, rid, headcode } = opts;
+  const { trainId, rid } = opts;
+  let headcode = opts.headcode;
   if (!trainId && !rid && !headcode) return [];
 
   const db = getDb();
+
+  if (rid && !headcode) {
+    try {
+      const train = await db
+        .select({ uid: darwinTrain.uid })
+        .from(darwinTrain)
+        .where(eq(darwinTrain.rid, rid))
+        .limit(1);
+      const uid = train[0]?.uid;
+      if (uid) {
+        const hc = await db
+          .select({ headcode: nrHeadcode.headcode })
+          .from(nrHeadcode)
+          .where(eq(nrHeadcode.uid, uid))
+          .limit(1);
+        headcode = hc[0]?.headcode ?? undefined;
+      }
+    } catch {
+      // leave headcode unresolved — rid/trainId filters still apply below
+    }
+  }
+
   const since = new Date(Date.now() - SINCE_HOURS * 3_600_000);
 
-  const idFilters = [
-    trainId ? eq(nrTrainPositionHistory.trainId, trainId) : undefined,
-    rid ? eq(nrTrainPositionHistory.rid, rid) : undefined,
-    headcode ? eq(nrTrainPositionHistory.headcode, headcode) : undefined,
-  ].filter(Boolean);
-  if (idFilters.length === 0) return [];
-
-  let rows: Array<{
+  type Row = {
     reportedAt: Date;
     lastEventType: string | null;
     lastStanox: string | null;
@@ -53,27 +83,81 @@ export async function getPositionHistory(opts: {
     tdArea: string | null;
     berth: string | null;
     lateness: number | null;
-  }>;
+  };
+  const cols = {
+    reportedAt: nrTrainPositionHistory.reportedAt,
+    lastEventType: nrTrainPositionHistory.lastEventType,
+    lastStanox: nrTrainPositionHistory.lastStanox,
+    lastCrs: nrTrainPositionHistory.lastCrs,
+    tdArea: nrTrainPositionHistory.tdArea,
+    berth: nrTrainPositionHistory.berth,
+    lateness: nrTrainPositionHistory.lateness,
+  };
+
+  // trainId/rid rows are unambiguous (rid is only ever set via TRUST
+  // activation matching train_uid) — no extra filtering needed.
+  const directFilters = [
+    trainId ? eq(nrTrainPositionHistory.trainId, trainId) : undefined,
+    rid ? eq(nrTrainPositionHistory.rid, rid) : undefined,
+  ].filter((f): f is NonNullable<typeof f> => Boolean(f));
+
+  let rows: Row[] = [];
   try {
-    rows = await db
-      .select({
-        reportedAt: nrTrainPositionHistory.reportedAt,
-        lastEventType: nrTrainPositionHistory.lastEventType,
-        lastStanox: nrTrainPositionHistory.lastStanox,
-        lastCrs: nrTrainPositionHistory.lastCrs,
-        tdArea: nrTrainPositionHistory.tdArea,
-        berth: nrTrainPositionHistory.berth,
-        lateness: nrTrainPositionHistory.lateness,
-      })
-      .from(nrTrainPositionHistory)
-      .where(and(or(...idFilters), gte(nrTrainPositionHistory.reportedAt, since)))
-      .orderBy(desc(nrTrainPositionHistory.reportedAt))
-      .limit(MAX_ROWS);
+    if (directFilters.length > 0) {
+      rows = await db
+        .select(cols)
+        .from(nrTrainPositionHistory)
+        .where(and(or(...directFilters), gte(nrTrainPositionHistory.reportedAt, since)))
+        .orderBy(desc(nrTrainPositionHistory.reportedAt))
+        .limit(MAX_ROWS);
+    }
+
+    if (headcode) {
+      const hcRows = await db
+        .select(cols)
+        .from(nrTrainPositionHistory)
+        .where(
+          and(eq(nrTrainPositionHistory.headcode, headcode), gte(nrTrainPositionHistory.reportedAt, since)),
+        )
+        .orderBy(desc(nrTrainPositionHistory.reportedAt))
+        .limit(MAX_ROWS);
+
+      // The headcode may have belonged to a different physical train earlier
+      // in the day: only keep rows whose location is on this rid's own route.
+      let routeCrs: Set<string> | null = null;
+      if (rid) {
+        try {
+          const forecasts = await db
+            .select({ crs: darwinStopForecast.crs })
+            .from(darwinStopForecast)
+            .where(eq(darwinStopForecast.rid, rid));
+          routeCrs = new Set(forecasts.map((f) => f.crs).filter((c): c is string => Boolean(c)));
+        } catch {
+          routeCrs = null; // fall through to accepting all headcode rows
+        }
+      }
+      const filtered = routeCrs
+        ? hcRows.filter((r) => r.lastCrs && routeCrs!.has(r.lastCrs))
+        : hcRows;
+      rows.push(...filtered);
+    }
   } catch {
     return [];
   }
   if (rows.length === 0) return [];
-  rows.reverse(); // chronological order for the UI
+
+  // Merge, dedupe (a row can match both a direct filter and the headcode
+  // filter), and sort chronologically for the UI.
+  const seen = new Set<string>();
+  rows = rows
+    .filter((r) => {
+      const key = `${r.reportedAt.getTime()}|${r.lastStanox ?? ""}|${r.tdArea ?? ""}|${r.berth ?? ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => a.reportedAt.getTime() - b.reportedAt.getTime())
+    .slice(-MAX_ROWS);
 
   // Resolve human-readable names for any STANOX without a direct CRS.
   const stanoxNeeded = [...new Set(rows.map((r) => r.lastStanox).filter(Boolean) as string[])];

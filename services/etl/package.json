@@ -12,6 +12,7 @@
   "dependencies": {
     "@mainline/db": "workspace:*",
     "@mainline/shared": "workspace:*",
+    "drizzle-orm": "^0.44.0",
     "mysql2": "^3.11.0",
     "ssh2-sftp-client": "^12.1.1"
   },

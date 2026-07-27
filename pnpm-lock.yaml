@@ -157,6 +157,9 @@ importers:
       '@mainline/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      drizzle-orm:
+        specifier: ^0.44.0
+        version: 0.44.7(mysql2@3.23.1(@types/node@24.13.3))(postgres@3.4.9)
       mysql2:
         specifier: ^3.11.0
         version: 3.23.1(@types/node@24.13.3)

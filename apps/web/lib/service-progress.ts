@@ -66,12 +66,15 @@ function toNrPosition(r: {
  * Tries two paths: the TRUST-keyed row (rid set by applyActivation matching
  * train_uid — reliable but only populated for TRUST movements, not TD berth
  * steps), then falls back to a direct TD lookup via nr_headcode's uid ->
- * headcode map. The TD fallback is unambiguous by construction — it looks up
- * one specific headcode for this train's own uid, not "whichever headcode
- * happens to be nearby" — so it needs no confidence guard, unlike
- * enrichWithNrProgress's headcode-proximity heuristic below.
+ * headcode map. The TD fallback is NOT unambiguous by construction: headcodes
+ * are reused by many unrelated physical trains across the day (and even
+ * concurrently, on other routes), and nr_train_position's `TD:<headcode>` row
+ * is just whichever train most recently reported that headcode anywhere on
+ * the network — it can belong to a different service entirely. Guard against
+ * that the same way enrichWithNrProgress does: only trust it when the
+ * reported CRS is actually one of this train's own route stops.
  */
-async function nrPositionForRid(rid: string): Promise<NrPosition | null> {
+async function nrPositionForRid(rid: string, routeCrs: Set<string>): Promise<NrPosition | null> {
   const db = getDb();
   try {
     const rows = await db
@@ -116,7 +119,12 @@ async function nrPositionForRid(rid: string): Promise<NrPosition | null> {
       .from(nrTrainPosition)
       .where(eq(nrTrainPosition.trainId, `TD:${headcode}`))
       .limit(1);
-    return td[0] ? toNrPosition(td[0]) : null;
+    const row = td[0];
+    // This headcode may currently belong to a different physical train
+    // elsewhere on the network — only trust it if the location it's
+    // reporting is actually on this train's own route.
+    if (!row || !row.lastCrs || !routeCrs.has(row.lastCrs)) return null;
+    return toNrPosition(row);
   } catch {
     return null;
   }
@@ -186,22 +194,27 @@ function minutesLate(schedHhmm: string | null, liveHhmm: string | null): number 
 /**
  * Resolve the LDBWS service to a Darwin rid by finding the candidate train
  * whose calling pattern best overlaps the LDBWS calls (crs + scheduled minute).
- * The origin gives us candidate rids cheaply; the full-pattern score prevents
- * matching a different train that merely shares the origin station.
+ *
+ * Candidates come from ANY of the LDBWS calls, not just the journey origin:
+ * Darwin's own timing points for a service can start partway through the
+ * real-world journey (e.g. a service LDBWS shows as starting at Waterloo may
+ * only be timed by Darwin from Clapham Junction onward, if that's where its
+ * schedule/activation begins) — anchoring on the origin alone silently fails
+ * to resolve those. The full-pattern score is what actually prevents matching
+ * a different train that merely shares one stop.
  */
-async function resolveRid(
-  originCrs: string,
-  originHhmm: string,
-  callKeys: Set<string>,
-): Promise<DarwinStop[] | null> {
+async function resolveRid(callKeys: Set<string>): Promise<DarwinStop[] | null> {
   const db = getDb();
-  // Candidate rids: trains whose origin-station stop matches crs + scheduled time.
+  const crsList = [...new Set([...callKeys].map((k) => k.split("|")[0]!))];
+  if (crsList.length === 0) return null;
+
+  // Candidate rids: any train calling at any of these stations at all.
   let candidates: Array<{ rid: string }>;
   try {
     candidates = await db
       .select({ rid: darwinStopForecast.rid })
       .from(darwinStopForecast)
-      .where(and(eq(darwinStopForecast.crs, originCrs)));
+      .where(inArray(darwinStopForecast.crs, crsList));
   } catch {
     return null;
   }
@@ -231,17 +244,11 @@ async function resolveRid(
     byRid.set(r.rid, list);
   }
 
-  // Score each candidate: it must have the origin at the right time, and we
-  // pick the one whose stops overlap the LDBWS calling pattern the most.
+  // Score each candidate purely by calling-pattern overlap with the LDBWS
+  // service — no single stop is required, so a Darwin schedule that starts
+  // mid-route still matches on everything downstream of where it picks up.
   let best: { stops: DarwinStop[]; score: number } | null = null;
   for (const [, stops] of byRid) {
-    const hasOrigin = stops.some(
-      (s) =>
-        s.crs === originCrs &&
-        (s.schedDep?.slice(0, 5) === originHhmm || s.schedArr?.slice(0, 5) === originHhmm),
-    );
-    if (!hasOrigin) continue;
-
     let score = 0;
     for (const s of stops) {
       if (!s.crs) continue;
@@ -252,30 +259,40 @@ async function resolveRid(
         }
       }
     }
-    if (!best || score > best.score) best = { stops: stops.sort((a, b) => a.seq - b.seq), score };
+    if (!best || score > best.score) {
+      // seq can tie (see darwin-ingest/store.ts applyTS): a stop inserted
+      // without a seeding SC message reuses its nearest lower neighbour's
+      // seq rather than an interpolated value, since seq is a smallint.
+      // Break ties by scheduled time so the route still orders correctly.
+      const sorted = stops.sort((a, b) => {
+        if (a.seq !== b.seq) return a.seq - b.seq;
+        const at = a.schedArr ?? a.schedDep ?? "";
+        const bt = b.schedArr ?? b.schedDep ?? "";
+        return at.localeCompare(bt);
+      });
+      best = { stops: sorted, score };
+    }
   }
 
-  // Require a real overlap (origin + at least one more stop) to trust the match.
+  // Require enough overlap to trust the match — same bar as before (origin +
+  // at least one more stop), now expressed purely as "at least 2 shared stops."
   if (!best || best.score < 2) return null;
   return best.stops;
 }
 
 export async function enrichWithDarwinProgress(
   calls: ServiceCall[],
-  originCrs: string | undefined,
-  originDep: string | undefined,
 ): Promise<{ calls: ServiceCall[]; progress: ServiceProgress; rid?: string }> {
-  if (!originCrs || !originDep) return { calls, progress: NOT_TRACKING };
-
-  // The LDBWS calling pattern as (crs|HH:MM) keys, to validate the rid match.
+  // The LDBWS calling pattern as (crs|HH:MM) keys, to resolve and validate the rid match.
   const callKeys = new Set<string>();
   for (const c of calls) {
     if (c.crs && c.scheduled) callKeys.add(`${c.crs}|${c.scheduled.slice(0, 5)}`);
   }
+  if (callKeys.size === 0) return { calls, progress: NOT_TRACKING };
 
   let stops: DarwinStop[] | null;
   try {
-    stops = await resolveRid(originCrs, originDep.slice(0, 5), callKeys);
+    stops = await resolveRid(callKeys);
   } catch {
     return { calls, progress: NOT_TRACKING };
   }
@@ -292,18 +309,70 @@ export async function enrichWithDarwinProgress(
     if (s.actDep || s.actArr) lastPassedIdx = i;
   });
   const finalStop = ordered[ordered.length - 1];
-  const arrived = Boolean(finalStop && (finalStop.actArr || finalStop.actDep));
+  // Darwin's own schedule for this rid can end short of the LDBWS-advertised
+  // destination (e.g. a reversal/unit change at an intermediate station that
+  // Darwin doesn't carry forward under the same rid) — only call the journey
+  // "arrived" when Darwin's last-known stop IS the actual last LDBWS call,
+  // not just the last stop Darwin happens to know about.
+  const lastLdbwsCrs = [...calls].reverse().find((c) => c.crs)?.crs;
+  const arrived = Boolean(
+    finalStop && (finalStop.actArr || finalStop.actDep) && finalStop.crs === lastLdbwsCrs,
+  );
+
+  // Overlay Network Rail's finer live position (correlated by rid via activation).
+  // TD berth steps report far more often than Darwin's timing-point actuals,
+  // so NR's position is frequently ahead of lastPassedIdx. The per-stop
+  // progress markers (and the "current" icon) MUST be driven by the same
+  // position as the summary banner text below — previously they weren't:
+  // Darwin's lastPassedIdx alone decided "current" while the banner preferred
+  // NR's (fresher) location, so the two could point at different stops.
+  const rid = stops[0]?.rid;
+  const routeCrs = new Set(calls.map((c) => c.crs).filter((c): c is string => Boolean(c)));
+  const nr = rid ? await nrPositionForRid(rid, routeCrs) : null;
+  const nrLocationName = nr?.location
+    ? (calls.find((c) => c.crs === nr.location)?.name ?? nr.location)
+    : undefined;
+
+  // Effective "last passed" index: NR's location if it's at or beyond
+  // Darwin's own last-known stop (NR only ever refines forward, since a
+  // fresher berth report can't un-happen), otherwise Darwin's.
+  let effectiveLastPassedIdx = lastPassedIdx;
+  if (nr?.location) {
+    const nrIdx = ordered.findIndex((s) => s.crs === nr.location);
+    if (nrIdx > effectiveLastPassedIdx) effectiveLastPassedIdx = nrIdx;
+  }
 
   const lastStopName = undefined; // resolved from calls below
+  // True once every Darwin-known stop has an actual time and the LDBWS
+  // journey still has calls beyond Darwin's own data (see `arrived` above) —
+  // the train has run off the end of what Darwin knows, but it hasn't
+  // reached the real destination. The first such call becomes "current": a
+  // reasonable inference (last confirmed position was the stop before it),
+  // not a guess about where exactly it is.
+  const ranOffDarwinData = !arrived && effectiveLastPassedIdx === ordered.length - 1 && ordered.length > 0;
+  let markedCurrentForOverrun = false;
   const enriched = calls.map((c) => {
     if (!c.crs) return c;
     const d = darwinByCrs.get(c.crs);
-    if (!d) return c;
+    if (!d) {
+      if (ranOffDarwinData && !markedCurrentForOverrun) {
+        markedCurrentForOverrun = true;
+        return { ...c, progress: "current" as const };
+      }
+      return c;
+    }
 
+    // The live front (idxInOrdered === effectiveLastPassedIdx) is always
+    // "current" — even if it only has actArr (arrived, still at the
+    // platform, not yet actDep) or NR has moved the front past a stop Darwin
+    // hasn't itself marked actDep for yet. Anything strictly before the
+    // front has necessarily been left behind, whatever its own actual-time
+    // state happens to be (a gap there is a data gap, not a still-current
+    // stop — the train is confirmed further on).
     const idxInOrdered = ordered.indexOf(d);
     let progress: ServiceCall["progress"];
-    if (d.actDep || d.actArr) progress = "departed";
-    else if (idxInOrdered === lastPassedIdx + 1) progress = "current";
+    if (idxInOrdered === effectiveLastPassedIdx) progress = "current";
+    else if (idxInOrdered < effectiveLastPassedIdx) progress = "departed";
     else progress = "upcoming";
 
     return {
@@ -323,13 +392,6 @@ export async function enrichWithDarwinProgress(
 
   const delayMinutes = lastPassed
     ? minutesLate(lastPassed.schedDep ?? lastPassed.schedArr, lastPassed.actDep ?? lastPassed.actArr)
-    : undefined;
-
-  // Overlay Network Rail's finer live position (correlated by rid via activation).
-  const rid = stops[0]?.rid;
-  const nr = rid ? await nrPositionForRid(rid) : null;
-  const nrLocationName = nr?.location
-    ? (calls.find((c) => c.crs === nr.location)?.name ?? nr.location)
     : undefined;
 
   void lastStopName;

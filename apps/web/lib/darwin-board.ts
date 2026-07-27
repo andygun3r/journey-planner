@@ -133,7 +133,7 @@ export async function enrichBoardWithDarwin(
     const estimate = hhmm(f.actDep) ?? hhmm(f.estDep);
     const delay = estimate ? delayMinutes(row.scheduled, estimate) : undefined;
     const status: BoardDeparture["status"] =
-      delay !== undefined && delay > 1 ? "delayed" : "on-time";
+      delay !== undefined && delay > 1 ? "delayed" : estimate ? "on-time" : "scheduled";
 
     return {
       ...row,

@@ -251,27 +251,38 @@ export async function fetchServiceDetails(serviceId: string): Promise<ServiceDet
     thisStop,
     ...flatten(d.subsequentCallingPoints).map(toCall),
   ];
-  // Resolve the service to a live Darwin train and overlay progress + platforms
-  // (LDBWS calling points carry no downstream platforms; Darwin does).
-  const origin = calls[0];
-  const { calls: withProgress, progress, rid } = await enrichWithDarwinProgress(
-    calls,
-    origin?.crs,
-    origin?.scheduled,
-  );
-  calls = withProgress;
-  let finalProgress = progress;
-  // Darwin couldn't resolve this service (its one-time schedule/activation was
-  // missed — common after a feed outage). Fall back to the Network Rail TD feed,
-  // which keeps flowing and positions trains by live headcode. Only overrides
-  // when NR is confident about a single unambiguous match.
-  // NR_FORCE=1 (debug) forces the NR path even when Darwin resolved, to test it.
-  if (!progress.tracking || process.env.NR_FORCE === "1") {
-    const nr = await enrichWithNrProgress(calls).catch(() => null);
-    if (nr) {
-      calls = nr.calls;
-      finalProgress = nr.progress;
-    }
+  // Resolve the service against Darwin (realtime timetable: scheduled/estimated/
+  // actual times, delay) and Network Rail TD (actual movement: live berth-step
+  // position) independently and side by side — Darwin's one-time schedule/
+  // activation message can be missed (e.g. after a feed outage, see CLAUDE.md),
+  // while TD keeps flowing regardless, and TD's berth steps are finer-grained
+  // than Darwin's timing points even when Darwin does resolve. TD only overrides
+  // when NR is confident about a single unambiguous match (never guess).
+  const { calls: darwinCalls, progress: darwinProgress, rid } = await enrichWithDarwinProgress(calls);
+  calls = darwinCalls;
+  let finalProgress = darwinProgress;
+
+  const nr = await enrichWithNrProgress(calls).catch(() => null);
+  if (nr) {
+    // Darwin still owns scheduled/estimated/actual times and delay figures;
+    // TD only supersedes the per-stop progress marker and the live position,
+    // since that's the only thing TD is actually more current on. nr.calls is
+    // enrichWithNrProgress's own positional re-marking of the exact same
+    // calls array passed in — match by index, not CRS: the TD-reported
+    // "current" location (match.crs) can be a passing point/junction that
+    // isn't itself one of the public LDBWS calling points, so a CRS-keyed
+    // lookup would silently fail to find the row it needs to mark.
+    calls = calls.map((c, i) => ({ ...c, progress: nr.calls[i]?.progress ?? c.progress }));
+    finalProgress = {
+      ...finalProgress,
+      tracking: true,
+      arrived: darwinProgress.tracking ? finalProgress.arrived : nr.progress.arrived,
+      lastStopName: nr.progress.lastStopName,
+      nextStopName: nr.progress.nextStopName,
+      networkRail: true,
+      nrLastLocation: nr.progress.nrLastLocation,
+      nrLastEvent: nr.progress.nrLastEvent,
+    };
   }
   // Backstop: fill any still-missing platforms by (crs, time), in case the
   // service didn't resolve to a single rid.

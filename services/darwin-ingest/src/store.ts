@@ -44,23 +44,48 @@ export async function applyTS(ts: ParsedTS): Promise<string[]> {
   // seq is not reliable from a TS message alone (see darwin_stop_forecast's
   // schema comment): TS only ever carries a shifting subset of stops, so a
   // message-local index restarts from 0 every time and collides with seq
-  // values already assigned (by applySchedule, or an earlier TS). For a stop
-  // this rid has never seen before, assign a seq that sorts after everything
-  // already known for this rid — a running per-rid counter seeded from the
-  // current max, not the message's own index — so new stops append instead
-  // of colliding with existing ones.
+  // values already assigned (by applySchedule, or an earlier TS). This path
+  // only runs when the SC message that would normally seed the authoritative
+  // order was missed (e.g. after an ingest outage — see CLAUDE.md).
+  //
+  // For a stop this rid has never seen before, place it by scheduled time
+  // relative to the stops we do know, NOT by TS message arrival order: TS
+  // messages land per-station as trains progress, so a station's message can
+  // arrive after a later station's, and appending in arrival order would
+  // silently misorder the route (seen in practice: an origin stop's TS
+  // arriving after a downstream stop's, making the app think the train had
+  // already reached the end of its journey when it had barely started).
   const existingRows = await db
-    .select({ tiploc: darwinStopForecast.tiploc, seq: darwinStopForecast.seq })
+    .select({
+      tiploc: darwinStopForecast.tiploc,
+      seq: darwinStopForecast.seq,
+      schedArr: darwinStopForecast.schedArr,
+      schedDep: darwinStopForecast.schedDep,
+    })
     .from(darwinStopForecast)
     .where(eq(darwinStopForecast.rid, ts.rid));
   const existingSeqByTiploc = new Map(existingRows.map((r) => [r.tiploc, r.seq]));
+  const knownStops = existingRows
+    .map((r) => ({ seq: r.seq, time: r.schedArr ?? r.schedDep }))
+    .filter((r): r is { seq: number; time: string } => Boolean(r.time))
+    .sort((a, b) => a.seq - b.seq);
   let nextSeq = existingRows.reduce((max, r) => Math.max(max, r.seq), -1) + 1;
+  // seq is a smallint with no room for fractional/interpolated values, so a
+  // stop slotting between two known seqs reuses the lower neighbour's seq
+  // rather than averaging — ties are broken by scheduled time everywhere
+  // seq-ordered stops are read (see resolveRid, enrichWithDarwinProgress).
+  function seqForTime(time: string | null): number {
+    if (!time || knownStops.length === 0) return nextSeq++;
+    const after = knownStops.filter((s) => s.time <= time).at(-1);
+    if (after) return after.seq;
+    return knownStops[0]!.seq - 1;
+  }
 
   const touchedCrs = new Set<string>();
   for (const stop of ts.stops) {
     const crs = tiplocToCrs.get(stop.tiploc) ?? null;
     if (crs) touchedCrs.add(crs);
-    const seq = existingSeqByTiploc.get(stop.tiploc) ?? nextSeq++;
+    const seq = existingSeqByTiploc.get(stop.tiploc) ?? seqForTime(stop.wta ?? stop.wtd ?? null);
     await db
       .insert(darwinStopForecast)
       .values({
