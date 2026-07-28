@@ -4,14 +4,17 @@ import { AdvancedViewToggle } from "@/components/advanced-view-toggle";
 import { BoardRefresher } from "@/components/board-refresher";
 import { LiveCountdown } from "@/components/live-countdown";
 import { ServicePositionMap } from "@/components/service-position-map";
+import { callLiveStatus, deltaChip, type CallLiveStatus } from "@/lib/call-status";
 import { serviceIndicatorsByToc, type ServiceIndicator } from "@/lib/disruptions";
 import {
   fetchServiceDetails,
   serviceDetailsConfigured,
   type ServiceCall,
   type ServiceCoach,
+  type ServicePortion,
   type ServiceProgress,
 } from "@/lib/service-details";
+import { parseHhmm } from "@/lib/uk-time";
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +39,7 @@ function Formation({ coaches, length }: { coaches: ServiceCoach[]; length?: numb
   return (
     <div className="formation">
       <p className="formation-head">
-        Formation · {coaches.length} coaches{" "}
-        <span aria-hidden="true">(front → back)</span>
+        Formation · {coaches.length} coaches <span aria-hidden="true">(front → back)</span>
       </p>
       <div className="coaches">
         {coaches.map((c, i) => (
@@ -69,22 +71,27 @@ function TrainIcon() {
   );
 }
 
-/** Render a per-stop expected time: highlight delays, strike cancellations. */
-function CallStatus({ call }: { call: ServiceCall }) {
-  if (call.cancelled) return <span className="call-status status-cancelled">Cancelled</span>;
-  const exp = (call.expected ?? "").trim();
-  if (!exp || /^on time$/i.test(exp)) {
-    return <span className="call-status status-ontime">On time</span>;
-  }
-  if (/^\d{2}:\d{2}$/.test(exp)) {
-    const late = exp !== (call.scheduled ?? "").trim();
-    return (
-      <span className={`call-status ${late ? "status-delayed" : "status-ontime"}`}>
-        {late ? `Exp. ${exp}` : "On time"}
-      </span>
-    );
-  }
-  return <span className="call-status status-delayed">{exp}</span>;
+/**
+ * A calling point's live state as a chip.
+ *
+ * All the parsing lives in `callLiveStatus` so this and the map's train panel
+ * agree, and so every case is unit-tested. Note "No report" — this used to
+ * print a confident "On time" whenever the feed said nothing at all, which is
+ * the opposite of what the board client does and of what PRODUCT.md asks for.
+ * Every chip carries its condition in words, never colour alone.
+ */
+function CallStatus({ status }: { status: CallLiveStatus }) {
+  const chip = deltaChip(status);
+  return (
+    <span className={`call-status status-${status.kind}`}>
+      {status.label}
+      {chip && (
+        <span className="call-delta" aria-label={`${status.deltaMinutes} minutes against schedule`}>
+          {chip}
+        </span>
+      )}
+    </span>
+  );
 }
 
 /**
@@ -130,6 +137,130 @@ function positionStatusText(progress: ServiceProgress): string | null {
   return parts.join(" · ");
 }
 
+/** One stop on the progress rail. */
+function CallRow({
+  call,
+  showIconHere,
+  showIconAfter,
+  tracked,
+}: {
+  call: ServiceCall;
+  showIconHere: boolean;
+  showIconAfter: boolean;
+  tracked: boolean;
+}) {
+  const state = call.progress ?? "upcoming";
+  const status = callLiveStatus(call);
+  // The booked time always stays visible in its own column, so the row can be
+  // read as a timetable. A separate live time appears beside it only when the
+  // two differ — the old single cell overwrote the booked time with the actual
+  // one and struck the original through, which read as a correction rather
+  // than as scheduled-vs-actual. An actual report outranks an estimate.
+  const estimate = parseHhmm(call.expected) !== null ? call.expected!.trim() : undefined;
+  const live = call.actual ?? estimate;
+  const showLive = Boolean(live && live !== call.scheduled);
+
+  return (
+    <li
+      className={`call call-${state} ${call.isThisStop ? "call-here" : ""} ${
+        call.cancelled ? "call-cancelled" : ""
+      }`}
+    >
+      {tracked && (
+        <span className="call-marker" aria-hidden="true">
+          {showIconHere && (
+            <span className="call-train call-train-at" role="img" aria-label="Train here">
+              <TrainIcon />
+            </span>
+          )}
+          {showIconAfter && (
+            <span
+              className="call-train call-train-between"
+              role="img"
+              aria-label="Train between stations"
+            >
+              <TrainIcon />
+            </span>
+          )}
+          <span className="call-node" />
+        </span>
+      )}
+      <span className="call-time">
+        <span className="call-time-sched">{call.scheduled ?? "—"}</span>
+        {showLive && <span className="call-time-live">{live}</span>}
+      </span>
+      <span className="call-name">
+        {call.name}
+        {call.isThisStop && <span className="call-here-tag">boarding here</span>}
+      </span>
+      <span className="call-plat">
+        {call.platform ? (
+          <>
+            <span className="call-plat-label">Plat</span> {call.platform}
+          </>
+        ) : (
+          <span className="call-plat-unknown" title="No platform assigned yet">
+            —
+          </span>
+        )}
+      </span>
+      <span className="call-status-col">
+        {state === "departed" ? (
+          <span className="call-status status-departed">Departed</span>
+        ) : call.estimatedArrivalIso && !call.cancelled ? (
+          <LiveCountdown iso={call.estimatedArrivalIso} />
+        ) : (
+          <CallStatus status={status} />
+        )}
+      </span>
+    </li>
+  );
+}
+
+/**
+ * An associated portion of a service that divides or joins.
+ *
+ * These stops used to be appended onto the main calling pattern, producing a
+ * single linear route the train never runs — the reported "passed a station
+ * that's not on the route". Shown separately, and clearly labelled, they're
+ * genuinely useful: they tell you which half of the train to be in.
+ */
+function Portion({ portion }: { portion: ServicePortion }) {
+  const heading =
+    portion.kind === "divides"
+      ? `This train divides — rear portion for ${portion.terminusName ?? "another destination"}`
+      : `Joined here by a portion from ${portion.terminusName ?? "another origin"}`;
+
+  return (
+    <section className="portion" aria-label={heading}>
+      <h2 className="portion-head">
+        <span className="portion-tag">{portion.kind === "divides" ? "Divides" : "Joins"}</span>
+        {heading}
+      </h2>
+      {portion.changeRequired && (
+        <p className="portion-note">
+          You must be in the correct portion — passengers cannot move between them once the train
+          divides.
+        </p>
+      )}
+      {portion.cancelled && (
+        <p className="portion-note portion-note-danger">This portion is cancelled.</p>
+      )}
+      <ol className="calls portion-calls">
+        {portion.calls.map((call, i) => (
+          <CallRow
+            key={`${call.crs ?? call.name}-${call.scheduled ?? i}`}
+            call={call}
+            showIconHere={false}
+            showIconAfter={false}
+            tracked={false}
+          />
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export default async function ServicePage({
   params,
   searchParams,
@@ -164,6 +295,16 @@ export default async function ServicePage({
       ? positionStatusText(service.progress)
       : null;
 
+  // Correlation is strict (see lib/service-progress.ts): we would rather show
+  // nothing than another train's position. That makes "no position yet" a
+  // routine outcome, so it has to be stated rather than left as an absence the
+  // reader has to interpret.
+  // ...but only when there is nothing better to say. When we already know the
+  // train hasn't left yet, that's the more useful sentence and this would just
+  // repeat it.
+  const awaitingPosition =
+    service.progress.positionState === "awaiting-report" && !service.cancelled && !statusText;
+
   // Where the train icon sits: on the "current" call's node if the last report
   // was an arrival there (the train is physically at that station), or
   // hovering on the rail between "current" and the next call otherwise — a
@@ -176,6 +317,10 @@ export default async function ServicePage({
     : -1;
   const atStation = service.progress.networkRail && service.progress.nrLastEvent === "ARRIVAL";
 
+  const boarding = service.calls.find((c) => c.isThisStop);
+  const boardingStatus = boarding ? callLiveStatus(boarding) : undefined;
+  const destination = service.calls[service.calls.length - 1]?.name ?? "Service";
+
   // Operator's overall service status ("Good service" / a disruption headline).
   let indicator: ServiceIndicator | undefined;
   if (service.operatorCode) {
@@ -187,7 +332,7 @@ export default async function ServicePage({
     <main>
       <div className="results-head">
         <h1>
-          {service.calls[service.calls.length - 1]?.name ?? "Service"}
+          {destination}
           <span className="board-crs">{service.operator}</span>
         </h1>
         <span className="when">
@@ -209,10 +354,52 @@ export default async function ServicePage({
         </span>
       </div>
 
+      {/* The five-second answer: which platform, and when does it actually go. */}
+      <div className="service-summary">
+        <div className="service-summary-cell">
+          <span className="service-summary-label">From</span>
+          <span className="service-summary-value">{service.stationName}</span>
+        </div>
+        <div className="service-summary-cell">
+          <span className="service-summary-label">Platform</span>
+          <span className="service-summary-value service-summary-plat">
+            {service.platform ?? <span className="service-summary-unknown">Not yet known</span>}
+          </span>
+        </div>
+        <div className="service-summary-cell">
+          <span className="service-summary-label">Departs</span>
+          <span className="service-summary-value">
+            {service.scheduledDeparture ?? "—"}
+            {boardingStatus && boardingStatus.kind !== "on-time" && (
+              <span className={`service-summary-status status-${boardingStatus.kind}`}>
+                {boardingStatus.label}
+              </span>
+            )}
+          </span>
+        </div>
+        {boarding?.estimatedArrivalIso && !service.cancelled && (
+          <div className="service-summary-cell">
+            <span className="service-summary-label">In</span>
+            <span className="service-summary-value">
+              <LiveCountdown iso={boarding.estimatedArrivalIso} />
+            </span>
+          </div>
+        )}
+      </div>
+
       {statusText && (
         <div className="track-banner" role="status">
           <span className="track-dot" aria-hidden="true" />
           <span className="track-text">{statusText}</span>
+        </div>
+      )}
+
+      {awaitingPosition && (
+        <div className="track-banner track-banner-muted" role="status">
+          <span className="track-text">
+            Awaiting a position report — this service hasn’t been matched to a live train yet, so
+            the times below are scheduled rather than tracked.
+          </span>
         </div>
       )}
 
@@ -227,9 +414,7 @@ export default async function ServicePage({
 
       {service.cancelled && (
         <div className="board-messages board-messages-danger" role="note">
-          <p>
-            This service is cancelled{service.cancelReason ? `: ${service.cancelReason}` : "."}
-          </p>
+          <p>This service is cancelled{service.cancelReason ? `: ${service.cancelReason}` : "."}</p>
         </div>
       )}
       {!service.cancelled && service.delayReason && (
@@ -239,73 +424,23 @@ export default async function ServicePage({
       )}
 
       <ol className={`calls ${currentIndex >= 0 ? "calls-tracked" : ""}`}>
-        {service.calls.map((call, i) => {
-          const state = call.progress ?? "upcoming";
-          // Show the train icon on this call's node if it's the current stop
-          // and the train has been confirmed as arrived there; otherwise show
-          // it hovering on the rail after this call if this is the current
-          // stop but the train has since departed/passed it (or we only know
-          // it's "last confirmed here" from Darwin, not a fresh arrival).
-          const showIconHere = i === currentIndex && atStation;
-          const showIconAfter = i === currentIndex && !atStation;
-          return (
-            <li
-              key={`${call.crs ?? call.name}-${i}`}
-              className={`call call-${state} ${call.isThisStop ? "call-here" : ""} ${
-                call.cancelled ? "call-cancelled" : ""
-              }`}
-            >
-              {currentIndex >= 0 && (
-                <span className="call-marker" aria-hidden="true">
-                  {showIconHere && (
-                    <span className="call-train call-train-at" role="img" aria-label="Train here">
-                      <TrainIcon />
-                    </span>
-                  )}
-                  {showIconAfter && (
-                    <span
-                      className="call-train call-train-between"
-                      role="img"
-                      aria-label="Train between stations"
-                    >
-                      <TrainIcon />
-                    </span>
-                  )}
-                  <span className="call-node" />
-                </span>
-              )}
-              <span className="call-time">
-                {call.actual ?? call.scheduled ?? "—"}
-                {call.actual && call.actual !== call.scheduled && (
-                  <span className="call-sched-was">{call.scheduled}</span>
-                )}
-              </span>
-              <span className="call-name">
-                {call.name}
-                {call.isThisStop && <span className="call-here-tag">boarding here</span>}
-              </span>
-              <span className="call-plat">
-                {call.platform ? (
-                  <>
-                    <span className="call-plat-label">Plat</span> {call.platform}
-                  </>
-                ) : (
-                  ""
-                )}
-              </span>
-              <span className="call-status-col">
-                {state === "departed" ? (
-                  <span className="call-status status-departed">Departed</span>
-                ) : call.estimatedArrivalIso && !call.cancelled ? (
-                  <LiveCountdown iso={call.estimatedArrivalIso} />
-                ) : (
-                  <CallStatus call={call} />
-                )}
-              </span>
-            </li>
-          );
-        })}
+        {service.calls.map((call, i) => (
+          <CallRow
+            // Never the bare array index: a stop's identity is its station and
+            // booked time, so a re-render can't shuffle live countdown state
+            // between rows.
+            key={`${call.crs ?? call.name}-${call.scheduled ?? i}`}
+            call={call}
+            showIconHere={i === currentIndex && atStation}
+            showIconAfter={i === currentIndex && !atStation}
+            tracked={currentIndex >= 0}
+          />
+        ))}
       </ol>
+
+      {service.portions.map((portion, i) => (
+        <Portion key={`${portion.kind}-${portion.terminusName ?? i}`} portion={portion} />
+      ))}
     </main>
   );
 }

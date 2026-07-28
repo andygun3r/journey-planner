@@ -2,6 +2,7 @@ import { darwinStopForecast, darwinTrain, nrHeadcode, nrTrainPosition, station }
 import { and, eq, gt, inArray } from "drizzle-orm";
 import type { BoardDeparture, BoardPosition } from "./board";
 import { getDb } from "./db";
+import { londonDateKey, ukHhmm } from "./uk-time";
 
 /**
  * Attaches a live "where is the train right now" position to each board row,
@@ -23,13 +24,12 @@ import { getDb } from "./db";
 
 const STALE_AFTER_MS = 10 * 60_000;
 
-const ukHm = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-  timeZone: "Europe/London",
-});
-const hhmm = (iso: string) => ukHm.format(new Date(iso));
+const hhmm = (iso: string) => ukHhmm(iso);
+
+/** The service days a board's trains could belong to, London-local. */
+function candidateServiceDays(now: Date): string[] {
+  return [londonDateKey(new Date(now.getTime() - 86_400_000)), londonDateKey(now)];
+}
 
 export async function enrichBoardWithPosition(
   crs: string,
@@ -38,24 +38,50 @@ export async function enrichBoardWithPosition(
   if (departures.length === 0) return departures;
   const db = getDb();
 
-  // 1. rid for each row, by this station's scheduled departure minute.
+  // 1. rid for each row, by this station's scheduled departure minute, bounded
+  //    to the current/previous service day. Unbounded, this matched every train
+  //    that has ever departed at that minute from this station.
   let forecasts: Array<{ rid: string; schedDep: string | null }>;
   try {
     forecasts = await db
       .select({ rid: darwinStopForecast.rid, schedDep: darwinStopForecast.schedDep })
       .from(darwinStopForecast)
-      .where(eq(darwinStopForecast.crs, crs));
+      .innerJoin(darwinTrain, eq(darwinTrain.rid, darwinStopForecast.rid))
+      .where(
+        and(
+          eq(darwinStopForecast.crs, crs),
+          inArray(darwinTrain.ssd, candidateServiceDays(new Date())),
+          eq(darwinTrain.deactivated, false),
+        ),
+      );
   } catch {
     return departures; // NR/Darwin tables not ready — leave rows unchanged.
   }
   if (forecasts.length === 0) return departures;
 
-  const ridByMinute = new Map<string, string>();
-  for (const f of forecasts) if (f.schedDep) ridByMinute.set(f.schedDep.slice(0, 5), f.rid);
+  // A minute that two trains share cannot identify either of them. This was a
+  // last-write-wins Map, so one of the two silently took the other's live
+  // position; now an ambiguous minute resolves to nothing at all.
+  const ridsByMinute = new Map<string, Set<string>>();
+  for (const f of forecasts) {
+    if (!f.schedDep) continue;
+    const key = f.schedDep.slice(0, 5);
+    const set = ridsByMinute.get(key) ?? new Set<string>();
+    set.add(f.rid);
+    ridsByMinute.set(key, set);
+  }
+  const ridForMinute = (minute: string | undefined): string | undefined => {
+    if (!minute) return undefined;
+    const set = ridsByMinute.get(minute);
+    if (!set || set.size !== 1) return undefined;
+    return [...set][0];
+  };
 
   const rids = [
     ...new Set(
-      departures.map((d) => d.rid ?? ridByMinute.get(hhmm(d.scheduled))).filter(Boolean) as string[],
+      departures
+        .map((d) => d.rid ?? ridForMinute(hhmm(d.scheduled)))
+        .filter(Boolean) as string[],
     ),
   ];
   if (rids.length === 0) return departures;
@@ -158,7 +184,7 @@ export async function enrichBoardWithPosition(
   }
 
   return departures.map((d) => {
-    const rid = d.rid ?? ridByMinute.get(hhmm(d.scheduled));
+    const rid = d.rid ?? ridForMinute(hhmm(d.scheduled));
     const p = rid ? posByRid.get(rid) : undefined;
     if (!p) return d;
 

@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { enrichBoardWithDarwin } from "./darwin-board";
 import { enrichBoardWithFormation } from "./darwin-formation";
 import { enrichBoardWithPosition } from "./board-position";
+import { orderByExpectedDeparture } from "./board-order";
 import { type Disruption, fetchStationDisruptions } from "./disruptions";
 import { fetchLdbwsBoard, ldbwsConfigured } from "./ldbws";
 import { getRtppmByOperatorName } from "./rtppm";
@@ -32,8 +33,15 @@ export interface BoardDeparture {
   destinationName: string;
   destinationCrs?: string;
   operator?: string;
+  /** ISO instant. Never a bare "HH:MM" — see `live`. */
   scheduled: string;
-  /** Live estimated departure when Darwin has one. */
+  /**
+   * Live estimated departure when Darwin has one, as an ISO INSTANT.
+   *
+   * Every consumer does `new Date(live)`. darwin-board.ts used to assign the
+   * raw "HH:MM" string here, which produced Invalid Date in the board's
+   * formatter and a silently blank countdown; keep this an instant.
+   */
   live?: string;
   platform?: string;
   platformChanged: boolean;
@@ -52,6 +60,12 @@ export interface BoardDeparture {
   position?: BoardPosition;
   /** Operator's rolling last-hour punctuality (RTPPM), 0-100, when known. */
   operatorPunctuality?: number;
+  /**
+   * True when live running has moved this row out of its booked position.
+   * The board orders by expected departure, so a delayed train drops down the
+   * list — the flag lets the UI say that rather than appear to shuffle.
+   */
+  movedFromSchedule?: boolean;
 }
 
 /** Live running position for a board row, from the Network Rail overlay. */
@@ -135,6 +149,16 @@ function scheduledRow(raw: RawDeparture): BoardDeparture {
   };
 }
 
+/**
+ * Order rows by when they will actually leave, tagging any the live picture
+ * has displaced. Applied to both source paths so the two boards behave alike.
+ */
+function inExpectedOrder(departures: BoardDeparture[]): BoardDeparture[] {
+  return orderByExpectedDeparture(departures).map(({ departure, movedFromSchedule }) =>
+    movedFromSchedule ? { ...departure, movedFromSchedule } : departure,
+  );
+}
+
 export async function getBoard(
   crsInput: string,
   when?: string,
@@ -183,7 +207,7 @@ export async function getBoard(
       // overlay the live Network Rail running position (where the train is now).
       const withFormation = await enrichBoardWithFormation(crs, ldbws.departures);
       const withPosition = await enrichBoardWithPosition(crs, withFormation);
-      const departures = await withPunctuality(withPosition);
+      const departures = inExpectedOrder(await withPunctuality(withPosition));
       return {
         ok: true,
         board: {
@@ -223,7 +247,7 @@ export async function getBoard(
   // here, leaving fallback boards without coach detail or live NR position.
   const withFormation = await enrichBoardWithFormation(crs, darwinDepartures);
   const withPosition = await enrichBoardWithPosition(crs, withFormation);
-  const departures = await withPunctuality(withPosition);
+  const departures = inExpectedOrder(await withPunctuality(withPosition));
 
   return {
     ok: true,

@@ -39,10 +39,16 @@ function StatusCell({ d }: { d: BoardDeparture }) {
     case "cancelled":
       return <span className="board-status status-cancelled">Cancelled</span>;
     case "delayed":
+      // The expected time appears once: as the sub-line under a countdown, or
+      // as the headline when there's no countdown. It used to render in both
+      // places at once, printing the same time twice in one cell.
       return (
         <span className="board-status status-delayed">
-          {showCountdown && departsIso ? (
-            <LiveCountdown iso={departsIso} />
+          {showCountdown ? (
+            <>
+              <LiveCountdown iso={departsIso} />
+              {d.live && <span className="board-status-sub">exp. {t(d.live)}</span>}
+            </>
           ) : d.live ? (
             <>Exp. {t(d.live)}</>
           ) : typeof d.delayMinutes === "number" ? (
@@ -50,18 +56,31 @@ function StatusCell({ d }: { d: BoardDeparture }) {
           ) : (
             "Delayed"
           )}
-          {d.live && <span className="board-status-sub">exp. {t(d.live)}</span>}
         </span>
       );
     case "on-time":
       return (
         <span className="board-status status-ontime">
-          {showCountdown && departsIso ? <LiveCountdown iso={departsIso} /> : "On time"}
+          {showCountdown ? <LiveCountdown iso={departsIso} /> : "On time"}
         </span>
       );
     default:
-      return <span className="board-status status-scheduled">{d.reason || "—"}</span>;
+      // "No report", "Starts here", "Bus" and friends — stated, not dressed up
+      // as a confirmed on-time status.
+      return <span className="board-status status-scheduled">{d.reason || "No report"}</span>;
   }
+}
+
+/**
+ * A stable identity for a board row.
+ *
+ * Never the array index: rows are now ordered by expected departure, so a
+ * delayed train genuinely moves between refreshes. With an index-derived key
+ * React reuses the wrong DOM node and LiveCountdown's ticking state sticks to
+ * whatever row inherited its position.
+ */
+function rowKey(d: BoardDeparture): string {
+  return d.tripId ?? d.rid ?? `${d.scheduled}-${d.destinationCrs ?? d.destinationName}`;
 }
 
 export default async function BoardPage({
@@ -214,81 +233,101 @@ export default async function BoardPage({
               )}
             </div>
           ) : (
-            <div className="board" role="table" aria-label={`Departures from ${outcome.board.stationName}`}>
-              <div className="board-row board-row-head" role="row">
-                <span role="columnheader">Time</span>
-                <span role="columnheader">Destination</span>
-                <span role="columnheader" className="board-plat-col">
-                  Plat
-                </span>
-                <span role="columnheader" className="board-status-col">
-                  Expected
-                </span>
+            <>
+              <div className="board-legend" aria-hidden="true">
+                <span className="board-legend-time">Time</span>
+                <span className="board-legend-dest">Destination</span>
+                <span className="board-legend-plat">Plat</span>
+                <span className="board-legend-status">Expected</span>
               </div>
-              {outcome.board.departures.map((d, i) => {
-                const inner = (
-                  <>
-                    <span className="board-time" role="cell">
-                      {t(d.scheduled)}
-                    </span>
-                    <span className="board-dest" role="cell">
-                      <span className="board-dest-name">{d.destinationName || "—"}</span>
-                      {(d.operator || d.coachCount) && (
-                        <span className="board-operator">
-                          {d.operator}
-                          {d.operator && d.operatorPunctuality !== undefined
-                            ? ` (${d.operatorPunctuality}% on time)`
-                            : ""}
-                          {d.operator && d.coachCount ? " · " : ""}
-                          {coachSummary(d)}
+              <ol className="board" aria-label={`Departures from ${outcome.board.stationName}`}>
+                {outcome.board.departures.map((d, i) => {
+                  // The first service still expected to run gets the "next
+                  // train" treatment — DESIGN.md reserves the blue border for
+                  // exactly this. Rows are ordered by expected departure, so
+                  // this really is the next one off the platform.
+                  const isNext =
+                    d.status !== "cancelled" &&
+                    outcome.board.departures.findIndex((x) => x.status !== "cancelled") === i;
+                  const linkable = Boolean(d.tripId) && outcome.board.source === "ldbws";
+                  return (
+                    <li
+                      key={rowKey(d)}
+                      // Always an <li>: the element type must not flip between
+                      // <Link> and <div> per row, or React remounts the row and
+                      // LiveCountdown loses its tick.
+                      className={`board-card ${d.status === "cancelled" ? "board-card-cancelled" : ""} ${
+                        isNext ? "board-card-next" : ""
+                      } ${linkable ? "board-card-link" : ""}`}
+                    >
+                      <span className="board-time">
+                        <span className="board-time-sched">{t(d.scheduled)}</span>
+                        {d.live && d.status !== "cancelled" && t(d.live) !== t(d.scheduled) && (
+                          <span className="board-time-live">{t(d.live)}</span>
+                        )}
+                      </span>
+                      <span className="board-dest">
+                        <span className="board-dest-name">
+                          {/* Only LDBWS boards carry a serviceID GetServiceDetails accepts. */}
+                          {linkable ? (
+                            <Link
+                              className="board-card-stretch"
+                              href={`/services/${encodeURIComponent(d.tripId!)}?from=${outcome.board.crs}`}
+                            >
+                              {d.destinationName || "—"}
+                            </Link>
+                          ) : (
+                            (d.destinationName || "—")
+                          )}
                         </span>
-                      )}
-                      {d.position && d.status !== "cancelled" && (
-                        <span className="board-position">
-                          <span className="board-position-dot" aria-hidden="true" />
-                          {d.position.label}
-                          {d.position.latenessMinutes && d.position.latenessMinutes > 1
-                            ? ` · ${d.position.latenessMinutes} late`
-                            : d.position.latenessMinutes && d.position.latenessMinutes < -1
-                              ? ` · ${-d.position.latenessMinutes} early`
+                        {(d.operator || d.coachCount) && (
+                          <span className="board-operator">
+                            {d.operator}
+                            {d.operator && d.operatorPunctuality !== undefined
+                              ? ` (${d.operatorPunctuality}% on time)`
                               : ""}
-                        </span>
-                      )}
-                      {d.reason && <span className="board-reason">{d.reason}</span>}
-                    </span>
-                    <span className="board-plat board-plat-col" role="cell">
-                      {d.platform ? (
-                        <span className={d.platformChanged ? "plat-changed" : ""}>
-                          {d.platform}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </span>
-                    <span className="board-status-col" role="cell">
-                      <StatusCell d={d} />
-                    </span>
-                  </>
-                );
-                const rowClass = `board-row ${d.status === "cancelled" ? "board-row-cancelled" : ""}`;
-                const key = `${d.tripId ?? i}-${d.scheduled}`;
-                // Only LDBWS boards carry a serviceID that GetServiceDetails accepts.
-                return d.tripId && outcome.board.source === "ldbws" ? (
-                  <Link
-                    href={`/services/${encodeURIComponent(d.tripId)}?from=${outcome.board.crs}`}
-                    className={`${rowClass} board-row-link`}
-                    role="row"
-                    key={key}
-                  >
-                    {inner}
-                  </Link>
-                ) : (
-                  <div className={rowClass} role="row" key={key}>
-                    {inner}
-                  </div>
-                );
-              })}
-            </div>
+                            {d.operator && d.coachCount ? " · " : ""}
+                            {coachSummary(d)}
+                          </span>
+                        )}
+                        {d.position && d.status !== "cancelled" && (
+                          <span className="board-position">
+                            <span className="board-position-dot" aria-hidden="true" />
+                            {d.position.label}
+                            {d.position.latenessMinutes && d.position.latenessMinutes > 1
+                              ? ` · ${d.position.latenessMinutes} late`
+                              : d.position.latenessMinutes && d.position.latenessMinutes < -1
+                                ? ` · ${-d.position.latenessMinutes} early`
+                                : ""}
+                          </span>
+                        )}
+                        {/* Rows move as trains run late; say so rather than
+                            appear to shuffle between refreshes. */}
+                        {d.movedFromSchedule && d.status !== "cancelled" && (
+                          <span className="board-moved">Booked {t(d.scheduled)}</span>
+                        )}
+                        {d.reason && <span className="board-reason">{d.reason}</span>}
+                      </span>
+                      <span className="board-plat">
+                        {d.platform ? (
+                          <span className={d.platformChanged ? "plat-changed" : ""}>
+                            {d.platform}
+                            {d.platformChanged && <span className="plat-changed-tag">changed</span>}
+                          </span>
+                        ) : (
+                          <span className="board-plat-unknown" title="No platform assigned yet">
+                            —
+                          </span>
+                        )}
+                      </span>
+                      <span className="board-status-col">
+                        <StatusCell d={d} />
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </>
           )}
         </>
       )}

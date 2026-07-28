@@ -1,7 +1,8 @@
 import { darwinStopForecast, darwinTrain } from "@mainline/db";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { BoardDeparture } from "./board";
 import { getDb } from "./db";
+import { hhmmToIso, londonDateKey, minutesLate, ukHhmm } from "./uk-time";
 
 /**
  * Overlays live Darwin forecasts onto a scheduled board.
@@ -25,21 +26,14 @@ interface DarwinForecast {
   cancelled: boolean;
 }
 
-const ukHm = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-  timeZone: "Europe/London",
-});
-
-/** "HH:MM" (UK local) for an ISO instant. */
-function ukHhmm(iso: string): string {
-  return ukHm.format(new Date(iso));
-}
-
 /** Normalise Darwin "HH:MM[:SS]" to "HH:MM". */
 function hhmm(value: string | null): string | null {
   return value ? value.slice(0, 5) : null;
+}
+
+/** The service days a board's trains could belong to, London-local. */
+function candidateServiceDays(now: Date): string[] {
+  return [londonDateKey(new Date(now.getTime() - 86_400_000)), londonDateKey(now)];
 }
 
 async function loadForecasts(crs: string): Promise<Map<string, DarwinForecast[]>> {
@@ -68,7 +62,16 @@ async function loadForecasts(crs: string): Promise<Map<string, DarwinForecast[]>
       })
       .from(darwinStopForecast)
       .innerJoin(darwinTrain, eq(darwinStopForecast.rid, darwinTrain.rid))
-      .where(eq(darwinStopForecast.crs, crs));
+      // Bounded to the current/previous service day. Without this, a scheduled
+      // minute matches every train that has ever departed at that minute from
+      // this station, and the row picks up an arbitrary one.
+      .where(
+        and(
+          eq(darwinStopForecast.crs, crs),
+          inArray(darwinTrain.ssd, candidateServiceDays(new Date())),
+          eq(darwinTrain.deactivated, false),
+        ),
+      );
   } catch {
     return byTime; // table/DB not ready — treat as no live data
   }
@@ -92,23 +95,6 @@ async function loadForecasts(crs: string): Promise<Map<string, DarwinForecast[]>
   return byTime;
 }
 
-/** Minutes late: both the scheduled instant and the estimate are UK wall-clock. */
-function delayMinutes(scheduledIso: string, estHhmm: string): number | undefined {
-  const est = toMinutes(estHhmm);
-  const sched = toMinutes(ukHhmm(scheduledIso));
-  if (est === undefined || sched === undefined) return undefined;
-  let delta = est - sched;
-  // A large negative delta means the estimate crossed midnight past the schedule.
-  if (delta < -720) delta += 1440;
-  return delta;
-}
-
-function toMinutes(hhmmStr: string): number | undefined {
-  const [h, m] = hhmmStr.split(":").map(Number);
-  if (h === undefined || m === undefined || Number.isNaN(h) || Number.isNaN(m)) return undefined;
-  return h * 60 + m;
-}
-
 export async function enrichBoardWithDarwin(
   crs: string,
   scheduled: BoardDeparture[],
@@ -119,11 +105,16 @@ export async function enrichBoardWithDarwin(
   let anyLive = false;
   const departures = scheduled.map((row) => {
     const key = ukHhmm(row.scheduled);
-    const candidates = forecasts.get(key);
+    const candidates = key ? forecasts.get(key) : undefined;
     if (!candidates || candidates.length === 0) return row;
-    // If multiple trains share a scheduled minute, prefer an exact platform match.
+    // If several trains share a scheduled minute, an exact platform match
+    // identifies ours. Failing that, only a single candidate is unambiguous —
+    // taking the first of several attaches some other train's live status to
+    // this row, which is exactly the kind of jumbling this pass is fixing.
     const f =
-      candidates.find((c) => row.platform && c.platform === row.platform) ?? candidates[0]!;
+      candidates.find((c) => row.platform && c.platform === row.platform) ??
+      (candidates.length === 1 ? candidates[0]! : undefined);
+    if (!f) return row;
     anyLive = true;
 
     if (f.cancelled || f.suppressed) {
@@ -131,9 +122,14 @@ export async function enrichBoardWithDarwin(
     }
 
     const estimate = hhmm(f.actDep) ?? hhmm(f.estDep);
-    const delay = estimate ? delayMinutes(row.scheduled, estimate) : undefined;
+    // `live` is an ISO INSTANT everywhere else in the app (see BoardDeparture).
+    // This used to assign the bare "HH:MM" string, so the board's formatter hit
+    // `new Date("18:42")` and threw Invalid time value into the error boundary,
+    // while LiveCountdown silently rendered nothing.
+    const liveIso = hhmmToIso(estimate, new Date(row.scheduled));
+    const delay = minutesLate(row.scheduled, liveIso);
     const status: BoardDeparture["status"] =
-      delay !== undefined && delay > 1 ? "delayed" : estimate ? "on-time" : "scheduled";
+      delay !== undefined && delay > 1 ? "delayed" : liveIso ? "on-time" : "scheduled";
 
     return {
       ...row,
@@ -142,7 +138,7 @@ export async function enrichBoardWithDarwin(
       platformChanged: f.platformChanged,
       status,
       delayMinutes: delay !== undefined && delay > 1 ? delay : undefined,
-      live: estimate ?? undefined,
+      live: liveIso,
       hasLive: true,
     };
   });

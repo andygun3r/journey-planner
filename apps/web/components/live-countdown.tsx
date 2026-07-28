@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ukHhmm } from "@/lib/uk-time";
 
 /**
  * Ticking countdown to an ISO instant. Shows "due", "1 min", "6 mins", or
@@ -26,12 +27,8 @@ export function LiveCountdown({ iso }: { iso: string }) {
       </span>
     );
   }
-  // Far away — show the clock time instead of a long countdown.
-  const t = new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Europe/London",
-  }).format(new Date(target));
-  return <span className="countdown countdown-far">{t}</span>;
+  // Far away — show the clock time instead of a long countdown. The formatter
+  // is built once at module scope in uk-time; this used to construct a new
+  // Intl.DateTimeFormat on every render of every row.
+  return <span className="countdown countdown-far">{ukHhmm(new Date(target))}</span>;
 }
