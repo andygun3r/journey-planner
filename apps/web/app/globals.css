@@ -711,46 +711,132 @@ a {
 }
 
 /* Board: time | destination | platform | expected — a stack of rounded,
-   elevated cards (the signature "Departure Card"), not a ruled table. */
+   elevated cards (the signature "Departure Card"), not a ruled table.
+   The four columns are shared by the card and its legend, so the two can't
+   drift apart: the legend used to carry no cell classes at all and only
+   lined up by accident of grid auto-placement. */
 .board {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.board-row {
+.board-legend,
+.board-card {
   display: grid;
-  grid-template-columns: 4.5rem 1fr 3rem 7rem;
+  grid-template-columns: 5rem 1fr 3.5rem 7rem;
   gap: 0.4rem 1rem;
   align-items: center;
+}
+
+.board-card {
+  position: relative;
   padding: 1rem;
   min-height: 48px;
   background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
+  border: 2px solid transparent;
 }
 
-.board-row:active {
+.board-card:active {
   box-shadow: var(--shadow-card-pressed);
 }
 
-.board-row-head {
+/* The next train still expected to run — DESIGN.md reserves the blue border
+   for exactly this row. */
+.board-card-next {
+  border-color: var(--primary);
+}
+
+.board-legend {
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
   padding: 0 0.25rem 0.4rem;
-  background: none;
-  box-shadow: none;
 }
 
 .board-time {
   font-family: var(--font-time);
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+/* Booked time always stays legible; the live estimate sits beneath it rather
+   than replacing it, so a row can still be read as a timetable. */
+.board-time-sched {
   font-size: 1.3rem;
   font-weight: 600;
-  line-height: 1;
+}
+
+/* When a live estimate is present the booked time steps down to a struck-out
+   reference, so the estimate reads as the operative one. */
+.board-card-cancelled .board-time-sched,
+.board-time:has(.board-time-live) .board-time-sched {
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.board-time-live {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* A row the live picture has moved out of its booked position. Stated, so
+   reordering reads as information rather than as the list shuffling. */
+.board-moved {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 0.1rem;
+}
+
+/* Whole-card click target for linkable rows, without changing the element
+   type per row (that remounted rows and broke the live countdown). */
+.board-card-stretch {
+  color: inherit;
+  text-decoration: none;
+}
+
+.board-card-stretch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+}
+
+.board-card-link {
+  transition: box-shadow 150ms ease-out;
+}
+
+.board-card-link:hover {
+  box-shadow:
+    0 2px 6px rgba(18, 20, 28, 0.08),
+    0 10px 22px rgba(18, 20, 28, 0.1);
+}
+
+.board-card-stretch:focus-visible::after {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-card-link {
+    transition: none;
+  }
 }
 
 .board-dest {
@@ -779,13 +865,27 @@ a {
   text-align: center;
 }
 
+/* "Not known yet" is a real state, distinct from a platform of "—". */
+.board-plat-unknown,
+.call-plat-unknown {
+  color: var(--muted);
+  font-weight: 500;
+}
+
 .plat-changed {
   color: var(--warn);
 }
 
-.plat-changed::after {
-  content: " ✱";
-  font-size: 0.7em;
+/* Platform changes are called out in words as well as colour (Signal-Text
+   Rule) — the bare asterisk carried the whole meaning before. */
+.plat-changed-tag {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--warn);
 }
 
 .board-status-col {
@@ -818,16 +918,15 @@ a {
   color: var(--muted);
 }
 
-.board-row-cancelled .board-time,
-.board-row-cancelled .board-dest-name {
+.board-card-cancelled .board-dest-name {
   text-decoration: line-through;
   text-decoration-thickness: 1px;
   opacity: 0.7;
 }
 
 @media (max-width: 34rem) {
-  .board-row {
-    grid-template-columns: 3.6rem 1fr 5.5rem;
+  .board-card {
+    grid-template-columns: 4rem 1fr 5.5rem;
     grid-template-areas:
       "time dest expected"
       "time plat expected";
@@ -836,32 +935,43 @@ a {
   .board-time {
     grid-area: time;
     align-self: center;
+  }
+  .board-time-sched,
+  .board-time-live {
     font-size: 1.15rem;
   }
   .board-dest {
     grid-area: dest;
   }
-  .board-plat-col {
+  .board-plat {
     grid-area: plat;
     text-align: left;
     font-size: 0.8rem;
     color: var(--muted);
   }
-  .board-plat-col::before {
+  .board-plat::before {
     content: "Plat ";
     font-weight: 400;
-  }
-  .board-row-head .board-plat-col::before {
-    content: none;
   }
   .board-status-col {
     grid-area: expected;
   }
-  .board-row-head {
-    grid-template-columns: 3.6rem 1fr 5.5rem;
+  /* The legend keeps the same three columns as the cards it labels. */
+  .board-legend {
+    grid-template-columns: 4rem 1fr 5.5rem;
     grid-template-areas: "time dest expected";
   }
-  .board-row-head .board-plat-col {
+  .board-legend-time {
+    grid-area: time;
+  }
+  .board-legend-dest {
+    grid-area: dest;
+  }
+  .board-legend-status {
+    grid-area: expected;
+    text-align: right;
+  }
+  .board-legend-plat {
     display: none;
   }
 }
@@ -960,22 +1070,6 @@ a {
   color: var(--ink);
 }
 
-/* Clickable board cards (link to service details) */
-a.board-row-link {
-  text-decoration: none;
-  color: inherit;
-  transition: box-shadow 150ms ease-out;
-}
-
-a.board-row-link:hover {
-  box-shadow: 0 2px 6px rgba(18, 20, 28, 0.08), 0 10px 22px rgba(18, 20, 28, 0.1);
-}
-
-a.board-row-link:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
 .board-messages-danger {
   border-color: color-mix(in oklch, var(--danger) 45%, transparent);
   background: color-mix(in oklch, var(--danger) 10%, transparent);
@@ -1024,6 +1118,31 @@ a.board-row-link:focus-visible {
   font-variant-numeric: tabular-nums;
   font-size: 1.05rem;
   font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  line-height: 1.15;
+}
+
+/* Booked time keeps its own place in the column; the live/actual time sits
+   beneath it. Previously one cell showed the actual and struck through the
+   booked one beside it, which read as a correction rather than as
+   scheduled-vs-actual. */
+.call-time:has(.call-time-live) .call-time-sched {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.call-time-live {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.call-departed .call-time-live {
+  color: var(--muted);
 }
 
 .call-name {
@@ -1067,6 +1186,135 @@ a.board-row-link:focus-visible {
   font-size: 0.9rem;
   font-weight: 600;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+/* Signed minutes against schedule, as a chip beside the words. Colour never
+   carries the meaning on its own (DESIGN.md Signal-Text Rule). */
+.call-delta {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-pill, 999px);
+  background: color-mix(in oklch, currentColor 14%, transparent);
+}
+
+/* Status kinds emitted by lib/call-status.ts. `no-report` and `info` are
+   deliberately neutral: "No report", "Starts here" and "Bus" are not delays,
+   and used to be rendered in the delay colour by the old catch-all branch. */
+.status-early {
+  color: var(--ok);
+}
+
+.status-no-report,
+.status-info {
+  color: var(--muted);
+}
+
+/* ---- Service summary: the five-second answer, above the calling pattern ---- */
+
+.service-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.65rem 1rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+.service-summary-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.service-summary-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.service-summary-value {
+  font-family: var(--font-time);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.15rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.service-summary-plat {
+  font-size: 1.4rem;
+}
+
+.service-summary-unknown {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.service-summary-status {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* ---- Divided / joined services ---- */
+
+/* Associated portions render as their own labelled section. Concatenating
+   them onto the main calling pattern produced a route the train never runs. */
+.portion {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+
+.portion-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.portion-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+}
+
+.portion-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.portion-note-danger {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.portion-calls {
+  border-top: 1px solid var(--border);
 }
 
 /* ---- Disruptions ---- */
@@ -1253,7 +1501,7 @@ a.board-row-link:focus-visible {
   line-height: 1.35;
 }
 
-.board-row-cancelled .board-reason {
+.board-card-cancelled .board-reason {
   color: var(--danger);
 }
 
@@ -1830,21 +2078,23 @@ a.board-row-link:focus-visible {
   font-size: 0.9rem;
 }
 
+/* "Awaiting a position report". Correlation is strict — we'd rather show
+   nothing than another train's position — so this is a routine state and must
+   read as honest rather than as a fault. Quiet, not alarming. */
+.track-banner-muted {
+  border-color: var(--border);
+  background: color-mix(in oklch, var(--muted) 8%, transparent);
+  color: var(--muted);
+  font-weight: 550;
+  line-height: 1.4;
+}
+
 .track-dot {
   width: 0.55rem;
   height: 0.55rem;
   border-radius: 999px;
   background: var(--primary);
   flex: none;
-}
-
-/* the scheduled time shown small under an actual time */
-.call-sched-was {
-  display: block;
-  font-size: 0.7rem;
-  color: var(--muted);
-  text-decoration: line-through;
-  font-weight: 400;
 }
 
 /* ---- Live train map ---- */
@@ -1986,6 +2236,19 @@ a.board-row-link:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+/* Three cells (time, location, event), so three columns — borrowing `.call`'s
+   four-column template put the event label in the platform track. */
+.history-calls {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.history-calls .call {
+  grid-template-columns: 4rem 1fr auto;
 }
 
 .history-calls .call-time {
@@ -2179,8 +2442,18 @@ a.map-tip-anchor:hover .map-tip {
 .map-panel-route strong {
   color: var(--ink);
 }
+/* This panel has no platform column: four cells, four columns. It used to
+   borrow `.calls-tracked`'s five-column template while rendering four cells,
+   which put the status value in the platform track. */
 .map-panel-calls {
   margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+
+.map-panel-calls .call {
+  grid-template-columns: 1.4rem 4rem 1fr auto;
 }
 .map-panel-empty {
   margin: 0;

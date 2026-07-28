@@ -1,7 +1,8 @@
-import { darwinFormation, darwinStopForecast } from "@mainline/db";
-import { eq, inArray } from "drizzle-orm";
+import { darwinFormation, darwinStopForecast, darwinTrain } from "@mainline/db";
+import { and, eq, inArray } from "drizzle-orm";
 import type { BoardDeparture, Coach } from "./board";
 import { getDb } from "./db";
+import { londonDateKey, ukHhmm } from "./uk-time";
 
 /**
  * Fills coach formation on board rows from the Darwin feed (darwin_formation),
@@ -18,15 +19,11 @@ interface StoredCoach {
   loading?: number;
 }
 
-const ukHm = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-  timeZone: "Europe/London",
-});
+const hhmm = (iso: string) => ukHhmm(iso);
 
-function hhmm(iso: string): string {
-  return ukHm.format(new Date(iso));
+/** The service days a board's trains could belong to, London-local. */
+function candidateServiceDays(now: Date): string[] {
+  return [londonDateKey(new Date(now.getTime() - 86_400_000)), londonDateKey(now)];
 }
 
 export async function enrichBoardWithFormation(
@@ -39,25 +36,45 @@ export async function enrichBoardWithFormation(
 
   const db = getDb();
 
-  // 1. rid by scheduled departure minute at this station.
+  // 1. rid by scheduled departure minute at this station, bounded to the
+  //    current/previous service day.
   let forecasts: Array<{ rid: string; schedDep: string | null }>;
   try {
     forecasts = await db
       .select({ rid: darwinStopForecast.rid, schedDep: darwinStopForecast.schedDep })
       .from(darwinStopForecast)
-      .where(eq(darwinStopForecast.crs, crs));
+      .innerJoin(darwinTrain, eq(darwinTrain.rid, darwinStopForecast.rid))
+      .where(
+        and(
+          eq(darwinStopForecast.crs, crs),
+          inArray(darwinTrain.ssd, candidateServiceDays(new Date())),
+          eq(darwinTrain.deactivated, false),
+        ),
+      );
   } catch {
     return departures; // DB/table not ready
   }
   if (forecasts.length === 0) return departures;
 
-  const ridByMinute = new Map<string, string>();
+  // Two trains sharing a scheduled minute can't be told apart by it, so an
+  // ambiguous minute resolves to nothing rather than to whichever row was
+  // written last — that produced another train's coach count on this row.
+  const ridsByMinute = new Map<string, Set<string>>();
   for (const f of forecasts) {
-    if (f.schedDep) ridByMinute.set(f.schedDep.slice(0, 5), f.rid);
+    if (!f.schedDep) continue;
+    const key = f.schedDep.slice(0, 5);
+    const set = ridsByMinute.get(key) ?? new Set<string>();
+    set.add(f.rid);
+    ridsByMinute.set(key, set);
   }
+  const ridForMinute = (minute: string | undefined): string | undefined => {
+    if (!minute) return undefined;
+    const set = ridsByMinute.get(minute);
+    return set && set.size === 1 ? [...set][0] : undefined;
+  };
 
   // 2. formation for the rids we can match.
-  const rids = [...new Set(needy.map((d) => ridByMinute.get(hhmm(d.scheduled))).filter(Boolean))] as string[];
+  const rids = [...new Set(needy.map((d) => ridForMinute(hhmm(d.scheduled))).filter(Boolean))] as string[];
   if (rids.length === 0) return departures;
 
   const rows = await db
@@ -69,7 +86,7 @@ export async function enrichBoardWithFormation(
   // 3. attach.
   return departures.map((d) => {
     if (d.coachCount) return d;
-    const rid = ridByMinute.get(hhmm(d.scheduled));
+    const rid = ridForMinute(hhmm(d.scheduled));
     const stored = rid ? formationByRid.get(rid) : undefined;
     if (!stored || stored.length === 0) return d;
     const coaches: Coach[] = stored.map((c) => ({

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { lateLabel, type LiveTrain } from "./map-types";
 import { SignallingDiagram } from "./signalling-diagram";
@@ -59,8 +58,13 @@ export function TrainDetailPanel({
         </p>
       )}
 
+      {/*
+        `map-panel-calls` defines its own grid: this panel has no platform
+        column, and borrowing `.calls-tracked`'s five-column template while
+        rendering four cells put the status value in the platform track.
+      */}
       {path.length > 1 ? (
-        <ol className="calls calls-tracked map-panel-calls">
+        <ol className="calls-tracked map-panel-calls">
           {path.map((s, i) => (
             <li key={`${s.crs}-${i}`} className={`call call-${s.status}`}>
               <span className="call-marker" aria-hidden="true">
@@ -73,10 +77,12 @@ export function TrainDetailPanel({
                 )}
                 <span className="call-node" />
               </span>
+              {/* Same scheduled-over-live treatment as the service page, so the
+                  two views read alike (they share the .call-time styling). */}
               <span className="call-time">
-                {s.expected ?? s.scheduled ?? "—"}
-                {s.expected && s.scheduled && s.expected !== s.scheduled && (
-                  <span className="call-sched-was">{s.scheduled}</span>
+                <span className="call-time-sched">{s.scheduled ?? "—"}</span>
+                {s.expected && s.expected !== s.scheduled && (
+                  <span className="call-time-live">{s.expected}</span>
                 )}
               </span>
               <span className="call-name">{s.name}</span>
@@ -106,11 +112,14 @@ export function TrainDetailPanel({
         View signalling diagram →
       </button>
 
-      {train.rid && (
-        <Link className="map-panel-full" href={`/services/${encodeURIComponent(train.rid)}`}>
-          Full service page →
-        </Link>
-      )}
+      {/*
+        There was a "Full service page →" link here passing `train.rid` into
+        /services/[id]. That route hands its id straight to LDBWS
+        GetServiceDetails, which only accepts an LDBWS serviceID — a Darwin rid
+        is not one, so the link 404'd every time. LiveTrain carries no
+        serviceID to use instead, and there is no rid -> serviceID mapping
+        available, so the link is gone rather than left broken.
+      */}
 
       {showSignalling && (
         <SignallingDiagram

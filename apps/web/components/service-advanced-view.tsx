@@ -73,9 +73,12 @@ export function ServiceAdvancedView({ serviceId, rid }: { serviceId: string; rid
             train moves, so a service near the start of its journey may not have any yet.
           </p>
         ) : (
-          <ol className="calls history-calls">
+          // `history-calls` has three cells, so it defines its own grid rather
+          // than borrowing `.call`'s four-column template — which put the
+          // status value in the platform track.
+          <ol className="history-calls">
             {entries.map((e, i) => (
-              <li key={i} className="call">
+              <li key={`${e.reportedAt}-${e.eventType ?? ""}-${i}`} className="call">
                 <span className="call-time">{timeFmt.format(new Date(e.reportedAt))}</span>
                 <span className="call-name">{e.locationName ?? "Unnamed berth"}</span>
                 <span className="call-status-col">

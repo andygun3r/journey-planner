@@ -1,17 +1,30 @@
 import { darwinStopForecast, darwinTrain, nrHeadcode, nrTrainPosition } from "@mainline/db";
-import { and, eq, gt, inArray, like, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, like } from "drizzle-orm";
 import { getDb } from "./db";
-import type { ServiceCall, ServiceProgress } from "./service-details";
+import type { PositionState, ServiceCall, ServiceProgress } from "./service-details";
+import {
+  alignCallsToRun,
+  callKeys,
+  pickBestRun,
+  plausibleTdMatch,
+  type CandidateRun,
+  type TdReport,
+} from "./service-match";
+import { hhmmToIso, londonDateKey, minutesLate } from "./uk-time";
 
 /**
  * Enriches an LDBWS service's calling points with LIVE PROGRESS from the Darwin
  * feed we ingest — no GPS (that doesn't exist for GB rail); progress is derived
  * from Darwin's actual/estimated times at each timing point.
  *
- * Resolve step: LDBWS gives a serviceID, not a Darwin rid. We resolve the rid
- * by matching the ORIGIN calling point (crs + scheduled departure minute) to a
- * darwin_stop_forecast row, then load that rid's full stop list. From the
- * actual (act_dep/act_arr) vs estimated times we compute, per stop:
+ * Resolve step: LDBWS gives a serviceID, not a Darwin rid. Candidate runs are
+ * drawn from the current and previous service day (`darwin_train.ssd`), scored
+ * on calling-pattern overlap, and disambiguated by which run is actually due
+ * around now — see service-match.ts for why each of those matters and what
+ * broke without them. If two candidates remain indistinguishable we return
+ * nothing rather than guess.
+ *
+ * From the actual (act_dep/act_arr) vs estimated times we compute, per stop:
  *   departed  = train has an actual time here (already gone)
  *   current   = the last stop with an actual time (train is just past here)
  *   upcoming  = only estimated (train hasn't reached it)
@@ -23,6 +36,7 @@ interface DarwinStop {
   crs: string | null;
   schedArr: string | null;
   schedDep: string | null;
+  schedPass: string | null;
   estArr: string | null;
   estDep: string | null;
   actArr: string | null;
@@ -32,6 +46,7 @@ interface DarwinStop {
 
 const NOT_TRACKING: ServiceProgress = {
   tracking: false,
+  positionState: "not-tracked",
   arrived: false,
   networkRail: false,
 };
@@ -60,6 +75,28 @@ function toNrPosition(r: {
   };
 }
 
+/** Reports older than this are stale — say nothing rather than show a ghost. */
+const STALE_AFTER_MS = 10 * 60_000;
+
+/** rid -> the TD headcode that belongs to it, via the NROD schedule feed. */
+async function headcodeForRid(rid: string): Promise<string | null> {
+  const db = getDb();
+  const train = await db
+    .select({ uid: darwinTrain.uid })
+    .from(darwinTrain)
+    .where(eq(darwinTrain.rid, rid))
+    .limit(1);
+  const uid = train[0]?.uid;
+  if (!uid) return null;
+
+  const hc = await db
+    .select({ headcode: nrHeadcode.headcode })
+    .from(nrHeadcode)
+    .where(eq(nrHeadcode.uid, uid))
+    .limit(1);
+  return hc[0]?.headcode ?? null;
+}
+
 /**
  * Look up the Network Rail live position for a resolved Darwin rid.
  *
@@ -71,11 +108,12 @@ function toNrPosition(r: {
  * concurrently, on other routes), and nr_train_position's `TD:<headcode>` row
  * is just whichever train most recently reported that headcode anywhere on
  * the network — it can belong to a different service entirely. Guard against
- * that the same way enrichWithNrProgress does: only trust it when the
- * reported CRS is actually one of this train's own route stops.
+ * that by only trusting it when the reported CRS is one of this train's own
+ * route stops, and when the report is recent.
  */
 async function nrPositionForRid(rid: string, routeCrs: Set<string>): Promise<NrPosition | null> {
   const db = getDb();
+  const staleCutoff = new Date(Date.now() - STALE_AFTER_MS);
   try {
     const rows = await db
       .select({
@@ -85,7 +123,7 @@ async function nrPositionForRid(rid: string, routeCrs: Set<string>): Promise<NrP
         lateness: nrTrainPosition.lateness,
       })
       .from(nrTrainPosition)
-      .where(eq(nrTrainPosition.rid, rid))
+      .where(and(eq(nrTrainPosition.rid, rid), gt(nrTrainPosition.lastReportedAt, staleCutoff)))
       .limit(1);
     if (rows[0]) return toNrPosition(rows[0]);
   } catch {
@@ -93,20 +131,7 @@ async function nrPositionForRid(rid: string, routeCrs: Set<string>): Promise<NrP
   }
 
   try {
-    const train = await db
-      .select({ uid: darwinTrain.uid })
-      .from(darwinTrain)
-      .where(eq(darwinTrain.rid, rid))
-      .limit(1);
-    const uid = train[0]?.uid;
-    if (!uid) return null;
-
-    const hc = await db
-      .select({ headcode: nrHeadcode.headcode })
-      .from(nrHeadcode)
-      .where(eq(nrHeadcode.uid, uid))
-      .limit(1);
-    const headcode = hc[0]?.headcode;
+    const headcode = await headcodeForRid(rid);
     if (!headcode) return null;
 
     const td = await db
@@ -117,7 +142,12 @@ async function nrPositionForRid(rid: string, routeCrs: Set<string>): Promise<NrP
         lateness: nrTrainPosition.lateness,
       })
       .from(nrTrainPosition)
-      .where(eq(nrTrainPosition.trainId, `TD:${headcode}`))
+      .where(
+        and(
+          eq(nrTrainPosition.trainId, `TD:${headcode}`),
+          gt(nrTrainPosition.lastReportedAt, staleCutoff),
+        ),
+      )
       .limit(1);
     const row = td[0];
     // This headcode may currently belong to a different physical train
@@ -130,97 +160,38 @@ async function nrPositionForRid(rid: string, routeCrs: Set<string>): Promise<NrP
   }
 }
 
-/** "HH:MM[:SS]" UK-local -> ISO instant today (handles the post-midnight case). */
-function toIso(hhmm: string | null): string | undefined {
-  if (!hhmm) return undefined;
-  const m = /^(\d{2}):(\d{2})/.exec(hhmm);
-  if (!m) return undefined;
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/London",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(now);
-  const g = (t: string) => parts.find((p) => p.type === t)!.value;
-  const nowMin = Number(g("hour")) * 60 + Number(g("minute"));
-  const stopMin = Number(m[1]) * 60 + Number(m[2]);
-  // If the stop time is far behind "now", it's tomorrow (past midnight).
-  let dayShift = 0;
-  if (stopMin - nowMin < -720) dayShift = 1;
-  const base = new Date(now.getTime() + dayShift * 86_400_000);
-  const bp = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/London",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(base);
-  const bg = (t: string) => bp.find((p) => p.type === t)!.value;
-  // London offset for that date.
-  const asUtc = Date.UTC(Number(bg("year")), Number(bg("month")) - 1, Number(bg("day")), Number(m[1]), Number(m[2]));
-  const probe = new Date(asUtc);
-  const off = londonOffsetMinutes(probe);
-  return new Date(asUtc - off * 60000).toISOString();
-}
-
-function londonOffsetMinutes(d: Date): number {
-  const p = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/London",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(d);
-  const g = (t: string) => Number(p.find((x) => x.type === t)!.value);
-  const asUtc = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour"), g("minute"));
-  return Math.round((asUtc - d.getTime()) / 60000);
-}
-
-function minutesLate(schedHhmm: string | null, liveHhmm: string | null): number | undefined {
-  if (!schedHhmm || !liveHhmm) return undefined;
-  const s = /^(\d{2}):(\d{2})/.exec(schedHhmm);
-  const l = /^(\d{2}):(\d{2})/.exec(liveHhmm);
-  if (!s || !l) return undefined;
-  let delta = (Number(l[1]) * 60 + Number(l[2])) - (Number(s[1]) * 60 + Number(s[2]));
-  if (delta < -720) delta += 1440;
-  return delta;
+/** The service days a currently-running train could belong to, London-local. */
+function candidateServiceDays(now: Date): string[] {
+  return [londonDateKey(new Date(now.getTime() - 86_400_000)), londonDateKey(now)];
 }
 
 /**
- * Resolve the LDBWS service to a Darwin rid by finding the candidate train
- * whose calling pattern best overlaps the LDBWS calls (crs + scheduled minute).
+ * Load every plausible Darwin run for this calling pattern.
  *
- * Candidates come from ANY of the LDBWS calls, not just the journey origin:
- * Darwin's own timing points for a service can start partway through the
- * real-world journey (e.g. a service LDBWS shows as starting at Waterloo may
- * only be timed by Darwin from Clapham Junction onward, if that's where its
- * schedule/activation begins) — anchoring on the origin alone silently fails
- * to resolve those. The full-pattern score is what actually prevents matching
- * a different train that merely shares one stop.
+ * Bounded two ways the previous version wasn't: to the current/previous service
+ * day, and to runs that are not deactivated. Without the date bound this pulled
+ * every rid ever recorded at every station on the route.
  */
-async function resolveRid(callKeys: Set<string>): Promise<DarwinStop[] | null> {
+async function loadCandidateRuns(crsList: string[], now: Date): Promise<Array<CandidateRun<DarwinStop>>> {
   const db = getDb();
-  const crsList = [...new Set([...callKeys].map((k) => k.split("|")[0]!))];
-  if (crsList.length === 0) return null;
+  const days = candidateServiceDays(now);
 
-  // Candidate rids: any train calling at any of these stations at all.
-  let candidates: Array<{ rid: string }>;
-  try {
-    candidates = await db
-      .select({ rid: darwinStopForecast.rid })
-      .from(darwinStopForecast)
-      .where(inArray(darwinStopForecast.crs, crsList));
-  } catch {
-    return null;
-  }
-  if (candidates.length === 0) return null;
+  const heads = await db
+    .selectDistinct({ rid: darwinStopForecast.rid, ssd: darwinTrain.ssd })
+    .from(darwinStopForecast)
+    .innerJoin(darwinTrain, eq(darwinTrain.rid, darwinStopForecast.rid))
+    .where(
+      and(
+        inArray(darwinStopForecast.crs, crsList),
+        inArray(darwinTrain.ssd, days),
+        eq(darwinTrain.deactivated, false),
+      ),
+    );
+  if (heads.length === 0) return [];
 
-  const rids = [...new Set(candidates.map((c) => c.rid))];
+  const ssdByRid = new Map(heads.map((h) => [h.rid, String(h.ssd)]));
+  const rids = [...ssdByRid.keys()];
+
   const rows = await db
     .select({
       rid: darwinStopForecast.rid,
@@ -228,6 +199,7 @@ async function resolveRid(callKeys: Set<string>): Promise<DarwinStop[] | null> {
       crs: darwinStopForecast.crs,
       schedArr: darwinStopForecast.schedArr,
       schedDep: darwinStopForecast.schedDep,
+      schedPass: darwinStopForecast.schedPass,
       estArr: darwinStopForecast.estArr,
       estDep: darwinStopForecast.estDep,
       actArr: darwinStopForecast.actArr,
@@ -244,70 +216,54 @@ async function resolveRid(callKeys: Set<string>): Promise<DarwinStop[] | null> {
     byRid.set(r.rid, list);
   }
 
-  // Score each candidate purely by calling-pattern overlap with the LDBWS
-  // service — no single stop is required, so a Darwin schedule that starts
-  // mid-route still matches on everything downstream of where it picks up.
-  let best: { stops: DarwinStop[]; score: number } | null = null;
-  for (const [, stops] of byRid) {
-    let score = 0;
-    for (const s of stops) {
-      if (!s.crs) continue;
-      for (const time of [s.schedDep, s.schedArr]) {
-        if (time && callKeys.has(`${s.crs}|${time.slice(0, 5)}`)) {
-          score++;
-          break;
-        }
-      }
-    }
-    if (!best || score > best.score) {
-      // seq can tie (see darwin-ingest/store.ts applyTS): a stop inserted
-      // without a seeding SC message reuses its nearest lower neighbour's
-      // seq rather than an interpolated value, since seq is a smallint.
-      // Break ties by scheduled time so the route still orders correctly.
-      const sorted = stops.sort((a, b) => {
-        if (a.seq !== b.seq) return a.seq - b.seq;
-        const at = a.schedArr ?? a.schedDep ?? "";
-        const bt = b.schedArr ?? b.schedDep ?? "";
-        return at.localeCompare(bt);
-      });
-      best = { stops: sorted, score };
-    }
-  }
-
-  // Require enough overlap to trust the match — same bar as before (origin +
-  // at least one more stop), now expressed purely as "at least 2 shared stops."
-  if (!best || best.score < 2) return null;
-  return best.stops;
+  return [...byRid.entries()].map(([rid, stops]) => ({
+    rid,
+    ssd: ssdByRid.get(rid) ?? londonDateKey(now),
+    stops,
+  }));
 }
 
 export async function enrichWithDarwinProgress(
   calls: ServiceCall[],
 ): Promise<{ calls: ServiceCall[]; progress: ServiceProgress; rid?: string }> {
-  // The LDBWS calling pattern as (crs|HH:MM) keys, to resolve and validate the rid match.
-  const callKeys = new Set<string>();
-  for (const c of calls) {
-    if (c.crs && c.scheduled) callKeys.add(`${c.crs}|${c.scheduled.slice(0, 5)}`);
-  }
-  if (callKeys.size === 0) return { calls, progress: NOT_TRACKING };
+  const keys = callKeys(calls);
+  if (keys.size === 0) return { calls, progress: NOT_TRACKING };
 
-  let stops: DarwinStop[] | null;
+  const now = new Date();
+  const crsList = [...new Set([...keys].map((k) => k.split("|")[0]!))];
+
+  let runs: Array<CandidateRun<DarwinStop>>;
   try {
-    stops = await resolveRid(callKeys);
+    runs = await loadCandidateRuns(crsList, now);
   } catch {
     return { calls, progress: NOT_TRACKING };
   }
-  if (!stops || stops.length === 0) return { calls, progress: NOT_TRACKING };
 
-  // Index Darwin stops by CRS for matching to LDBWS calls.
-  const darwinByCrs = new Map<string, DarwinStop>();
-  for (const s of stops) if (s.crs) darwinByCrs.set(s.crs, s);
+  const pick = pickBestRun(runs, keys, now.getTime());
+  if (!pick) {
+    // We couldn't identify the run. The train may well be running fine — we
+    // just can't say where it is, and saying so is the honest answer.
+    return { calls, progress: { ...NOT_TRACKING, positionState: "awaiting-report" } };
+  }
 
-  // The "current position": the last stop with an actual (departed/arrived) time.
+  const rid = pick.run.rid;
+  // Passing points are kept: a train passing a station without calling there is
+  // real progress, even though LDBWS never lists it as a calling point.
+  const ordered = pick.stops.filter((s) => s.crs);
+
+  // Walk both sequences in order so a route calling twice at one station gets
+  // two distinct rows rather than both reading the last one.
+  const alignment = alignCallsToRun(
+    calls.map((c) => c.crs),
+    ordered,
+  );
+
+  // The live front: the last stop with an actual (arrived/departed) time.
   let lastPassedIdx = -1;
-  const ordered = stops.filter((s) => s.crs);
   ordered.forEach((s, i) => {
     if (s.actDep || s.actArr) lastPassedIdx = i;
   });
+
   const finalStop = ordered[ordered.length - 1];
   // Darwin's own schedule for this rid can end short of the LDBWS-advertised
   // destination (e.g. a reversal/unit change at an intermediate station that
@@ -321,84 +277,104 @@ export async function enrichWithDarwinProgress(
 
   // Overlay Network Rail's finer live position (correlated by rid via activation).
   // TD berth steps report far more often than Darwin's timing-point actuals,
-  // so NR's position is frequently ahead of lastPassedIdx. The per-stop
-  // progress markers (and the "current" icon) MUST be driven by the same
-  // position as the summary banner text below — previously they weren't:
-  // Darwin's lastPassedIdx alone decided "current" while the banner preferred
-  // NR's (fresher) location, so the two could point at different stops.
-  const rid = stops[0]?.rid;
+  // so NR's position is frequently ahead of lastPassedIdx.
   const routeCrs = new Set(calls.map((c) => c.crs).filter((c): c is string => Boolean(c)));
-  const nr = rid ? await nrPositionForRid(rid, routeCrs) : null;
+  const nr = await nrPositionForRid(rid, routeCrs).catch(() => null);
   const nrLocationName = nr?.location
     ? (calls.find((c) => c.crs === nr.location)?.name ?? nr.location)
     : undefined;
 
-  // Effective "last passed" index: NR's location if it's at or beyond
-  // Darwin's own last-known stop (NR only ever refines forward, since a
-  // fresher berth report can't un-happen), otherwise Darwin's.
+  // Effective "last passed" index: NR's location if it's at or beyond Darwin's
+  // own last-known stop (NR only ever refines forward, since a fresher berth
+  // report can't un-happen), otherwise Darwin's.
   let effectiveLastPassedIdx = lastPassedIdx;
   if (nr?.location) {
     const nrIdx = ordered.findIndex((s) => s.crs === nr.location);
     if (nrIdx > effectiveLastPassedIdx) effectiveLastPassedIdx = nrIdx;
   }
 
-  const lastStopName = undefined; // resolved from calls below
-  // True once every Darwin-known stop has an actual time and the LDBWS
-  // journey still has calls beyond Darwin's own data (see `arrived` above) —
-  // the train has run off the end of what Darwin knows, but it hasn't
-  // reached the real destination. The first such call becomes "current": a
-  // reasonable inference (last confirmed position was the stop before it),
-  // not a guess about where exactly it is.
-  const ranOffDarwinData = !arrived && effectiveLastPassedIdx === ordered.length - 1 && ordered.length > 0;
+  // True once every Darwin-known stop has an actual time but the LDBWS journey
+  // continues beyond Darwin's own data (see `arrived` above) — the train has run
+  // off the end of what Darwin knows without reaching the real destination.
+  const ranOffDarwinData =
+    !arrived && ordered.length > 0 && effectiveLastPassedIdx === ordered.length - 1;
   let markedCurrentForOverrun = false;
-  const enriched = calls.map((c) => {
-    if (!c.crs) return c;
-    const d = darwinByCrs.get(c.crs);
-    if (!d) {
-      if (ranOffDarwinData && !markedCurrentForOverrun) {
+
+  // Carried forward so a call Darwin doesn't know about still lands on the
+  // right side of the live front instead of defaulting to "upcoming".
+  let lastKnownIdx = -1;
+  const enriched = calls.map((c, i) => {
+    const runIdx = alignment[i];
+    if (runIdx === undefined) {
+      // The first LDBWS call BEYOND the end of Darwin's data becomes "current":
+      // the last confirmed position was the stop before it. The
+      // `lastKnownIdx === ordered.length - 1` guard is what makes it "beyond" —
+      // without it, an unmatched call at the HEAD of the route (Darwin schedules
+      // can begin partway through the journey) would be picked up first and the
+      // train marked as sitting at its origin when it is in fact near the end.
+      if (
+        ranOffDarwinData &&
+        !markedCurrentForOverrun &&
+        c.crs &&
+        lastKnownIdx === ordered.length - 1
+      ) {
         markedCurrentForOverrun = true;
         return { ...c, progress: "current" as const };
       }
+      if (lastKnownIdx >= 0 && lastKnownIdx < effectiveLastPassedIdx) {
+        return { ...c, progress: "departed" as const };
+      }
       return c;
     }
+    lastKnownIdx = runIdx;
+    const d = ordered[runIdx]!;
 
-    // The live front (idxInOrdered === effectiveLastPassedIdx) is always
-    // "current" — even if it only has actArr (arrived, still at the
-    // platform, not yet actDep) or NR has moved the front past a stop Darwin
-    // hasn't itself marked actDep for yet. Anything strictly before the
-    // front has necessarily been left behind, whatever its own actual-time
-    // state happens to be (a gap there is a data gap, not a still-current
-    // stop — the train is confirmed further on).
-    const idxInOrdered = ordered.indexOf(d);
+    // The live front is always "current" — even if it only has actArr (arrived,
+    // still at the platform, not yet actDep) or NR has moved the front past a
+    // stop Darwin hasn't itself marked actDep for yet. Anything strictly before
+    // the front has necessarily been left behind, whatever its own actual-time
+    // state (a gap there is a data gap, not a still-current stop).
     let progress: ServiceCall["progress"];
-    if (idxInOrdered === effectiveLastPassedIdx) progress = "current";
-    else if (idxInOrdered < effectiveLastPassedIdx) progress = "departed";
+    if (runIdx === effectiveLastPassedIdx) progress = "current";
+    else if (runIdx < effectiveLastPassedIdx) progress = "departed";
     else progress = "upcoming";
+
+    const actual = (d.actArr ?? d.actDep)?.slice(0, 5);
+    const estimate = d.estArr ?? d.estDep ?? d.schedArr ?? d.schedDep ?? d.schedPass;
+    const anchor = c.scheduledIso ? new Date(c.scheduledIso) : now;
 
     return {
       ...c,
       platform: c.platform ?? d.platform ?? undefined,
       progress,
-      actual: (d.actArr ?? d.actDep)?.slice(0, 5),
-      estimatedArrivalIso: toIso(d.estArr ?? d.estDep ?? d.schedArr ?? d.schedDep),
+      actual: actual ?? c.actual,
+      actualIso: actual ? hhmmToIso(actual, anchor) : c.actualIso,
+      estimatedArrivalIso: hhmmToIso(estimate, anchor),
     };
   });
 
-  // Overall progress summary.
-  const lastPassed = lastPassedIdx >= 0 ? ordered[lastPassedIdx] : undefined;
-  const nextStop = ordered[lastPassedIdx + 1];
+  // The summary banner and the per-stop markers MUST name the same stop. They
+  // didn't: the markers used the NR-refined front while the banner used
+  // Darwin's own last timing point, so whenever a berth report was ahead of
+  // Darwin (which is most of the time) the two disagreed on screen.
+  const frontIdx = effectiveLastPassedIdx;
+  const lastPassed = frontIdx >= 0 ? ordered[frontIdx] : undefined;
+  const nextStop = frontIdx >= 0 ? ordered[frontIdx + 1] : ordered[0];
   const nameOf = (s?: DarwinStop) =>
     s?.crs ? (calls.find((c) => c.crs === s.crs)?.name ?? s.crs) : undefined;
 
   const delayMinutes = lastPassed
-    ? minutesLate(lastPassed.schedDep ?? lastPassed.schedArr, lastPassed.actDep ?? lastPassed.actArr)
+    ? minutesLate(
+        hhmmToIso(lastPassed.schedDep ?? lastPassed.schedArr ?? lastPassed.schedPass, now),
+        hhmmToIso(lastPassed.actDep ?? lastPassed.actArr, now),
+      )
     : undefined;
 
-  void lastStopName;
   return {
     calls: enriched,
     progress: {
       tracking: true,
+      positionState: frontIdx >= 0 || nr ? "tracked" : "awaiting-report",
       lastStopName: nameOf(lastPassed),
       nextStopName: nameOf(nextStop),
       delayMinutes: delayMinutes !== undefined && delayMinutes > 1 ? delayMinutes : undefined,
@@ -419,42 +395,57 @@ export async function enrichWithDarwinProgress(
  * The Darwin resolve (above) needs a one-time schedule/activation message that is
  * missed for trains already running after a feed outage. The NR TD (berth-step)
  * stream keeps flowing regardless and carries a headcode + a live CRS. This
- * resolver correlates that live position to THIS service by its calling pattern —
- * no rid, no activation — so the moving-train position survives Darwin gaps.
+ * resolver correlates that live position to THIS service — so the moving-train
+ * position survives Darwin gaps.
  *
- * Correlation is deliberately conservative: we accept a position only when
- * EXACTLY ONE fresh TD headcode sits at EXACTLY ONE of this service's remaining
- * stops within a timing tolerance. Any ambiguity → not tracking (never guess).
+ * Two paths, in order of confidence:
+ *
+ *  1. If Darwin DID resolve a rid, we know this train's headcode from the NROD
+ *     schedule feed, so we can ask for that headcode specifically. Unambiguous.
+ *  2. Otherwise, correlate anonymously by calling pattern — but require the
+ *     report to be time-plausible against the schedule, not merely to be at a
+ *     station this route happens to serve. Any ambiguity → not tracking.
+ *
+ * The old version had only a weakened form of (2): "exactly one headcode is at
+ * an intermediate stop of this route", with no timing check at all despite its
+ * docstring promising one. Any unrelated train standing at a shared station
+ * satisfied that, and its position was then adopted wholesale.
  */
 export async function enrichWithNrProgress(
   calls: ServiceCall[],
+  rid?: string,
 ): Promise<{ calls: ServiceCall[]; progress: ServiceProgress } | null> {
   const DBG = process.env.NR_DEBUG === "1";
 
   // Only INTERMEDIATE stops disambiguate. The origin has every departing train
   // sitting in it and the terminus every arriving one, so a headcode there tells
-  // us nothing about which service it is. A headcode at an intermediate CRS of
-  // this route is a strong, specific signal that it's this train mid-journey.
+  // us nothing about which service it is.
   const lastIdx = calls.length - 1;
   const routeStops = calls
-    .map((c, i) => ({ i, crs: c.crs }))
-    .filter((s): s is { i: number; crs: string } => Boolean(s.crs) && s.i > 0 && s.i < lastIdx);
+    .map((c, i) => ({
+      index: i,
+      crs: c.crs,
+      scheduledMs: c.scheduledIso ? Date.parse(c.scheduledIso) : undefined,
+    }))
+    .filter((s): s is { index: number; crs: string; scheduledMs: number | undefined } =>
+      Boolean(s.crs) && s.index > 0 && s.index < lastIdx,
+    );
   if (routeStops.length === 0) return null;
 
   const routeCrs = [...new Set(routeStops.map((s) => s.crs))];
   if (DBG) console.log("[nr-dbg] intermediate routeCrs", routeCrs.join(","));
 
-  // Fresh TD berth positions (train_id 'TD:<headcode>') sitting at a route CRS,
-  // reported within the last 10 minutes. TD rows carry the live headcode + CRS.
-  const cutoff = new Date(Date.now() - 10 * 60_000);
-  let rows: Array<{
-    headcode: string | null;
-    lastCrs: string | null;
-    lastEvent: string | null;
-    lastReportedAt: Date | null;
-  }>;
+  const cutoff = new Date(Date.now() - STALE_AFTER_MS);
+
+  // Path 1: we know which headcode is ours, so ask for it by name.
+  let ownHeadcode: string | null = null;
+  if (rid) {
+    ownHeadcode = await headcodeForRid(rid).catch(() => null);
+  }
+
+  let rows: TdReport[];
   try {
-    rows = await getDb()
+    const base = await getDb()
       .select({
         headcode: nrTrainPosition.headcode,
         lastCrs: nrTrainPosition.lastCrs,
@@ -467,42 +458,40 @@ export async function enrichWithNrProgress(
           like(nrTrainPosition.trainId, "TD:%"),
           inArray(nrTrainPosition.lastCrs, routeCrs),
           gt(nrTrainPosition.lastReportedAt, cutoff),
+          ...(ownHeadcode ? [eq(nrTrainPosition.headcode, ownHeadcode)] : []),
         ),
       );
+    rows = base.map((r) => ({
+      headcode: r.headcode,
+      crs: r.lastCrs,
+      reportedAtMs: r.lastReportedAt ? r.lastReportedAt.getTime() : Number.NaN,
+      event: r.lastEvent,
+    }));
   } catch {
     return null; // NR tables not ready
   }
-  if (DBG) console.log("[nr-dbg] fresh TD rows at intermediate CRS:", rows.length, rows.map((r) => `${r.headcode}@${r.lastCrs}`).join(" "));
+  rows = rows.filter((r) => Number.isFinite(r.reportedAtMs));
+  if (DBG) {
+    console.log(
+      "[nr-dbg] fresh TD rows at intermediate CRS:",
+      rows.length,
+      rows.map((r) => `${r.headcode}@${r.crs}`).join(" "),
+      ownHeadcode ? `(restricted to own headcode ${ownHeadcode})` : "(anonymous correlation)",
+    );
+  }
   if (rows.length === 0) return null;
 
-  // Group the matching positions by headcode. Each distinct headcode at an
-  // intermediate stop is a candidate train; more than one means we can't tell
-  // which is "this" service, so we refuse (never guess).
-  const byHeadcode = new Map<string, { stopIndex: number; crs: string; event: string | null }[]>();
-  for (const r of rows) {
-    if (!r.headcode || !r.lastCrs) continue;
-    const stopsHere = routeStops.filter((s) => s.crs === r.lastCrs);
-    if (stopsHere.length === 0) continue;
-    // If the route visits this CRS more than once, take the furthest-along one
-    // (the train's current front, not a stop it left earlier).
-    const stopIndex = Math.max(...stopsHere.map((s) => s.i));
-    const list = byHeadcode.get(r.headcode) ?? [];
-    list.push({ stopIndex, crs: r.lastCrs, event: r.lastEvent });
-    byHeadcode.set(r.headcode, list);
+  const match = plausibleTdMatch(rows, routeStops);
+  if (!match) {
+    if (DBG) console.log("[nr-dbg] ✗ no unambiguous, time-plausible TD match");
+    return null;
   }
 
-  if (DBG) console.log("[nr-dbg] distinct headcodes at intermediate stops:", byHeadcode.size, JSON.stringify([...byHeadcode]));
-  // Exactly one physical train at an intermediate stop of this route → confident.
-  if (byHeadcode.size !== 1) return null;
-
-  const positions = [...byHeadcode.values()][0]!;
-  // The train's current front is its furthest-along reported intermediate stop.
-  const match = positions.reduce((a, b) => (b.stopIndex > a.stopIndex ? b : a));
   const hereName = calls[match.stopIndex]?.name ?? match.crs;
 
   // Mark progress: everything up to & including the live CRS has been passed;
   // the live CRS is "current"; the rest are upcoming. This is what the page's
-  // moving-train icon keys off (first `upcoming` after the current front).
+  // moving-train icon keys off.
   const enriched = calls.map((c, i) => {
     if (i < match.stopIndex) return { ...c, progress: "departed" as const };
     if (i === match.stopIndex) return { ...c, progress: "current" as const };
@@ -517,6 +506,7 @@ export async function enrichWithNrProgress(
     calls: enriched,
     progress: {
       tracking: true,
+      positionState: "tracked",
       lastStopName: hereName,
       nextStopName: nextName,
       arrived,
@@ -525,4 +515,9 @@ export async function enrichWithNrProgress(
       nrLastEvent: match.event ?? "PASS",
     },
   };
+}
+
+/** Index of the live front, or -1. Used to keep NR from dragging progress backwards. */
+export function frontIndex(calls: ServiceCall[]): number {
+  return calls.findIndex((c) => c.progress === "current");
 }

@@ -1,6 +1,7 @@
 import { nrRtppm, nrVstpSchedule } from "@mainline/db";
 import { desc, gte, sql } from "drizzle-orm";
 import { getDb } from "./db";
+import { londonDateKey } from "./uk-time";
 
 /**
  * Network punctuality from the Network Rail Real Time PPM feed (nr_rtppm,
@@ -73,7 +74,10 @@ export async function getNetworkPunctuality(): Promise<NetworkPunctuality> {
 
   let vstpToday = 0;
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    // The London service date, not the UTC one — during BST these differ
+    // between 23:00 and midnight, which is exactly when a late-evening board
+    // would drop the day's VSTP schedules a whole hour early.
+    const today = londonDateKey();
     const vstp = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(nrVstpSchedule)

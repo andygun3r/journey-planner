@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StationInput, type StationOption } from "./station-input";
 
 interface Props {
@@ -17,6 +17,17 @@ export function BoardFilter({ crs, stations, active }: Props) {
   const [station, setStation] = useState<StationOption | null>(
     active ? { crs: active.crs, name: active.name } : null,
   );
+
+  // Resync when the server changes the applied filter under us — browser
+  // back/forward, or a link that sets ?callingAt. Initialised-from-prop state
+  // that never resyncs left the combobox showing a filter the board wasn't
+  // using. Keyed on the primitives, not the object, so it doesn't refire on
+  // every parent render.
+  const activeCrs = active?.crs;
+  const activeName = active?.name;
+  useEffect(() => {
+    setStation(activeCrs && activeName ? { crs: activeCrs, name: activeName } : null);
+  }, [activeCrs, activeName]);
 
   function apply(next: StationOption | null) {
     setStation(next);

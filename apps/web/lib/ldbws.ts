@@ -1,4 +1,5 @@
 import type { BoardDeparture } from "./board";
+import { hhmmToIso, minutesLate } from "./uk-time";
 
 /**
  * Client for the RDG "Live Departure Board" REST API (LDBWS / OpenLDBWS
@@ -61,69 +62,28 @@ export function ldbwsConfigured(): boolean {
 
 /**
  * Turn a "HH:MM" UK-local time into an ISO instant, anchored to the board's
- * generatedAt date. Times up to ~3h before "now" are assumed to be tomorrow
- * (a board can list services past midnight).
+ * generatedAt date.
+ *
+ * This used to have its own forward-only rollover rule, which dated a 23:59
+ * departure still listed on a 00:03 board as 23:59 TONIGHT — roughly 24 hours
+ * in the future — and poisoned that row's delay figure and countdown. The
+ * shared helper picks the nearest of yesterday/today/tomorrow instead.
  */
 function toIso(hhmm: string, reference: Date): string | undefined {
-  const m = /^(\d{2}):(\d{2})$/.exec(hhmm.trim());
-  if (!m) return undefined;
-  const hours = Number(m[1]);
-  const mins = Number(m[2]);
-
-  // Build the candidate in Europe/London terms by comparing wall-clock minutes.
-  const refParts = ukParts(reference);
-  const candidateMinutes = hours * 60 + mins;
-  const refMinutes = refParts.hour * 60 + refParts.minute;
-  let dayShift = 0;
-  if (candidateMinutes - refMinutes < -180) dayShift = 1; // crossed midnight
-
-  const base = new Date(reference.getTime() + dayShift * 86_400_000);
-  const parts = ukParts(base);
-  // Compose an ISO with the London offset for that date.
-  const offset = londonOffset(base);
-  const yyyy = String(parts.year).padStart(4, "0");
-  const mm = String(parts.month).padStart(2, "0");
-  const dd = String(parts.day).padStart(2, "0");
-  const hh = String(hours).padStart(2, "0");
-  const mi = String(mins).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}:00${offset}`;
+  return hhmmToIso(hhmm, reference);
 }
 
-const ukDtf = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Europe/London",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-
-function ukParts(d: Date): {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-} {
-  const p = Object.fromEntries(ukDtf.formatToParts(d).map((x) => [x.type, x.value]));
-  return {
-    year: Number(p.year),
-    month: Number(p.month),
-    day: Number(p.day),
-    hour: Number(p.hour === "24" ? "00" : p.hour),
-    minute: Number(p.minute),
-  };
-}
-
-/** London UTC offset ("+00:00" or "+01:00") for the given instant. */
-function londonOffset(d: Date): string {
-  const p = ukParts(d);
-  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
-  const diffMin = Math.round((asUtc - d.getTime()) / 60000);
-  const sign = diffMin >= 0 ? "+" : "-";
-  const abs = Math.abs(diffMin);
-  return `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
+/**
+ * Coerce a feed collection that may arrive as a bare object.
+ *
+ * LDBWS is XML underneath and gateways routinely collapse a single-element list
+ * into the element itself. `trainServices.map(...)` on such a payload threw
+ * `.map is not a function` out of a parse that had no try/catch around it,
+ * taking the whole board down with a 500.
+ */
+function normaliseList<T>(value: T | T[] | null | undefined): T[] {
+  if (value === null || value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
 }
 
 function parseService(svc: LdbwsService, reference: Date): BoardDeparture | null {
@@ -131,7 +91,7 @@ function parseService(svc: LdbwsService, reference: Date): BoardDeparture | null
   const scheduled = toIso(svc.std, reference);
   if (!scheduled) return null;
 
-  const dest = svc.destination?.[0];
+  const dest = normaliseList(svc.destination)[0];
   const etd = (svc.etd ?? "").trim();
   const cancelled = svc.isCancelled === true || /cancel/i.test(etd);
 
@@ -144,11 +104,13 @@ function parseService(svc: LdbwsService, reference: Date): BoardDeparture | null
   } else if (/^on time$/i.test(etd)) {
     status = "on-time";
   } else if (/^\d{2}:\d{2}$/.test(etd)) {
-    live = toIso(etd, reference);
-    if (live && scheduled) {
-      delayMinutes = Math.round((Date.parse(live) - Date.parse(scheduled)) / 60000);
-    }
-    status = delayMinutes && delayMinutes > 1 ? "delayed" : "on-time";
+    // Anchor the estimate on the SCHEDULED instant, not the board's generatedAt:
+    // for a service departing just after midnight the two sit on opposite sides
+    // of the date boundary, and anchoring on generatedAt put the estimate a day
+    // away from its own scheduled time.
+    live = toIso(etd, new Date(scheduled));
+    delayMinutes = minutesLate(scheduled, live);
+    status = delayMinutes !== undefined && delayMinutes > 1 ? "delayed" : "on-time";
   } else if (/delay/i.test(etd)) {
     status = "delayed"; // "Delayed" with no estimate yet
   } else {
@@ -157,7 +119,7 @@ function parseService(svc: LdbwsService, reference: Date): BoardDeparture | null
     status = "scheduled";
   }
 
-  const coachCount = svc.formation?.coaches?.length || svc.length || undefined;
+  const coachCount = normaliseList(svc.formation?.coaches).length || svc.length || undefined;
   // LDBWS gives a full human sentence for cancellations and delays, available
   // for every operator (unlike coach formation). Prefer the relevant one.
   const reason =
@@ -211,24 +173,32 @@ export async function fetchLdbwsBoard(
   }
   if (!res.ok) return null;
 
-  const data = (await res.json()) as LdbwsResponse;
-  const reference = data.generatedAt ? new Date(data.generatedAt) : new Date();
+  // Everything past this point is parsing a payload we don't control. A shape
+  // surprise must degrade to "no live board" (the caller falls back to MOTIS),
+  // never propagate as a 500.
+  try {
+    const data = (await res.json()) as LdbwsResponse;
+    const rawRef = data.generatedAt ? new Date(data.generatedAt) : new Date();
+    const reference = Number.isNaN(rawRef.getTime()) ? new Date() : rawRef;
 
-  const departures = (data.trainServices ?? [])
-    .map((svc) => parseService(svc, reference))
-    .filter((d): d is BoardDeparture => d !== null);
+    const departures = normaliseList(data.trainServices)
+      .map((svc) => parseService(svc, reference))
+      .filter((d): d is BoardDeparture => d !== null);
 
-  const messages = (data.nrccMessages ?? [])
-    .map((m) => (typeof m === "string" ? m : (m.value ?? "")))
-    .map((html) => html.replace(/<[^>]+>/g, "").trim())
-    .filter(Boolean);
+    const messages = normaliseList(data.nrccMessages)
+      .map((m) => (typeof m === "string" ? m : (m.value ?? "")))
+      .map((html) => html.replace(/<[^>]+>/g, "").trim())
+      .filter(Boolean);
 
-  return {
-    crs: (data.crs ?? crs).toUpperCase(),
-    stationName: data.locationName ?? crs,
-    generatedAt: reference.toISOString(),
-    filterName: data.filterLocationName,
-    messages,
-    departures,
-  };
+    return {
+      crs: (data.crs ?? crs).toUpperCase(),
+      stationName: data.locationName ?? crs,
+      generatedAt: reference.toISOString(),
+      filterName: data.filterLocationName,
+      messages,
+      departures,
+    };
+  } catch {
+    return null;
+  }
 }
