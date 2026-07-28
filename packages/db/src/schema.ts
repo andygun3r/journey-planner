@@ -107,6 +107,11 @@ export const darwinStopForecast = pgTable(
     platform: text("platform"),
     platformChanged: boolean("platform_changed").notNull().default(false),
     suppressed: boolean("suppressed").notNull().default(false),
+    // The originating Darwin envelope's own `ts`, epoch ms — NOT when we wrote
+    // the row. Guards applyTS's upsert against an out-of-order/replayed Kafka
+    // message (e.g. after the consumer resumes post-outage, see CLAUDE.md)
+    // clobbering a fresher actArr/actDep with a stale one.
+    lastMsgTs: timestamp("last_msg_ts", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -641,4 +646,24 @@ export const alert = pgTable(
     // The streaming hook and the periodic sweep must not double-insert.
     uniqueIndex("alert_dedupe_idx").on(t.commuteId, t.ref, t.kind, t.serviceDate),
   ],
+);
+
+// ---------------------------------------------------------------------------
+// TfL (write-through cache of StopPoint lookups; populated lazily, never
+// hand-seeded — see apps/web/lib/tfl-stop-cache.ts)
+// ---------------------------------------------------------------------------
+
+export const tflStopPointCache = pgTable(
+  "tfl_stop_point_cache",
+  {
+    naptanId: text("naptan_id").primaryKey(),
+    commonName: text("common_name").notNull(),
+    /** Set only when this StopPoint is also a National Rail interchange. */
+    crs: text("crs"),
+    lat: real("lat"),
+    lon: real("lon"),
+    modes: text("modes").array().notNull().default([]),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("tfl_stop_crs_idx").on(t.crs), index("tfl_stop_modes_idx").using("gin", t.modes)],
 );

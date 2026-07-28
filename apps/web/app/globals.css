@@ -2099,12 +2099,77 @@ a {
 
 /* ---- Live train map ---- */
 
-/* The map breaks out of the 52rem reading column to use the viewport width. */
+/* Full-bleed: pinned under the top bar, edge-to-edge, down to the (mobile)
+   tab bar or viewport bottom. --topbar-h approximates .topbar's rendered
+   height (padding 1.1rem/1rem + content + .shell's top padding) closely
+   enough that a 1-2px seam is invisible against the map canvas below it. */
 .map-main {
-  max-width: min(88rem, calc(100vw - 2rem));
-  margin-left: 50%;
-  transform: translateX(-50%);
-  width: min(88rem, calc(100vw - 2rem));
+  --topbar-h: 4.5rem;
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--topbar-h);
+  bottom: 0;
+  z-index: 1;
+}
+
+@media (max-width: 40rem) {
+  .map-main {
+    --topbar-h: 3.75rem;
+    bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom));
+  }
+}
+
+.live-map-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* MapLibre adds .maplibregl-map to this element on init, and its stylesheet
+   (imported from live-map.tsx, so it cascades *after* this file) sets
+   `position: relative` at equal specificity — which silently beat the
+   `absolute` below and left `inset: 0` inert, collapsing the box to height 0
+   and making the map invisible. Doubling the class outranks it; the explicit
+   height is a belt-and-braces guard so the canvas is sized even if the
+   positioning is overridden again. */
+.live-map-canvas.live-map-canvas {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.live-map-toolbar {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 2;
+  background: color-mix(in oklch, var(--surface) 86%, transparent);
+  backdrop-filter: blur(8px);
+  border-radius: var(--radius-control);
+  padding: 0.4rem 0.75rem;
+  box-shadow: var(--shadow-card);
+}
+
+.live-map-panel {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  width: min(20rem, calc(100vw - 1.5rem));
+  overflow-y: auto;
+  z-index: 2;
+}
+
+.live-map-legend {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  /* Leave room for MapLibre's bottom-right attribution control (added by the
+     basemap raster source) so its text doesn't overlap the legend note. */
+  right: 8rem;
+  z-index: 2;
 }
 
 .map-wrap {
@@ -2148,6 +2213,23 @@ a {
 .map-stat strong {
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+
+.map-tfl-toggle {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.map-tfl-toggle[aria-pressed="false"] {
+  color: var(--muted);
 }
 
 .map-stat-off {
@@ -2491,6 +2573,63 @@ a.map-tip-anchor:hover .map-tip {
   border-color: var(--ring);
 }
 
+/* ---- Bus stop / bus route map panels ---- */
+.map-panel-departures {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+.map-panel-departure {
+  display: grid;
+  grid-template-columns: 3rem 1fr auto;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.map-panel-departure-line {
+  font-weight: 700;
+  color: var(--ink);
+}
+.map-panel-departure-dest {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-panel-route-direction {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+.map-panel-route-stops {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.map-panel-route-stop {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+.map-panel-route-stop-marker {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #8a4fd6;
+}
+
 /* ---- Signalling diagram modal ---- */
 .sig-modal {
   position: fixed;
@@ -2702,6 +2841,15 @@ a.map-tip-anchor:hover .map-tip {
 }
 .map-key-early::before {
   background: var(--primary-strong);
+}
+.map-key-tfl-stop::before {
+  background: #c99a2e;
+}
+.map-key-tfl-bus-stop::before {
+  background: #8a8fa3;
+}
+.map-key-tfl-bus::before {
+  background: #8a4fd6;
 }
 .map-legend-note {
   margin-left: auto;
@@ -3212,6 +3360,16 @@ details[open] > .commute-dep-link .commute-dep-chevron {
   .ppm-figure.ppm-muted {
     display: none;
   }
+}
+
+.tfl-heading {
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--ink);
+  margin: 1.75rem 0 0.75rem;
+}
+.tfl-row {
+  grid-template-columns: 1fr auto;
 }
 
 /* ---- Leave/arrive toggle + journey→live links ---- */

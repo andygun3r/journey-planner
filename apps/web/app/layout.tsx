@@ -37,9 +37,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-GB" className={inter.variable}>
+    <html lang="en-GB" className={inter.variable} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Must run before first paint, so it stays an inline blocking script
+            rather than next/script. suppressHydrationWarning: this script
+            mutates documentElement.dataset before React hydrates, which would
+            otherwise read as a server/client attribute mismatch on <html>. */}
+        <script suppressHydrationWarning dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
         <a href="#main" className="skip-link">

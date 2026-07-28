@@ -1,0 +1,1 @@
+CREATE INDEX "tfl_stop_modes_idx" ON "tfl_stop_point_cache" USING gin ("modes");

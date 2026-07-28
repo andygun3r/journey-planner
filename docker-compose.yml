@@ -95,6 +95,109 @@ services:
       retries: 5
       start_period: 30s
 
+  # Vector tile stack for the live map (/map): the full OpenRailwayMap-vector
+  # project (https://github.com/hiddewie/OpenRailwayMap-vector), vendored as a
+  # git submodule at vendor/openrailwaymap-vector — it is not a static style
+  # over a generic tileset, it's its own Postgres/PostGIS import (osm2pgsql)
+  # + Martin vector tile server + nginx proxy that serves the styled UI.
+  # `orm-db` is dedicated to this stack — separate instance/schema from
+  # Mainline's own `postgres` service, not shared.
+  #
+  # One-time manual setup before this can serve real tiles (orm-martin/
+  # orm-proxy will come up fine beforehand, just with an empty database):
+  #   1. Download a GB OSM extract (https://download.geofabrik.de/europe/great-britain.html)
+  #      to vendor/openrailwaymap-vector/data/data.osm.pbf
+  #   2. docker compose up -d orm-db
+  #   3. docker compose --profile orm-import run --rm orm-import import
+  #      (takes several minutes; re-run after refreshing data.osm.pbf later)
+  #   4. docker compose up -d orm-martin orm-api orm-proxy
+  # See vendor/openrailwaymap-vector/SETUP.md for the full upstream docs
+  # (data update/refresh commands, SSL, etc).
+  orm-db:
+    build:
+      context: vendor/openrailwaymap-vector/db
+    shm_size: 1g
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      PGDATA: /data/postgresql
+      POSTGRES_DB: gis
+    volumes:
+      - orm-db-data:/data
+    restart: unless-stopped
+
+  # Run-to-completion import: docker compose run --rm orm-import import
+  # (re-run manually to pick up a refreshed data.osm.pbf; see SETUP.md).
+  orm-import:
+    build:
+      context: vendor/openrailwaymap-vector
+      dockerfile: import/Dockerfile
+    profiles: ["orm-import"]
+    depends_on:
+      orm-db:
+        condition: service_healthy
+    volumes:
+      - ./vendor/openrailwaymap-vector/data:/data
+    environment:
+      PGHOST: orm-db
+      PGUSER: postgres
+
+  orm-martin:
+    build:
+      context: vendor/openrailwaymap-vector
+      dockerfile: martin.Dockerfile
+    depends_on:
+      orm-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres@orm-db:5432/gis
+      POSTGRES_RELOAD_INTERVAL: 10s
+    restart: unless-stopped
+
+  # Facility/milestone search API behind the proxy's /api path — the map
+  # itself only needs tiles, but the proxy's nginx template hard-references
+  # API_UPSTREAM, so this has to exist for the proxy to serve anything.
+  orm-api:
+    build:
+      context: vendor/openrailwaymap-vector
+      dockerfile: api.Dockerfile
+    depends_on:
+      orm-db:
+        condition: service_healthy
+    environment:
+      PORT: 5000
+      HOST: 0.0.0.0
+      POSTGRES_USER: postgres
+      POSTGRES_HOST: orm-db
+      POSTGRES_DB: gis
+    restart: unless-stopped
+
+  # Serves the styled map UI + tiles on :8000 (see docker-compose.override.yml
+  # for the host port publish) — this is what NEXT_PUBLIC_TILES_URL points at.
+  orm-proxy:
+    build:
+      context: vendor/openrailwaymap-vector
+      dockerfile: proxy.Dockerfile
+    depends_on:
+      - orm-martin
+      - orm-api
+    environment:
+      TILES_UPSTREAM: orm-martin:3000
+      API_UPSTREAM: orm-api:5000
+      PUBLIC_PROTOCOL: http
+      # The externally-reachable host:port browsers use to reach this proxy —
+      # martin rewrites tile URLs in tilejson responses to match. Must equal
+      # wherever orm-proxy:8000 is actually published/routed for this
+      # environment (see docker-compose.override.yml for local dev's 8081).
+      PUBLIC_HOST: ${ORM_PUBLIC_HOST:-localhost:8000}
+      NGINX_CACHE_TTL: "0"
+      CLIENT_CACHE_TTL_ASSETS_FRESH: "0"
+      CLIENT_CACHE_TTL_ASSETS_STALE: "0"
+      CLIENT_CACHE_TTL_API_FRESH: "0"
+      CLIENT_CACHE_TTL_API_STALE: "0"
+      CLIENT_CACHE_TTL_TILES_FRESH: "0"
+      CLIENT_CACHE_TTL_TILES_STALE: "0"
+    restart: unless-stopped
+
   # Run-to-completion ETL: docker compose --profile etl run --rm etl timetable
   # Writes into the same named `gtfs-data` volume MOTIS reads from, so on a
   # fresh host (Coolify included) this must be run at least once before MOTIS
@@ -246,3 +349,4 @@ volumes:
   gtfs-data:
   dtd-archive:
   mariadb-data:
+  orm-db-data:

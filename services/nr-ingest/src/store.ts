@@ -2,12 +2,14 @@ import {
   createDb,
   darwinTrain,
   nrCorpus,
+  nrHeadcode,
   nrSignallingState,
   nrSmart,
   nrTrainPosition,
   nrTrainPositionHistory,
 } from "@mainline/db";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { londonDateKey } from "@mainline/shared";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import type { BerthStep, MovementReport, SClassReport } from "./parse.js";
 
 const db = createDb();
@@ -63,14 +65,40 @@ async function ensureRef(): Promise<void> {
   refLoadedAt = Date.now();
 }
 
-/** Correlate an NR train to a Darwin rid by headcode. Darwin rid isn't the
- * headcode, but darwin_train has uid; we match on the most recent train whose
- * schedule matches — best-effort, refined by activation train_uid later. */
-async function findRidForHeadcode(_headcode: string): Promise<string | null> {
-  // Best-effort placeholder: correlation by headcode alone is ambiguous without
-  // the schedule feed. We link via activation train_uid where available (below);
-  // headcode-only matching is intentionally conservative and returns null here.
-  return null;
+/**
+ * Correlate a TD headcode to a Darwin rid via nr_headcode (CIF uid -> headcode)
+ * and darwin_train (uid + ssd -> rid), scoped to today's or yesterday's traffic
+ * day so an overnight service's headcode still resolves near midnight.
+ *
+ * A headcode is reused across many unrelated diagrams, and nr_headcode has no
+ * per-day scoping (it's uid-keyed, not (uid, date)-keyed) — so more than one
+ * uid, and per uid more than one day's darwin_train row, can come back for the
+ * same headcode. Rather than guess, only trust the result when exactly one
+ * active (non-deactivated) rid matches; ambiguous or empty -> null, same
+ * conservative stance applyActivation already takes on trainUid.
+ */
+async function findRidForHeadcode(headcode: string, at: Date): Promise<string | null> {
+  const uidRows = await db
+    .select({ uid: nrHeadcode.uid })
+    .from(nrHeadcode)
+    .where(eq(nrHeadcode.headcode, headcode));
+  if (uidRows.length === 0) return null;
+  const uids = uidRows.map((r) => r.uid);
+
+  const days = [londonDateKey(new Date(at.getTime() - 86_400_000)), londonDateKey(at)];
+  const matches = await db
+    .select({ rid: darwinTrain.rid })
+    .from(darwinTrain)
+    .where(
+      and(
+        inArray(darwinTrain.uid, uids),
+        inArray(darwinTrain.ssd, days),
+        eq(darwinTrain.deactivated, false),
+      ),
+    )
+    .limit(2);
+
+  return matches.length === 1 ? matches[0]!.rid : null;
 }
 
 export async function applyMovement(m: MovementReport): Promise<string | undefined> {
@@ -79,12 +107,24 @@ export async function applyMovement(m: MovementReport): Promise<string | undefin
   const crs = loc?.crs ?? null;
   const tiploc = loc?.tiploc ?? null;
 
+  // applyActivation may already have linked this trainId to a rid — carry it
+  // forward onto the history row too, not just the live snapshot, or a
+  // per-stop TRUST timeline can never be joined back to a specific service
+  // (nr_train_position_history.rid would be null for every TRUST row).
+  const existing = await db
+    .select({ rid: nrTrainPosition.rid })
+    .from(nrTrainPosition)
+    .where(eq(nrTrainPosition.trainId, m.trainId))
+    .limit(1);
+  const rid = existing[0]?.rid ?? null;
+
   const reportedAt = new Date(m.actualTimestampMs);
   await db.transaction(async (tx) => {
     await tx
       .insert(nrTrainPosition)
       .values({
         trainId: m.trainId,
+        rid,
         lastStanox: m.stanox,
         lastTiploc: tiploc,
         lastCrs: crs,
@@ -107,6 +147,7 @@ export async function applyMovement(m: MovementReport): Promise<string | undefin
       });
     await tx.insert(nrTrainPositionHistory).values({
       trainId: m.trainId,
+      rid,
       lastStanox: m.stanox,
       lastTiploc: tiploc,
       lastCrs: crs,
@@ -167,14 +208,22 @@ export async function applyBerthStep(b: BerthStep): Promise<string | undefined> 
   // TD is keyed by headcode, not train_id. Update any position row we can match
   // by headcode; otherwise record the berth against the headcode as the key so
   // the service layer can still surface "train X near <area>".
+  //
+  // Also resolve and stamp the Darwin rid here (best-effort, null when
+  // ambiguous/unknown) so this row is directly comparable with the
+  // TRUST-keyed row applyActivation writes — without it, a reader scoped to
+  // `rid` can only ever see the coarser TRUST movement position and never
+  // this feed's finer-grained berth steps, even when this row is fresher.
   const reportedAt = new Date(b.timestampMs);
   const berth = b.toBerth ?? b.fromBerth ?? null;
+  const rid = await findRidForHeadcode(b.headcode, reportedAt).catch(() => null);
   await db.transaction(async (tx) => {
     await tx
       .insert(nrTrainPosition)
       .values({
         trainId: `TD:${b.headcode}`,
         headcode: b.headcode,
+        rid,
         tdArea: b.tdArea,
         berth,
         lastStanox: smart?.stanox ?? null,
@@ -187,6 +236,9 @@ export async function applyBerthStep(b: BerthStep): Promise<string | undefined> 
         target: nrTrainPosition.trainId,
         set: {
           headcode: b.headcode,
+          // A miss here (ambiguous headcode, or the reference cache mid-reload)
+          // must not clobber a rid this row already resolved on a prior step.
+          rid: rid ?? sql`${nrTrainPosition.rid}`,
           tdArea: b.tdArea,
           berth,
           lastStanox: smart?.stanox ?? null,
@@ -196,9 +248,18 @@ export async function applyBerthStep(b: BerthStep): Promise<string | undefined> 
           updatedAt: new Date(),
         },
       });
+    // Read back the effective rid: this call's resolution may have missed
+    // (ambiguous headcode, cache mid-reload) while the row already carries one
+    // from a prior step, same reasoning as the onConflictDoUpdate guard above.
+    const effective = await tx
+      .select({ rid: nrTrainPosition.rid })
+      .from(nrTrainPosition)
+      .where(eq(nrTrainPosition.trainId, `TD:${b.headcode}`))
+      .limit(1);
     await tx.insert(nrTrainPositionHistory).values({
       trainId: `TD:${b.headcode}`,
       headcode: b.headcode,
+      rid: effective[0]?.rid ?? rid,
       tdArea: b.tdArea,
       berth,
       lastStanox: smart?.stanox ?? null,
@@ -239,5 +300,3 @@ export async function applySClass(reports: SClassReport[]): Promise<void> {
       set: { data: sql`excluded.data`, updatedAt: sql`excluded.updated_at` },
     });
 }
-
-void findRidForHeadcode;

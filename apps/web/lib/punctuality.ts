@@ -40,6 +40,27 @@ export interface NetworkPunctuality {
   vstpToday: number;
 }
 
+/**
+ * RTPPM includes freight and infrastructure operators alongside passenger
+ * TOCs (Network Rail reports PPM for anyone running services on the network).
+ * PPM isn't a meaningful "how's my train" metric for freight, so they're
+ * dropped from the operator table entirely. Matched by name since freight
+ * operators don't share a common code prefix.
+ */
+const FREIGHT_OPERATOR_NAMES = new Set([
+  "db cargo",
+  "colas freight",
+  "gb railfreight",
+  "heavy haul rail",
+  "freightliner intermodal",
+  "direct rail services",
+  "network rail - materials",
+]);
+
+function isFreightOperator(name: string): boolean {
+  return FREIGHT_OPERATOR_NAMES.has(name.toLowerCase());
+}
+
 function toRow(r: typeof nrRtppm.$inferSelect): OperatorPunctuality {
   return {
     code: r.operatorCode,
@@ -66,7 +87,7 @@ export async function getNetworkPunctuality(): Promise<NetworkPunctuality> {
     if (r.updatedAt && (!updatedAt || r.updatedAt > updatedAt)) updatedAt = r.updatedAt;
     const row = toRow(r);
     if (r.operatorCode === "NATIONAL") national = row;
-    else if (row.total > 0) operators.push(row); // hide operators with no trains today
+    else if (row.total > 0 && !isFreightOperator(row.name)) operators.push(row); // hide operators with no trains today / freight
   }
 
   // Worst-performing first — that's the operationally interesting end.

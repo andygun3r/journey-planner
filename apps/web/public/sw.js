@@ -6,7 +6,9 @@
  * API responses (boards, journeys, alerts, live-trains) are always network-only.
  */
 
-const CACHE = "mainline-shell-v2";
+// Bumping this name is what evicts old entries: `activate` deletes every cache
+// whose key !== CACHE. Bump it whenever the caching policy changes.
+const CACHE = "mainline-shell-v3";
 const SHELL = ["/", "/icon.png", "/icon-192.png", "/apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {
@@ -40,6 +42,13 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
+
+  // Next's build output is content-hashed and changes every rebuild. Serving it
+  // cache-first pinned the browser to stale JS chunks across reloads (a hard
+  // refresh bypasses the HTTP cache but NOT the service worker), so the app
+  // kept running code from an earlier build. Always go to network for these;
+  // the hashed filenames already make them safely HTTP-cacheable.
+  if (url.pathname.startsWith("/_next/")) return;
 
   // Static assets: cache-first.
   if (["style", "script", "image", "font"].includes(req.destination)) {

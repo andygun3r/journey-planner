@@ -158,7 +158,9 @@ function CallRow({
   // than as scheduled-vs-actual. An actual report outranks an estimate.
   const estimate = parseHhmm(call.expected) !== null ? call.expected!.trim() : undefined;
   const live = call.actual ?? estimate;
-  const showLive = Boolean(live && live !== call.scheduled);
+  // Only show (and strike through the booked time for) a genuine deviation —
+  // an on-time report shouldn't read as a correction.
+  const showLive = Boolean(live && live !== call.scheduled && status.kind !== "on-time");
 
   return (
     <li

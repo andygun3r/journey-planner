@@ -19,3 +19,20 @@ services:
   motis:
     ports:
       - "8080:8080"
+
+  orm-proxy:
+    ports:
+      # Browser (MapLibre client) hits this directly — see NEXT_PUBLIC_TILES_URL.
+      # Set ORM_PUBLIC_HOST=localhost:8081 in .env to match (see .env.example).
+      - "8081:8000"
+    volumes:
+      # The vendored nginx template sends no CORS headers, so the browser's
+      # cross-origin fetch (localhost:3000 -> localhost:8081) is blocked
+      # outright. This is a copy of that template with
+      # `add_header 'Access-Control-Allow-Origin' '*' always;` added to every
+      # location block (nginx's add_header doesn't inherit into a location
+      # that sets its own, so it has to be repeated, not added once at the
+      # top). Kept outside vendor/ so a vendor refresh doesn't clobber it —
+      # diff this file against vendor/openrailwaymap-vector/proxy/proxy.conf.template
+      # after any such refresh to catch upstream changes.
+      - ./docker/orm-proxy/proxy.conf.template:/etc/nginx/templates/proxy.conf.template:ro

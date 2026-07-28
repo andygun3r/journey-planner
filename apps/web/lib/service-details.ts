@@ -406,30 +406,30 @@ export async function fetchServiceDetails(serviceId: string): Promise<ServiceDet
   let calls = parsed.calls;
   const { portions } = parsed;
 
-  // Resolve the service against Darwin (realtime timetable: scheduled/estimated/
-  // actual times, delay) and Network Rail TD (actual movement: live berth-step
-  // position) independently and side by side — Darwin's one-time schedule/
-  // activation message can be missed (e.g. after a feed outage, see CLAUDE.md),
-  // while TD keeps flowing regardless, and TD's berth steps are finer-grained
-  // than Darwin's timing points even when Darwin does resolve. TD only overrides
-  // when NR is confident about a single unambiguous match (never guess).
+  // Resolve the run against Darwin first — it's still the only source for the
+  // schedule, platforms, cancellation reasons, and (necessarily) any estimate
+  // for a stop the train hasn't reached yet, since neither TRUST nor TD can
+  // predict ahead of where the train has actually been. But WITHIN that
+  // resolve, position/progress/actual-time/delay are already TRUST+TD
+  // primary — see trustProgressForRid in service-progress.ts — because
+  // Darwin's own actArr/actDep have shown up stale/out-of-order after a Kafka
+  // replay (see CLAUDE.md), a class of bug TRUST/TD's append-only event log
+  // doesn't have.
   const { calls: darwinCalls, progress: darwinProgress, rid } = await enrichWithDarwinProgress(calls);
   calls = darwinCalls;
   let finalProgress = darwinProgress;
 
-  // Passing the rid lets NR ask for THIS train's headcode specifically rather
-  // than correlating anonymously — the difference between "our train" and
-  // "some train standing at a station on our route".
+  // A second, independent TD correlation as a forward-only safety net: when
+  // the live nr_train_position snapshot is even fresher than the history rows
+  // enrichWithDarwinProgress already saw, or when Darwin never resolved a rid
+  // at all (missed activation after an outage), this can still find the train
+  // by anonymous headcode/timing correlation.
   const nr = await enrichWithNrProgress(calls, rid).catch(() => null);
   if (nr) {
-    // Darwin owns scheduled/estimated/actual times and delay figures; TD only
-    // refines the live position, which is the one thing it's more current on.
-    //
-    // Crucially it refines FORWARD ONLY. TD berth reports are fresher but
-    // anonymous, so letting them drag the front backwards would let a
-    // mis-correlated report un-happen a Darwin actual — a stop the train
-    // demonstrably departed would go back to "upcoming". A fresher report can
-    // move the train on; it can never move it back.
+    // Crucially this only ever refines FORWARD. TD berth reports here are
+    // anonymous (no rid), so letting them drag the front backwards would let
+    // a mis-correlated report un-happen a stop the train demonstrably passed.
+    // A fresher report can move the train on; it can never move it back.
     const darwinFront = frontIndex(calls);
     const nrFront = frontIndex(nr.calls);
     if (nrFront > darwinFront) {

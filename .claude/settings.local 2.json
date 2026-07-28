@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(*)",
       "Bash(npm install *)",
       "Bash(pnpm --version)",
       "Bash(git init *)",

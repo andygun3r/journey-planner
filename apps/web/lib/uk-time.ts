@@ -23,23 +23,10 @@
  * Never rely on the host timezone — every formatter here pins Europe/London.
  */
 
-export interface UkParts {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-}
+import { londonDateKey, ukParts, type UkParts } from "@mainline/shared";
 
-const ukDtf = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Europe/London",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
+export type { UkParts };
+export { londonDateKey, ukParts };
 
 const ukHmDtf = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Europe/London",
@@ -47,19 +34,6 @@ const ukHmDtf = new Intl.DateTimeFormat("en-GB", {
   minute: "2-digit",
   hour12: false,
 });
-
-/** Calendar/clock fields of an instant, as seen in Europe/London. */
-export function ukParts(d: Date): UkParts {
-  const p = Object.fromEntries(ukDtf.formatToParts(d).map((x) => [x.type, x.value]));
-  return {
-    year: Number(p.year),
-    // en-GB with hour12:false renders midnight as "24" in some ICU versions.
-    hour: Number(p.hour === "24" ? "00" : p.hour),
-    month: Number(p.month),
-    day: Number(p.day),
-    minute: Number(p.minute),
-  };
-}
 
 /** London's offset from UTC in minutes at that instant (+60 during BST). */
 export function londonOffsetMinutes(d: Date): number {
@@ -74,12 +48,6 @@ export function londonOffsetString(d: Date): string {
   const sign = diffMin >= 0 ? "+" : "-";
   const abs = Math.abs(diffMin);
   return `${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
-}
-
-/** "YYYY-MM-DD" for the London calendar date of an instant. */
-export function londonDateKey(d: Date = new Date()): string {
-  const p = ukParts(d);
-  return `${String(p.year).padStart(4, "0")}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
 }
 
 /** Accepts "HH:MM" or Darwin's "HH:MM:SS"; returns minutes since midnight. */

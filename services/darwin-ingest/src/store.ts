@@ -1,5 +1,5 @@
 import { createDb, darwinFormation, darwinStopForecast, darwinTrain, station } from "@mainline/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import type {
   ParsedCoach,
   ParsedDeactivation,
@@ -81,6 +81,8 @@ export async function applyTS(ts: ParsedTS): Promise<string[]> {
     return knownStops[0]!.seq - 1;
   }
 
+  const msgTs = ts.msgTs !== undefined ? new Date(ts.msgTs) : null;
+
   const touchedCrs = new Set<string>();
   for (const stop of ts.stops) {
     const crs = tiplocToCrs.get(stop.tiploc) ?? null;
@@ -102,6 +104,7 @@ export async function applyTS(ts: ParsedTS): Promise<string[]> {
         platform: stop.platform ?? null,
         platformChanged: stop.platformConfirmed,
         suppressed: stop.suppressed,
+        lastMsgTs: msgTs,
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
@@ -118,8 +121,20 @@ export async function applyTS(ts: ParsedTS): Promise<string[]> {
           platform: stop.platform ?? null,
           platformChanged: stop.platformConfirmed,
           suppressed: stop.suppressed,
+          lastMsgTs: msgTs,
           updatedAt: new Date(),
         },
+        // Reject an out-of-order/replayed message (see CLAUDE.md's Kafka-offset-
+        // reset gotcha): only overwrite live fields if this update is at least
+        // as new as what's already stored, or nothing was stored yet. A message
+        // with no timestamp of its own can't be compared, so it always applies.
+        where:
+          msgTs === null
+            ? undefined
+            : or(
+                sql`${darwinStopForecast.lastMsgTs} is null`,
+                sql`${msgTs.toISOString()}::timestamptz >= ${darwinStopForecast.lastMsgTs}`,
+              ),
       });
   }
   return [...touchedCrs];

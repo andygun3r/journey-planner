@@ -33,6 +33,8 @@ export interface ParsedTS {
   ssd: string;
   lateReason?: string;
   stops: ParsedStopForecast[];
+  /** The envelope's own `ts` (epoch ms) — when Darwin sent this update, not when we received it. */
+  msgTs?: number;
 }
 
 /** One stop in a schedule's ordered calling pattern (no live times — just the plan). */
@@ -133,7 +135,7 @@ interface RawLocation {
   plat?: unknown;
 }
 
-function parseTS(ts: Record<string, unknown>): ParsedTS | null {
+function parseTS(ts: Record<string, unknown>, msgTs?: number): ParsedTS | null {
   const rid = ts.rid as string | undefined;
   const uid = ts.uid as string | undefined;
   const ssd = ts.ssd as string | undefined;
@@ -168,6 +170,7 @@ function parseTS(ts: Record<string, unknown>): ParsedTS | null {
     ssd,
     lateReason: ts.LateReason as string | undefined,
     stops,
+    msgTs,
   };
 }
 
@@ -269,7 +272,7 @@ export function parseMessage(value: string): ParsedUpdate[] {
   const inner = envelope.bytes ?? envelope.text;
   if (!inner) return [];
 
-  let payload: { uR?: Record<string, unknown>; UR?: Record<string, unknown> };
+  let payload: { ts?: string | number; uR?: Record<string, unknown>; UR?: Record<string, unknown> };
   try {
     payload = JSON.parse(inner);
   } catch {
@@ -278,9 +281,15 @@ export function parseMessage(value: string): ParsedUpdate[] {
   const ur = payload.uR ?? payload.UR;
   if (!ur) return [];
 
+  // Darwin's own envelope timestamp — when Darwin sent this update, distinct
+  // from when we received/processed it. `ts` arrives as an epoch-ms number or
+  // numeric string depending on gateway; either way `Number()` handles it.
+  const rawMsgTs = payload.ts !== undefined ? Number(payload.ts) : NaN;
+  const msgTs = Number.isFinite(rawMsgTs) ? rawMsgTs : undefined;
+
   const updates: ParsedUpdate[] = [];
   for (const ts of asArray(ur.TS as Record<string, unknown> | Record<string, unknown>[])) {
-    const parsed = parseTS(ts);
+    const parsed = parseTS(ts, msgTs);
     if (parsed) updates.push(parsed);
   }
   for (const sch of asArray(ur.schedule as Record<string, unknown> | Record<string, unknown>[])) {

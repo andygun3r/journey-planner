@@ -107,6 +107,18 @@ async function main(): Promise<void> {
   scheduleCorridorPrecompute();
 
   consumer = createKafka().consumer({ groupId });
+
+  // KafkaJS emits CRASH as an event, not a rejection of consumer.run()'s
+  // promise — without this listener the process stayed alive (and Docker's
+  // `restart: unless-stopped` never fired) after an unrecoverable error like
+  // a SASL auth timeout, silently leaving the consumer dead while the
+  // container reported healthy (the healthcheck only checks the process is
+  // running, not that it's making progress). Exit and let Docker restart us.
+  consumer.on(consumer.events.CRASH, ({ payload }) => {
+    console.error("[darwin] consumer crashed:", payload.error);
+    process.exit(1);
+  });
+
   await consumer.connect();
   await consumer.subscribe({ topic: kafkaTopic(), fromBeginning: false });
   console.log(`[darwin] consuming ${kafkaTopic()} as group ${groupId}`);

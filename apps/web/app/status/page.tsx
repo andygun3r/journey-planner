@@ -1,7 +1,18 @@
 import { BoardRefresher } from "@/components/board-refresher";
 import { getNetworkPunctuality, type OperatorPunctuality, type PpmStatus } from "@/lib/punctuality";
+import { lineStatus, tflConfigured, type TflLineStatus } from "@/lib/tfl";
 
 export const dynamic = "force-dynamic";
+
+/** Core TfL rail modes; excludes bus/tram to keep this list board-sized. */
+const TFL_RAIL_MODES = ["tube", "overground", "elizabeth-line", "dlr"] as const;
+
+/** TfL's severity is 0-10 (10 = Good Service, lower is worse); map onto our chip classes. */
+function tflChipClass(severity: number): string {
+  if (severity >= 10) return "chip-ok";
+  if (severity >= 8) return "chip-warn";
+  return "chip-danger";
+}
 
 const STATUS_LABEL: Record<PpmStatus, string> = {
   good: "Good service",
@@ -24,6 +35,21 @@ function StatusChip({ status }: { status: PpmStatus }) {
 
 function pct(n: number | null): string {
   return n == null ? "—" : `${Math.round(n)}%`;
+}
+
+function TflLineRow({ line }: { line: TflLineStatus }) {
+  return (
+    <div className="ppm-row tfl-row" role="row">
+      <span className="ppm-op" role="cell">
+        {line.lineName}
+      </span>
+      <span className="ppm-status" role="cell">
+        <span className={`chip ${tflChipClass(line.statusSeverity)}`}>
+          {line.statusSeverityDescription}
+        </span>
+      </span>
+    </div>
+  );
 }
 
 function OperatorRow({ op }: { op: OperatorPunctuality }) {
@@ -50,6 +76,7 @@ function OperatorRow({ op }: { op: OperatorPunctuality }) {
 
 export default async function StatusPage() {
   const data = await getNetworkPunctuality();
+  const tflLines = tflConfigured() ? await lineStatus(TFL_RAIL_MODES) : [];
 
   return (
     <main>
@@ -113,6 +140,18 @@ export default async function StatusPage() {
             PPM (Public Performance Measure): the share of trains arriving on time. Source: Network
             Rail Real Time PPM.
           </p>
+        </>
+      )}
+
+      {tflLines.length > 0 && (
+        <>
+          <h2 className="tfl-heading">London status</h2>
+          <section className="ppm-table tfl-table" role="table" aria-label="TfL line status">
+            {tflLines.map((line) => (
+              <TflLineRow key={line.lineId} line={line} />
+            ))}
+          </section>
+          <p className="ppm-note">Tube, Overground, Elizabeth line and DLR. Source: TfL.</p>
         </>
       )}
     </main>

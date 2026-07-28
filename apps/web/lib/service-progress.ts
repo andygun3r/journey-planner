@@ -1,5 +1,11 @@
-import { darwinStopForecast, darwinTrain, nrHeadcode, nrTrainPosition } from "@mainline/db";
-import { and, eq, gt, inArray, like } from "drizzle-orm";
+import {
+  darwinStopForecast,
+  darwinTrain,
+  nrHeadcode,
+  nrTrainPosition,
+  nrTrainPositionHistory,
+} from "@mainline/db";
+import { and, eq, gt, inArray, like, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import type { PositionState, ServiceCall, ServiceProgress } from "./service-details";
 import {
@@ -10,7 +16,7 @@ import {
   type CandidateRun,
   type TdReport,
 } from "./service-match";
-import { hhmmToIso, londonDateKey, minutesLate } from "./uk-time";
+import { hhmmToIso, londonDateKey, minutesLate, ukHhmm } from "./uk-time";
 
 /**
  * Enriches an LDBWS service's calling points with LIVE PROGRESS from the Darwin
@@ -100,16 +106,21 @@ async function headcodeForRid(rid: string): Promise<string | null> {
 /**
  * Look up the Network Rail live position for a resolved Darwin rid.
  *
- * Tries two paths: the TRUST-keyed row (rid set by applyActivation matching
- * train_uid — reliable but only populated for TRUST movements, not TD berth
- * steps), then falls back to a direct TD lookup via nr_headcode's uid ->
- * headcode map. The TD fallback is NOT unambiguous by construction: headcodes
- * are reused by many unrelated physical trains across the day (and even
- * concurrently, on other routes), and nr_train_position's `TD:<headcode>` row
- * is just whichever train most recently reported that headcode anywhere on
- * the network — it can belong to a different service entirely. Guard against
- * that by only trusting it when the reported CRS is one of this train's own
- * route stops, and when the report is recent.
+ * Both the TRUST-keyed row (rid set by applyActivation matching train_uid)
+ * and the TD-keyed row (rid set by applyBerthStep matching headcode -> uid ->
+ * rid, best-effort) can carry this rid — TD reports far more often and at
+ * finer granularity, so among rows sharing a rid we want whichever is
+ * currently freshest, not whichever the DB happens to return first.
+ *
+ * Falls back to a direct TD lookup via nr_headcode's uid -> headcode map only
+ * when neither row resolved this rid (e.g. an ambiguous headcode, or the
+ * reference cache mid-reload). That fallback is NOT unambiguous by
+ * construction: headcodes are reused by many unrelated physical trains across
+ * the day (and even concurrently, on other routes), and nr_train_position's
+ * `TD:<headcode>` row is just whichever train most recently reported that
+ * headcode anywhere on the network — it can belong to a different service
+ * entirely. Guard against that by only trusting it when the reported CRS is
+ * one of this train's own route stops, and when the report is recent.
  */
 async function nrPositionForRid(rid: string, routeCrs: Set<string>): Promise<NrPosition | null> {
   const db = getDb();
@@ -124,6 +135,7 @@ async function nrPositionForRid(rid: string, routeCrs: Set<string>): Promise<NrP
       })
       .from(nrTrainPosition)
       .where(and(eq(nrTrainPosition.rid, rid), gt(nrTrainPosition.lastReportedAt, staleCutoff)))
+      .orderBy(sql`${nrTrainPosition.lastReportedAt} desc`)
       .limit(1);
     if (rows[0]) return toNrPosition(rows[0]);
   } catch {
@@ -163,6 +175,98 @@ async function nrPositionForRid(rid: string, routeCrs: Set<string>): Promise<NrP
 /** The service days a currently-running train could belong to, London-local. */
 function candidateServiceDays(now: Date): string[] {
   return [londonDateKey(new Date(now.getTime() - 86_400_000)), londonDateKey(now)];
+}
+
+interface TrustStop {
+  /** Index into `ordered` (the Darwin-sourced, seq-ordered stop list). */
+  runIdx: number;
+  reportedAt: Date;
+  /** TRUST-only: TD history rows carry no lateness. Seconds, +late/-early. */
+  latenessSeconds: number | null;
+}
+
+/**
+ * The train's actual passage through this rid's stops, per TRUST movements +
+ * TD berth steps — not Darwin's actArr/actDep.
+ *
+ * TRUST/TD are retrospective event logs with no native notion of a schedule's
+ * stop order (see nr_train_position_history's schema comment), so each row is
+ * matched back onto `ordered` by CRS, picking whichever of that route's
+ * visits to the CRS (a route can call twice) is nearest in scheduled time —
+ * same disambiguation `alignCallsToRun` uses for Darwin's own data. History
+ * rows are then walked in report order to build a monotonic front: a later
+ * report can only advance the position, never retreat it, so a mis-ordered or
+ * out-of-sequence row can't drag the train backwards on screen.
+ */
+async function trustProgressForRid(
+  rid: string,
+  ordered: Array<{ crs: string | null }>,
+): Promise<TrustStop[]> {
+  const db = getDb();
+  const staleCutoff = new Date(Date.now() - STALE_AFTER_MS);
+
+  let rows: Array<{
+    lastCrs: string | null;
+    reportedAt: Date;
+    lateness: number | null;
+    trainId: string;
+  }>;
+  try {
+    rows = await db
+      .select({
+        lastCrs: nrTrainPositionHistory.lastCrs,
+        reportedAt: nrTrainPositionHistory.reportedAt,
+        lateness: nrTrainPositionHistory.lateness,
+        trainId: nrTrainPositionHistory.trainId,
+      })
+      .from(nrTrainPositionHistory)
+      .where(and(eq(nrTrainPositionHistory.rid, rid), gt(nrTrainPositionHistory.reportedAt, staleCutoff)))
+      .orderBy(sql`${nrTrainPositionHistory.reportedAt} asc`);
+  } catch {
+    return [];
+  }
+
+  const byCrs = new Map<string, number[]>();
+  ordered.forEach((s, i) => {
+    if (!s.crs) return;
+    const list = byCrs.get(s.crs) ?? [];
+    list.push(i);
+    byCrs.set(s.crs, list);
+  });
+
+  const out: TrustStop[] = [];
+  let front = -1;
+  for (const r of rows) {
+    if (!r.lastCrs) continue;
+    const candidates = byCrs.get(r.lastCrs);
+    if (!candidates || candidates.length === 0) continue;
+
+    // Of this route's visits to that CRS, take the one nearest the current
+    // front (index distance, not clock time — rows arrive in report order
+    // already, so "nearest to where we are" is the natural disambiguator for
+    // a route that calls at the same CRS twice, e.g. a circular or reversal).
+    let best = candidates[0]!;
+    let bestGap = Number.POSITIVE_INFINITY;
+    for (const idx of candidates) {
+      const gap = Math.abs(idx - Math.max(front, 0));
+      if (gap < bestGap) {
+        bestGap = gap;
+        best = idx;
+      }
+    }
+    if (best < front) continue; // retrospective-but-stale report; ignore
+
+    front = best;
+    // TD rows are keyed "TD:<headcode>"; TRUST rows by TRUST's own trainId —
+    // only TRUST carries a real per-event lateness figure.
+    const latenessSeconds = r.trainId.startsWith("TD:") ? null : r.lateness;
+    out.push({
+      runIdx: best,
+      reportedAt: r.reportedAt,
+      latenessSeconds,
+    });
+  }
+  return out;
 }
 
 /**
@@ -226,6 +330,7 @@ async function loadCandidateRuns(crsList: string[], now: Date): Promise<Array<Ca
 export async function enrichWithDarwinProgress(
   calls: ServiceCall[],
 ): Promise<{ calls: ServiceCall[]; progress: ServiceProgress; rid?: string }> {
+  const DBG = process.env.NR_DEBUG === "1";
   const keys = callKeys(calls);
   if (keys.size === 0) return { calls, progress: NOT_TRACKING };
 
@@ -238,15 +343,27 @@ export async function enrichWithDarwinProgress(
   } catch {
     return { calls, progress: NOT_TRACKING };
   }
+  if (DBG) {
+    console.log(
+      "[match-dbg] candidate runs:",
+      runs.map((r) => `${r.rid} (ssd ${r.ssd}, ${r.stops.length} stops)`).join(" | ") || "(none)",
+    );
+  }
 
   const pick = pickBestRun(runs, keys, now.getTime());
   if (!pick) {
+    if (DBG) console.log("[match-dbg] ✗ no run cleared the bar — awaiting-report");
     // We couldn't identify the run. The train may well be running fine — we
     // just can't say where it is, and saying so is the honest answer.
     return { calls, progress: { ...NOT_TRACKING, positionState: "awaiting-report" } };
   }
 
   const rid = pick.run.rid;
+  if (DBG) {
+    console.log(
+      `[match-dbg] ✅ picked rid ${rid} — matched ${pick.score.matched} stops, coverage ${(pick.score.coverage * 100).toFixed(0)}%`,
+    );
+  }
   // Passing points are kept: a train passing a station without calling there is
   // real progress, even though LDBWS never lists it as a calling point.
   const ordered = pick.stops.filter((s) => s.crs);
@@ -258,47 +375,78 @@ export async function enrichWithDarwinProgress(
     ordered,
   );
 
-  // The live front: the last stop with an actual (arrived/departed) time.
+  // TRUST movements + TD berth steps are the primary source of "where has the
+  // train actually been" — see CLAUDE.md and the fix history on this file:
+  // Darwin's own actArr/actDep have shown up stale/out-of-order after a Kafka
+  // replay, which is exactly the class of bug NR's own event log doesn't have
+  // (each row is a distinct, ordered report, not a mutable per-stop cell an
+  // old message can clobber). Darwin's actArr/actDep still seed the front
+  // ONLY when this rid has no TRUST/TD history at all (e.g. very early in the
+  // run, before the first movement report lands).
+  const trustStops = await trustProgressForRid(rid, ordered).catch(() => []);
+  const trustFront = trustStops.at(-1);
+  if (DBG) {
+    console.log(
+      `[match-dbg] TRUST/TD history: ${trustStops.length} report(s) for rid ${rid}` +
+        (trustFront
+          ? `, front at stop ${trustFront.runIdx} (${ordered[trustFront.runIdx]?.crs ?? "?"}), lateness ${trustFront.latenessSeconds ?? "n/a"}s`
+          : " — none, falling back to Darwin actArr/actDep"),
+    );
+  }
+
   let lastPassedIdx = -1;
-  ordered.forEach((s, i) => {
-    if (s.actDep || s.actArr) lastPassedIdx = i;
-  });
+  if (trustFront) {
+    lastPassedIdx = trustFront.runIdx;
+  } else {
+    ordered.forEach((s, i) => {
+      if (s.actDep || s.actArr) lastPassedIdx = i;
+    });
+  }
 
   const finalStop = ordered[ordered.length - 1];
   // Darwin's own schedule for this rid can end short of the LDBWS-advertised
   // destination (e.g. a reversal/unit change at an intermediate station that
   // Darwin doesn't carry forward under the same rid) — only call the journey
-  // "arrived" when Darwin's last-known stop IS the actual last LDBWS call,
-  // not just the last stop Darwin happens to know about.
+  // "arrived" when the last-known stop IS the actual last LDBWS call, not
+  // just the last stop Darwin happens to know about.
   const lastLdbwsCrs = [...calls].reverse().find((c) => c.crs)?.crs;
-  const arrived = Boolean(
-    finalStop && (finalStop.actArr || finalStop.actDep) && finalStop.crs === lastLdbwsCrs,
-  );
+  const reachedFinalStop = trustFront
+    ? trustFront.runIdx === ordered.length - 1
+    : Boolean(finalStop && (finalStop.actArr || finalStop.actDep));
+  const arrived = Boolean(finalStop && reachedFinalStop && finalStop.crs === lastLdbwsCrs);
 
-  // Overlay Network Rail's finer live position (correlated by rid via activation).
-  // TD berth steps report far more often than Darwin's timing-point actuals,
-  // so NR's position is frequently ahead of lastPassedIdx.
+  // Overlay Network Rail's live-position snapshot for the banner's location
+  // name/event/"N min ago" wording — nrPositionForRid already prefers
+  // whichever of the TRUST- or TD-keyed row is freshest.
   const routeCrs = new Set(calls.map((c) => c.crs).filter((c): c is string => Boolean(c)));
   const nr = await nrPositionForRid(rid, routeCrs).catch(() => null);
   const nrLocationName = nr?.location
     ? (calls.find((c) => c.crs === nr.location)?.name ?? nr.location)
     : undefined;
 
-  // Effective "last passed" index: NR's location if it's at or beyond Darwin's
-  // own last-known stop (NR only ever refines forward, since a fresher berth
-  // report can't un-happen), otherwise Darwin's.
+  // Effective "last passed" index: the TRUST/TD-history front computed above,
+  // further refined forward by the live snapshot when it's even fresher than
+  // the last history row we saw (history is pruned/rate-limited; the snapshot
+  // can be a beat ahead) — refinement is forward-only, since a fresher report
+  // can't un-happen an earlier one.
   let effectiveLastPassedIdx = lastPassedIdx;
   if (nr?.location) {
     const nrIdx = ordered.findIndex((s) => s.crs === nr.location);
     if (nrIdx > effectiveLastPassedIdx) effectiveLastPassedIdx = nrIdx;
   }
 
-  // True once every Darwin-known stop has an actual time but the LDBWS journey
-  // continues beyond Darwin's own data (see `arrived` above) — the train has run
-  // off the end of what Darwin knows without reaching the real destination.
+  // True once the train has reached the last stop we have data for but the
+  // LDBWS journey continues beyond it (see `arrived` above) — run off the end
+  // of what we know without reaching the real destination.
   const ranOffDarwinData =
     !arrived && ordered.length > 0 && effectiveLastPassedIdx === ordered.length - 1;
   let markedCurrentForOverrun = false;
+
+  // TRUST/TD reports for each stop, by run index, for the per-stop actual time
+  // and lateness below — TRUST history beats Darwin's actArr/actDep wherever
+  // it exists; Darwin only fills gaps TRUST/TD never reported.
+  const trustByRunIdx = new Map<number, TrustStop>();
+  for (const t of trustStops) trustByRunIdx.set(t.runIdx, t);
 
   // Carried forward so a call Darwin doesn't know about still lands on the
   // right side of the live front instead of defaulting to "upcoming".
@@ -339,7 +487,17 @@ export async function enrichWithDarwinProgress(
     else if (runIdx < effectiveLastPassedIdx) progress = "departed";
     else progress = "upcoming";
 
-    const actual = (d.actArr ?? d.actDep)?.slice(0, 5);
+    // TRUST/TD's own report for this stop, when it has one, is the actual —
+    // a real event log entry, not a per-stop cell an out-of-order message can
+    // overwrite. Darwin's actArr/actDep only fill in stops TRUST/TD never
+    // reported (sparser coverage: TD needs a recognised SMART station event,
+    // TRUST needs a TOC to send a movement message for that location).
+    const trust = trustByRunIdx.get(runIdx);
+    const actual = trust ? ukHhmm(trust.reportedAt) : (d.actArr ?? d.actDep)?.slice(0, 5);
+    const actualIso = trust ? trust.reportedAt.toISOString() : undefined;
+    // Future stops have no TRUST/TD equivalent at all — neither feed predicts
+    // ahead of where the train has actually been — so Darwin's own forecast
+    // remains the only source for what's still ahead.
     const estimate = d.estArr ?? d.estDep ?? d.schedArr ?? d.schedDep ?? d.schedPass;
     const anchor = c.scheduledIso ? new Date(c.scheduledIso) : now;
 
@@ -348,7 +506,7 @@ export async function enrichWithDarwinProgress(
       platform: c.platform ?? d.platform ?? undefined,
       progress,
       actual: actual ?? c.actual,
-      actualIso: actual ? hhmmToIso(actual, anchor) : c.actualIso,
+      actualIso: actualIso ?? (actual ? hhmmToIso(actual, anchor) : c.actualIso),
       estimatedArrivalIso: hhmmToIso(estimate, anchor),
     };
   });
@@ -363,12 +521,23 @@ export async function enrichWithDarwinProgress(
   const nameOf = (s?: DarwinStop) =>
     s?.crs ? (calls.find((c) => c.crs === s.crs)?.name ?? s.crs) : undefined;
 
-  const delayMinutes = lastPassed
-    ? minutesLate(
-        hhmmToIso(lastPassed.schedDep ?? lastPassed.schedArr ?? lastPassed.schedPass, now),
-        hhmmToIso(lastPassed.actDep ?? lastPassed.actArr, now),
-      )
-    : undefined;
+  // TRUST's own per-event lateness is the delay figure of record — it's what
+  // TOCs and Darwin itself ultimately derive from, and it doesn't depend on
+  // Darwin's actArr/actDep being right. TD-only fronts carry no lateness (TD
+  // has no timing concept at all), so walk back to the most recent TRUST
+  // (not TD) report seen anywhere in this rid's history. Only when TRUST has
+  // never reported for this rid at all does the schedule-vs-Darwin-actual
+  // delta at the front stop stand in.
+  const latestTrustLateness = [...trustStops].reverse().find((t) => t.latenessSeconds !== null);
+  const delayMinutes =
+    latestTrustLateness?.latenessSeconds != null
+      ? Math.round(latestTrustLateness.latenessSeconds / 60)
+      : lastPassed
+        ? minutesLate(
+            hhmmToIso(lastPassed.schedDep ?? lastPassed.schedArr ?? lastPassed.schedPass, now),
+            hhmmToIso(lastPassed.actDep ?? lastPassed.actArr, now),
+          )
+        : undefined;
 
   return {
     calls: enriched,

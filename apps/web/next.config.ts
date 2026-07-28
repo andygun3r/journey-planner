@@ -37,6 +37,14 @@ loadRootEnv();
 const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@mainline/shared", "@mainline/db", "@mainline/routing-adapter"],
+  // NEXT_PUBLIC_* vars are inlined into the client bundle by the bundler, which
+  // snapshots process.env *before* this config module is evaluated — so the
+  // loadRootEnv() call above is too late to reach browser code, and
+  // NEXT_PUBLIC_TILES_URL would arrive as "" on the client. Re-export it here:
+  // `env` entries are applied at build time, after this file has run.
+  env: {
+    NEXT_PUBLIC_TILES_URL: process.env.NEXT_PUBLIC_TILES_URL ?? "",
+  },
 };
 
 export default nextConfig;

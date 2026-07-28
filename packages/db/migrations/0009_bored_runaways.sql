@@ -1,0 +1,1 @@
+ALTER TABLE "darwin_stop_forecast" ADD COLUMN "last_msg_ts" timestamp with time zone;
