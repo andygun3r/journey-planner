@@ -2,6 +2,8 @@
 
 Guidance for Claude Code when working in this repository.
 
+During coding, you must use clear language, short sentences and stray away from overly technical language. 
+
 ## What this is
 
 **Mainline** — a fast, self-reliant UK rail journey & commute planner. It runs its
