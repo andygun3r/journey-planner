@@ -1,5 +1,5 @@
 import { alert, commute } from "@mainline/db";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "./db";
 
 export interface AlertRecord {
@@ -60,7 +60,7 @@ export async function markSeen(deviceId: string, alertId?: string): Promise<void
   const ids = owned.map((o) => o.id);
   if (ids.length === 0) return;
 
-  for (const id of ids) {
-    await db.update(alert).set({ seenAt: new Date() }).where(eq(alert.id, id));
-  }
+  // One statement, not one per alert. "Mark all as seen" on a busy commute
+  // used to fire a separate round trip for every unseen alert.
+  await db.update(alert).set({ seenAt: new Date() }).where(inArray(alert.id, ids));
 }

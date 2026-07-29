@@ -120,6 +120,13 @@
       "when": 1785354303904,
       "tag": "0016_wandering_centennial",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785359451834,
+      "tag": "0017_abandoned_wrecking_crew",
+      "breakpoints": true
     }
   ]
 }

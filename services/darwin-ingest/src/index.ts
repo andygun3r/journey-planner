@@ -3,6 +3,7 @@ import { Redis } from "ioredis";
 import cron from "node-cron";
 import { invalidateTrackedUids, matchCancellation, matchDelay } from "./alerts.js";
 import { createKafka, kafkaTopic } from "./kafka.js";
+import { pruneExpiredData } from "./maintenance.js";
 import { corridorsEmptyForToday, precomputeAllCorridors } from "./precompute.js";
 import { parseMessage } from "./pushport.js";
 import {

@@ -1,5 +1,5 @@
 import {
-  createDb,
+  getSharedDb,
   darwinStopForecast,
   darwinTrain,
   nrCorpus,
@@ -10,14 +10,10 @@ import {
   nrTrainPositionHistory,
 } from "@mainline/db";
 import { alignCallsToRun, hhmmToIso, londonDateKey, resolvePatternTimes } from "@mainline/shared";
-import { and, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, or, sql } from "drizzle-orm";
 import type { BerthStep, MovementReport, SClassReport } from "./parse.js";
 
-const db = createDb();
-
-const POSITION_HISTORY_RETENTION_DAYS = Number(
-  process.env.NR_POSITION_HISTORY_RETENTION_DAYS ?? 7,
-);
+const db = getSharedDb();
 
 /**
  * Per-key async mutex. STOMP delivers each frame's read callback independently
@@ -63,12 +59,12 @@ async function withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Cheap self-prune: no dedicated cron, just an occasional sweep on write. */
-function maybePruneHistory(): void {
-  if (Math.random() >= 0.001) return;
-  const cutoff = new Date(Date.now() - POSITION_HISTORY_RETENTION_DAYS * 86_400_000);
-  void db.delete(nrTrainPositionHistory).where(lt(nrTrainPositionHistory.recordedAt, cutoff));
-}
+// Retention lives in darwin-ingest's nightly pruneExpiredData, not here. There
+// used to be a sweep-on-write on this path that fired on Math.random() < 0.001
+// and issued an un-awaited bulk DELETE from inside the busiest loop in the
+// system. Nothing bounded how many could overlap, and its rate followed traffic
+// rather than time. maintenance.ts's comment already claimed to have replaced
+// it; this removes the code that claim was about.
 
 // --- In-memory reference caches (loaded once, refreshed hourly) ---
 let stanoxToCrs = new Map<string, { crs: string | null; tiploc: string | null }>();
@@ -811,7 +807,6 @@ async function applyMovementLocked(m: MovementReport): Promise<string | undefine
       lateness: m.latenessSeconds ?? null,
     });
   });
-  maybePruneHistory();
   return crs ?? undefined;
 }
 
@@ -1056,7 +1051,6 @@ async function applyBerthStepLocked(b: BerthStep): Promise<string | undefined> {
       reportedAt,
     });
   });
-  maybePruneHistory();
   return crs ?? undefined;
 }
 

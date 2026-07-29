@@ -1,4 +1,4 @@
-import { createDb, darwinFormation, darwinStopForecast, darwinTrain, station } from "@mainline/db";
+import { getSharedDb, darwinFormation, darwinStopForecast, darwinTrain, station } from "@mainline/db";
 import { eq, or, sql } from "drizzle-orm";
 import type {
   ParsedCoach,
@@ -9,7 +9,7 @@ import type {
   ParsedTS,
 } from "./pushport.js";
 
-const db = createDb();
+const db = getSharedDb();
 
 /** TIPLOC -> CRS, loaded once from the station table (refreshed hourly). */
 let tiplocToCrs = new Map<string, string>();

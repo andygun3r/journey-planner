@@ -1,14 +1,23 @@
 import { NextResponse } from "next/server";
-import { createDb } from "@mainline/db";
 import { sql } from "drizzle-orm";
 import Redis from "ioredis";
+import { getDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Uses the shared pool, NOT a fresh createDb().
+ *
+ * This route used to build its own client on every request and never close it.
+ * Because the pool has no idle timeout, each one left its connections open for
+ * the life of the process. Docker health-checks this endpoint every 10s, so it
+ * leaked roughly 360 Postgres backends an hour against a default
+ * max_connections of 100 — the database ran out of room in under 20 minutes,
+ * which looks exactly like "the whole app got slow" from the outside.
+ */
 async function checkPostgres(): Promise<boolean> {
   try {
-    const db = createDb();
-    await db.execute(sql`select 1`);
+    await getDb().execute(sql`select 1`);
     return true;
   } catch {
     return false;
