@@ -50,6 +50,8 @@ export interface ParsedSchedule {
   rid: string;
   uid: string;
   ssd: string;
+  /** 4-char headcode, from the SC message's `trainId` attribute. */
+  headcode?: string;
   toc?: string;
   cancelled: boolean;
   cancelReason?: string;
@@ -217,6 +219,9 @@ function parseSchedule(sch: Record<string, unknown>): ParsedSchedule | null {
     rid,
     uid,
     ssd,
+    // Confirmed present on every live SC message (verified against the feed
+    // 2026-07-29); `rsid` is NOT sent, so there's no retail-service-id to take.
+    headcode: (sch.trainId as string | undefined)?.trim() || undefined,
     toc: sch.toc as string | undefined,
     cancelled: cancelReason !== undefined,
     cancelReason: reasonCode,

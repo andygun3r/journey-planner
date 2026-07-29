@@ -81,13 +81,44 @@ export async function applyTS(ts: ParsedTS): Promise<string[]> {
     return knownStops[0]!.seq - 1;
   }
 
+  /**
+   * Position an UNTIMED stop using its neighbours within this same TS message.
+   *
+   * A TS message lists its stops in route order, so a stop with no time of its
+   * own still has a knowable place: whatever the nearest timed stop beside it
+   * in this message says. Without this, seqForTime's `!time` branch appended
+   * such stops to the END of the pattern, which is how a schedule ended up
+   * claiming a train called at Teignmouth/Dawlish (seq 26-28) *after* Exeter
+   * and Taunton (seq 3-5) when it physically passed them long before.
+   *
+   * That mis-ordering is not cosmetic: resolvePatternTimes assumes travel order
+   * and rolls the day forward on any backwards clock step, and calling-pattern
+   * matching walks a forward-only cursor. Measured before this fix: 5.7% of
+   * consecutive stop pairs in today's schedules went backwards in time.
+   */
+  function seqForUntimedAt(index: number): number {
+    for (let i = index - 1; i >= 0; i--) {
+      const t = ts.stops[i]!.wta ?? ts.stops[i]!.wtd ?? null;
+      if (t) return seqForTime(t);
+    }
+    for (let i = index + 1; i < ts.stops.length; i++) {
+      const t = ts.stops[i]!.wta ?? ts.stops[i]!.wtd ?? null;
+      // Sits before that stop, so borrow the slot just ahead of it.
+      if (t) return Math.max(seqForTime(t) - 1, 0);
+    }
+    return nextSeq++;
+  }
+
   const msgTs = ts.msgTs !== undefined ? new Date(ts.msgTs) : null;
 
   const touchedCrs = new Set<string>();
-  for (const stop of ts.stops) {
+  for (const [stopIndex, stop] of ts.stops.entries()) {
     const crs = tiplocToCrs.get(stop.tiploc) ?? null;
     if (crs) touchedCrs.add(crs);
-    const seq = existingSeqByTiploc.get(stop.tiploc) ?? seqForTime(stop.wta ?? stop.wtd ?? null);
+    const bookedTime = stop.wta ?? stop.wtd ?? null;
+    const seq =
+      existingSeqByTiploc.get(stop.tiploc) ??
+      (bookedTime ? seqForTime(bookedTime) : seqForUntimedAt(stopIndex));
     await db
       .insert(darwinStopForecast)
       .values({
@@ -149,6 +180,7 @@ export async function applySchedule(sch: ParsedSchedule): Promise<void> {
       rid: sch.rid,
       uid: sch.uid,
       ssd: sch.ssd,
+      headcode: sch.headcode,
       toc: sch.toc,
       cancelled: sch.cancelled,
       cancelReason: sch.cancelReason,
@@ -156,6 +188,10 @@ export async function applySchedule(sch: ParsedSchedule): Promise<void> {
     .onConflictDoUpdate({
       target: darwinTrain.rid,
       set: {
+        // coalesce, not a plain overwrite: a re-issued SC that omits trainId
+        // must not wipe a headcode we already captured. Everything else here
+        // is genuinely last-writer-wins, but this is the correlation key.
+        headcode: sql`coalesce(${sch.headcode ?? null}, ${darwinTrain.headcode})`,
         toc: sch.toc ?? null,
         cancelled: sch.cancelled,
         cancelReason: sch.cancelReason ?? null,

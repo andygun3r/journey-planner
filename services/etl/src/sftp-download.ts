@@ -64,30 +64,39 @@ export async function downloadFeedViaSftp(feed: SftpFeedName, destDir: string): 
   });
 }
 
+export interface DownloadedFeedFile {
+  path: string;
+  /** Remote file mtime at download time (epoch ms). */
+  sourceModifiedAt: number;
+}
+
 /**
- * Downloads every .zip in the remote directory whose basename (feed version,
- * e.g. "RJTTF512") isn't already in `importedVersions` — oldest first, so a
- * monthly full drop and any daily updates since are applied in delivery
- * order. Used instead of downloadFeedViaSftp so a run never skips files that
- * landed between cron runs (e.g. after downtime, or a full + same-day daily).
+ * Downloads every .zip in the remote directory whose mtime is newer than
+ * `sinceModifiedAt` — oldest first, so a monthly full drop and any daily
+ * updates since are applied in delivery order. Mtime, not filename, is what
+ * decides "already imported": RDG's SFTP drop reuses static filenames (e.g.
+ * timetable_full.zip) rather than versioned ones, so a name-based skip would
+ * miss real updates. Used instead of downloadFeedViaSftp so a run never
+ * skips files that landed between cron runs (e.g. after downtime, or a full
+ * + same-day daily).
  */
 export async function downloadPendingFeedsViaSftp(
   feed: SftpFeedName,
   destDir: string,
-  importedVersions: ReadonlySet<string>,
-): Promise<string[]> {
+  sinceModifiedAt: number,
+): Promise<DownloadedFeedFile[]> {
   return withSftp(async (sftp) => {
     const remoteDir = REMOTE_DIRS[feed];
     const zips = await listZips(sftp, remoteDir);
-    const pending = zips.filter((z) => !importedVersions.has(path.basename(z.name, path.extname(z.name))));
+    const pending = zips.filter((z) => z.modifyTime > sinceModifiedAt);
 
     await mkdir(destDir, { recursive: true });
-    const dests: string[] = [];
+    const dests: DownloadedFeedFile[] = [];
     for (const file of pending) {
       const dest = path.join(destDir, file.name);
       await sftp.fastGet(`${remoteDir}/${file.name}`, dest);
       console.log(`Downloaded ${feed} via SFTP -> ${dest}`);
-      dests.push(dest);
+      dests.push({ path: dest, sourceModifiedAt: file.modifyTime });
     }
     return dests;
   });

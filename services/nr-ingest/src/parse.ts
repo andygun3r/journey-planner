@@ -10,10 +10,35 @@ export interface MovementReport {
   eventType: "ARRIVAL" | "DEPARTURE";
   stanox: string;
   actualTimestampMs: number;
+  /**
+   * TRUST's own BOOKED time for this event at this location (`planned_timestamp`).
+   *
+   * The single most useful field for correlation, and previously discarded.
+   * Comparing a report's *actual* time to a candidate's booked time needs a wide
+   * tolerance because trains run late — measured over 1,686 live movements,
+   * |actual - planned| is p50 1.0min but p90 11.5min and p99 38min. Comparing
+   * BOOKED to BOOKED needs no such slack, so it discriminates between two
+   * candidates that a +/-90min actual-time window cannot separate.
+   * Present on 98.5% of movements.
+   */
+  plannedTimestampMs?: number;
+  /** Public (GBTT) booked time; present on ~67% — only public calls have one. */
+  gbttTimestampMs?: number;
+  /** Whether the booked event was an arrival/departure/destination. */
+  plannedEventType?: string;
+  /**
+   * Stable per-service code shared with the CIF timetable. Far more selective
+   * than a 4-char headcode. Present on 100% of movements.
+   */
+  trainServiceCode?: string;
+  /** Operator code (numeric, e.g. "20"); present on 100% of movements. */
+  tocId?: string;
   platform?: string;
   /** Seconds late (positive) / early (negative). */
   latenessSeconds?: number;
   nextStanox?: string;
+  /** Booked minutes from here to next_report_stanox. */
+  nextReportRunTimeMins?: number;
   terminated: boolean;
 }
 
@@ -125,15 +150,28 @@ export function parseMovements(value: string): NrEvent[] {
       const stanox = (body.loc_stanox ?? body.reporting_stanox) as string | undefined;
       const ts = num(body.actual_timestamp);
       if ((eventType === "ARRIVAL" || eventType === "DEPARTURE") && stanox && ts) {
+        // planned/gbtt are TRUST timestamps like actual_timestamp: UK-local
+        // wall-clock expressed as epoch-ms (CLAUDE.md), so they need the same
+        // trustTsToUtcMs correction. Comparing a raw one against a real instant
+        // would be an hour out during BST.
+        const plannedTs = num(body.planned_timestamp);
+        const gbttTs = num(body.gbtt_timestamp);
+        const runTime = num(body.next_report_run_time);
         events.push({
           kind: "movement",
           trainId,
           eventType,
           stanox: String(stanox).trim(),
           actualTimestampMs: trustTsToUtcMs(ts),
+          plannedTimestampMs: plannedTs ? trustTsToUtcMs(plannedTs) : undefined,
+          gbttTimestampMs: gbttTs ? trustTsToUtcMs(gbttTs) : undefined,
+          plannedEventType: (body.planned_event_type as string | undefined)?.trim() || undefined,
+          trainServiceCode: (body.train_service_code as string | undefined)?.trim() || undefined,
+          tocId: (body.toc_id as string | undefined)?.trim() || undefined,
           platform: (body.platform as string | undefined)?.trim() || undefined,
           latenessSeconds: lateness(body),
           nextStanox: (body.next_report_stanox as string | undefined)?.trim() || undefined,
+          nextReportRunTimeMins: runTime ?? undefined,
           terminated: String(body.train_terminated) === "true",
         });
       }

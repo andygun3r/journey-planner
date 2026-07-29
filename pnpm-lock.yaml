@@ -172,6 +172,9 @@ importers:
       mysql2:
         specifier: ^3.11.0
         version: 3.23.1(@types/node@24.13.3)
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
       ssh2-sftp-client:
         specifier: ^12.1.1
         version: 12.1.1

@@ -1,3 +1,4 @@
+import { acquireSingletonLock } from "@mainline/db";
 import { Redis } from "ioredis";
 import cron from "node-cron";
 import { invalidateTrackedUids, matchCancellation, matchDelay } from "./alerts.js";
@@ -73,6 +74,24 @@ async function handle(value: string): Promise<void> {
 }
 
 /**
+ * Expire daily data (see pruneExpiredData). Deliberately NOT inside
+ * scheduleCorridorPrecompute: that returns early when MOTIS_URL is unset, which
+ * would silently disable pruning on any deployment without MOTIS and let the
+ * tables grow without bound. Data lifecycle must not depend on the routing
+ * engine being configured.
+ *
+ * 03:30 — an hour after the corridor precompute, and AFTER it, because the
+ * precompute reads yesterday's schedules that this deletes.
+ */
+function scheduleMaintenance(): void {
+  cron.schedule("30 3 * * *", () => {
+    void pruneExpiredData().catch((err) =>
+      console.error("[maintenance] nightly prune failed:", (err as Error).message),
+    );
+  });
+}
+
+/**
  * Schedules the nightly commute-corridor precompute and runs it once on boot if
  * today's corridors are missing. Isolated in its own try/catch so it can never
  * take down the Kafka consumer — a MOTIS outage just leaves yesterday's rows.
@@ -88,6 +107,7 @@ function scheduleCorridorPrecompute(): void {
       .then(() => invalidateTrackedUids())
       .catch((err) => console.error("[precompute] nightly run failed:", (err as Error).message));
   });
+
 
   // Boot-time catch-up: if today has no corridors yet, compute them now.
   void (async () => {
@@ -105,6 +125,7 @@ function scheduleCorridorPrecompute(): void {
 
 async function main(): Promise<void> {
   scheduleCorridorPrecompute();
+  scheduleMaintenance();
 
   consumer = createKafka().consumer({ groupId });
 
@@ -164,8 +185,23 @@ if (process.argv.includes("--precompute-now")) {
       process.exit(1);
     });
 } else {
-  main().catch((err) => {
-    console.error("[darwin] fatal:", err);
-    process.exit(1);
-  });
+  // Exactly-one-writer, same as nr-ingest: two live consumers on one database
+  // overwrite each other's rows rather than sharing the work. The one-shot
+  // precompute above is exempt.
+  //
+  // The two failures are reported separately on purpose: chaining .then(main)
+  // into a single .catch made every startup error inside main() print as
+  // "another instance is already running", which is actively misleading — and
+  // on a restarting container it looks like a self-deadlock.
+  acquireSingletonLock("darwin-ingest").then(
+    () =>
+      main().catch((err) => {
+        console.error("[darwin] fatal:", err);
+        process.exit(1);
+      }),
+    (err) => {
+      console.error(`[darwin] ${(err as Error).message}`);
+      process.exit(1);
+    },
+  );
 }

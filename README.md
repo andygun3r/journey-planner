@@ -102,7 +102,10 @@ healthchecks + `restart: unless-stopped`.
      `docker compose --profile etl run --rm etl timetable`
      — or, on a low-memory server, use the local-import-then-upload flow
      below instead of running this on the server.
-   - Then start/restart `motis` so it imports the fresh GTFS.
+   - Then run `motis import` (`docker exec <motis-container> /motis import -d /data/data -c /data/config.yml`)
+     and restart `motis` so it serves the fresh GTFS — a restart alone does
+     NOT reimport, `motis server` only ever serves whatever's already
+     preprocessed under `/data/data`.
    - For NR positioning, load reference data once:
      `docker compose run --rm nr-ingest pnpm tsx src/index.ts reference`
      and the headcode map (re-run roughly daily):
@@ -115,8 +118,10 @@ healthchecks + `restart: unless-stopped`.
    crontab in `services/etl/cron/timetable-daily`. Set `DTD_SFTP_HOST` (+
    `DTD_SFTP_USERNAME`/`PASSWORD`/`PORT`/`*_DIR`) to pull via RDG's SFTP
    delivery instead of the NRDP HTTPS API — see `.env.example`. After each
-   nightly run, restart `motis` (or add a Coolify post-hook) so it reimports
-   the refreshed GTFS zip; it doesn't watch the volume for changes.
+   nightly run, `run-and-reload-motis.sh` runs `motis import` then restarts
+   `motis` (or add an equivalent Coolify post-hook) so it serves the
+   refreshed GTFS zip; it doesn't watch the volume for changes, and a bare
+   restart without the import step is a no-op against stale preprocessed data.
 7. **Container-name env vars**: `MOTIS_CONTAINER_NAME` and
    `ETL_CRON_CONTAINER_NAME` (both in `.env.example`) default to plain Docker
    Compose's `<project>-<service>-1` naming, which Coolify's compose deploys
@@ -152,8 +157,9 @@ manifest — see `services/etl/src/package-bundle.ts`). No MariaDB or
 `dtd2mysql` ever runs on the server for this path.
 
 Then upload it from the server's `/settings/timetable` page. The server
-loads the bundle straight into Postgres and restarts `motis` to reimport —
-skipping the heavy conversion step entirely.
+loads the bundle straight into Postgres, then runs `motis import` and
+restarts `motis` to serve the new data — skipping the heavy conversion step
+entirely.
 
 `etl-cron` on the server keeps handling **daily** delta updates via
 `DTD_SFTP_*` as in step 6 above — those files are much smaller than a full

@@ -27,6 +27,17 @@ export const station = pgTable("station", {
   nlc: text("nlc"),
   lat: real("lat"),
   lon: real("lon"),
+  /**
+   * Station coordinates snapped onto the nearest OpenRailwayMap running line.
+   * The .MSN-derived lat/lon above is the station's entrance/centroid, which
+   * sits a median ~12m (and up to a few hundred metres at large stations) to
+   * one side of the actual track — enough that a train plotted there visibly
+   * misses the rails on the map. Populated by services/etl's `snap-stations`
+   * command against the orm-db PostGIS import; null where no track was found
+   * within tolerance, in which case callers fall back to lat/lon.
+   */
+  trackLat: real("track_lat"),
+  trackLon: real("track_lon"),
   /** Minimum interchange time in minutes, from .MSN. */
   interchangeMin: smallint("interchange_min").notNull().default(5),
 });
@@ -54,6 +65,10 @@ export const etlRun = pgTable("etl_run", {
   id: uuid("id").primaryKey().defaultRandom(),
   feed: text("feed").notNull(), // timetable | fares | routeing
   version: text("version").notNull(), // e.g. RJTTF512
+  // Remote SFTP file mtime at download time. RDG's SFTP drop reuses static
+  // filenames (e.g. timetable_full.zip) rather than versioned ones, so
+  // "already imported" is decided by this mtime, not by `version`/filename.
+  sourceModifiedAt: timestamp("source_modified_at", { withTimezone: true }),
   importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
   ok: boolean("ok").notNull(),
   detail: text("detail"),
@@ -70,6 +85,18 @@ export const darwinTrain = pgTable(
     uid: text("uid").notNull(),
     /** Scheduled start date. */
     ssd: date("ssd").notNull(),
+    /**
+     * The 4-char headcode, from the SC message's own `trainId` attribute.
+     *
+     * Darwin has always sent this and it was simply never read. It matters
+     * because it makes headcode -> rid a DIRECT, live lookup: the alternative
+     * (nr_headcode) is derived from a ~3.2GB CIF download, loaded by a manual
+     * command with no cron, and was measured 4 days stale. Note this is the
+     * working's headcode, NOT unique — several rids a day share one — so it
+     * still needs the usual time/location disambiguation, it just supplies a
+     * far fresher candidate set.
+     */
+    headcode: text("headcode"),
     toc: text("toc"),
     cancelled: boolean("cancelled").notNull().default(false),
     cancelReason: text("cancel_reason"),
@@ -77,7 +104,11 @@ export const darwinTrain = pgTable(
     deactivated: boolean("deactivated").notNull().default(false),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("darwin_train_uid_ssd_idx").on(t.uid, t.ssd)],
+  (t) => [
+    index("darwin_train_uid_ssd_idx").on(t.uid, t.ssd),
+    // Serves findRidForHeadcode's Darwin-native candidate lookup.
+    index("darwin_train_headcode_ssd_idx").on(t.headcode, t.ssd),
+  ],
 );
 
 /**
@@ -283,11 +314,23 @@ export const nrTrainPosition = pgTable(
  * uid can have several schedule variants (STP indicators) but its reporting
  * headcode is effectively constant, so last-write-wins during the load.
  */
-export const nrHeadcode = pgTable("nr_headcode", {
-  uid: text("uid").primaryKey(),
-  headcode: text("headcode").notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const nrHeadcode = pgTable(
+  "nr_headcode",
+  {
+    uid: text("uid").primaryKey(),
+    headcode: text("headcode").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // The PK is `uid`, but the hot path queries the OTHER direction:
+    // findRidForHeadcode looks up candidate uids BY headcode on every
+    // correlation attempt. Without this that was a parallel seq scan of all
+    // ~310k rows at ~7ms a time — measured 441,322 scans reading 69 BILLION
+    // rows, i.e. 99% of all rows read in the entire database, and roughly 51
+    // minutes of wasted DB time.
+    index("nr_headcode_headcode_idx").on(t.headcode),
+  ],
+);
 
 /**
  * Append-only log of every position report (TRUST movement or TD berth step),
@@ -666,4 +709,41 @@ export const tflStopPointCache = pgTable(
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("tfl_stop_crs_idx").on(t.crs), index("tfl_stop_modes_idx").using("gin", t.modes)],
+);
+
+/**
+ * Track-following geometry between two adjacent calling points, precomputed by
+ * services/etl's `rail-corridors` command from the orm-db OpenRailwayMap import.
+ *
+ * Why materialise it: drawing a route as straight chords between calling points
+ * cuts visibly across country, but resolving a real path needs a shortest-path
+ * search over ~118k OSM way segments — far too slow for the request path, and
+ * orm-db exposes no host port to the web app anyway. The geometry only changes
+ * when the OSM extract is re-imported, so it's computed once and read back as
+ * plain coordinate pairs, exactly like station.track_lat/lon.
+ *
+ * Directional (`from_crs`/`to_crs` ordered): GB has one-way loops and divergent
+ * up/down alignments, so A→B is not always B→A reversed.
+ *
+ * A missing row means "no path found" and is a normal outcome — parallel-line
+ * ambiguity, an unmapped corridor, or the two stations simply not being rail-
+ * connected. Callers fall back to the straight chord rather than drawing
+ * nothing, so coverage gaps degrade gracefully.
+ */
+export const railCorridor = pgTable(
+  "rail_corridor",
+  {
+    fromCrs: text("from_crs").notNull(),
+    toCrs: text("to_crs").notNull(),
+    /**
+     * Ordered [lon, lat] pairs flattened into a single array
+     * ([lon0, lat0, lon1, lat1, ...]) — a plain real[] avoids both a PostGIS
+     * dependency in the main database and the per-row overhead of jsonb.
+     */
+    geometry: real("geometry").array().notNull(),
+    /** Along-track length in metres; lets callers sanity-check a bad match. */
+    lengthM: real("length_m"),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.fromCrs, t.toCrs] })],
 );

@@ -16,7 +16,8 @@
     "test": "turbo test",
     "db:generate": "pnpm --filter @mainline/db generate",
     "db:migrate": "pnpm --filter @mainline/db migrate",
-    "etl:timetable": "pnpm --filter @mainline/etl timetable"
+    "etl:timetable": "pnpm --filter @mainline/etl timetable",
+    "timetable:update": "docker compose --profile etl build etl && docker compose --profile etl run --rm etl timetable && docker compose --profile routing run --rm motis /motis import -d /data/data -c /data/config.yml && docker compose --profile routing restart motis"
   },
   "devDependencies": {
     "turbo": "^2.5.0",

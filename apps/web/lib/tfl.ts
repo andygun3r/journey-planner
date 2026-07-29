@@ -338,6 +338,55 @@ export async function lineStatus(modes: readonly string[]): Promise<TflLineStatu
 const ARRIVALS_TTL_MS = 25 * 1000;
 const arrivalsCache = new Map<string, { data: TflArrivalPrediction[]; at: number }>();
 
+/**
+ * Arrivals is only served for StopPoints that vehicles actually call at.
+ * `HUB*` ids (Barking, Farringdon, Brixton — the multi-mode interchanges) are
+ * containers, not calling points, and return `[]` however busy the station
+ * is. The map backdrop caches whatever StopPoint/Mode returned, so those hub
+ * ids are exactly what a user clicks on at the biggest interchanges, and the
+ * panel read "no departures predicted" at King's Cross.
+ *
+ * Resolve a hub to its children and query those instead. Only HUB ids need
+ * this: `940GZZLU*` metro stations and `490*` bus stops are real calling
+ * points and answer directly (verified against the live API), so they skip
+ * the extra request entirely.
+ */
+const HUB_CHILDREN_TTL_MS = 24 * 60 * 60 * 1000; // hub composition is effectively static
+const hubChildrenCache = new Map<string, { data: string[]; at: number }>();
+
+interface RawStopPointNode {
+  naptanId?: string;
+  id?: string;
+  modes?: string[];
+  children?: RawStopPointNode[];
+}
+
+function isHubId(naptanId: string): boolean {
+  return naptanId.startsWith("HUB");
+}
+
+/**
+ * Direct children of a hub that are themselves calling points. Takes the
+ * mode-bearing children one level down (`940GZZLU…` tube stations, bus stop
+ * clusters) rather than recursing to individual platforms — querying the
+ * station id returns every platform's arrivals in one call, so going deeper
+ * would multiply requests for the same predictions.
+ */
+async function hubChildren(naptanId: string): Promise<string[]> {
+  const cached = hubChildrenCache.get(naptanId);
+  if (cached && Date.now() - cached.at < HUB_CHILDREN_TTL_MS) return cached.data;
+
+  const data = (await get(`/StopPoint/${encodeURIComponent(naptanId)}`)) as RawStopPointNode | null;
+  const ids: string[] = [];
+  for (const child of data?.children ?? []) {
+    const id = child.naptanId ?? child.id;
+    if (id && (child.modes?.length ?? 0) > 0) ids.push(id);
+  }
+
+  hubChildrenCache.set(naptanId, { data: ids, at: Date.now() });
+  return ids;
+}
+
 interface RawPrediction {
   lineId?: string;
   lineName?: string;
@@ -350,14 +399,8 @@ interface RawPrediction {
   vehicleId?: string;
 }
 
-export async function arrivals(naptanId: string): Promise<TflArrivalPrediction[]> {
-  const cached = arrivalsCache.get(naptanId);
-  if (cached && Date.now() - cached.at < ARRIVALS_TTL_MS) return cached.data;
-
-  const data = (await get(`/StopPoint/${encodeURIComponent(naptanId)}/Arrivals`)) as
-    | RawPrediction[]
-    | null;
-  const predictions = (data ?? [])
+function toPredictions(data: RawPrediction[] | null): TflArrivalPrediction[] {
+  return (data ?? [])
     .filter((p): p is RawPrediction & { timeToStation: number } => typeof p.timeToStation === "number")
     .map((p) => {
       // TfL sends bearing as a numeric string; a handful of vehicles report
@@ -377,6 +420,29 @@ export async function arrivals(naptanId: string): Promise<TflArrivalPrediction[]
       };
     })
     .sort((a, b) => a.timeToStation - b.timeToStation);
+}
+
+async function fetchArrivals(naptanId: string): Promise<TflArrivalPrediction[]> {
+  const data = (await get(`/StopPoint/${encodeURIComponent(naptanId)}/Arrivals`)) as
+    | RawPrediction[]
+    | null;
+  return toPredictions(data);
+}
+
+export async function arrivals(naptanId: string): Promise<TflArrivalPrediction[]> {
+  const cached = arrivalsCache.get(naptanId);
+  if (cached && Date.now() - cached.at < ARRIVALS_TTL_MS) return cached.data;
+
+  let predictions: TflArrivalPrediction[];
+  if (isHubId(naptanId)) {
+    const children = await hubChildren(naptanId);
+    const perChild = await Promise.all(children.map(fetchArrivals));
+    // Children are separate calling points, so their predictions never
+    // overlap — merge and re-sort into one board for the whole interchange.
+    predictions = perChild.flat().sort((a, b) => a.timeToStation - b.timeToStation);
+  } else {
+    predictions = await fetchArrivals(naptanId);
+  }
 
   arrivalsCache.set(naptanId, { data: predictions, at: Date.now() });
   return predictions;
@@ -445,8 +511,20 @@ export async function lineRouteSequence(
     const polylines: [number, number][][] = [];
     for (const raw of data.lineStrings ?? []) {
       try {
-        const parsed = JSON.parse(raw) as [number, number][];
-        if (Array.isArray(parsed) && parsed.length > 0) polylines.push(parsed);
+        // Each lineString parses to an *array of branches*, not a bare
+        // coordinate list: [[[lon,lat],…],…]. Treating the outer array as the
+        // coordinate list itself (as this used to) yields a "polyline" whose
+        // first element is an entire branch, which is neither a valid
+        // LineString for the route overlay nor a usable vertex for position
+        // snapping. Unwrap one level, tolerating both shapes in case TfL ever
+        // returns a flat list.
+        const parsed = JSON.parse(raw) as [number, number][] | [number, number][][];
+        if (!Array.isArray(parsed) || parsed.length === 0) continue;
+        const branches: [number, number][][] =
+          Array.isArray(parsed[0]?.[0]) ? (parsed as [number, number][][]) : [parsed as [number, number][]];
+        for (const branch of branches) {
+          if (Array.isArray(branch) && branch.length > 0) polylines.push(branch);
+        }
       } catch {
         // Malformed lineString for this branch — skip it, keep the rest.
       }

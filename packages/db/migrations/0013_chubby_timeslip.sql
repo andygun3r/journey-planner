@@ -1,0 +1,1 @@
+ALTER TABLE "etl_run" ADD COLUMN "source_modified_at" timestamp with time zone;

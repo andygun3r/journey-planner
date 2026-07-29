@@ -1,0 +1,1 @@
+CREATE INDEX "nr_headcode_headcode_idx" ON "nr_headcode" USING btree ("headcode");

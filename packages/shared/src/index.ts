@@ -5,3 +5,4 @@ export * from "./journey.js";
 export * from "./darwin.js";
 export * from "./commute.js";
 export * from "./uk-time.js";
+export * from "./service-match.js";

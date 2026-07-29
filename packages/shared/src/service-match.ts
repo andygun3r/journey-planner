@@ -1,4 +1,4 @@
-import { parseHhmm, resolvePatternTimes } from "./uk-time";
+import { parseHhmm, resolvePatternTimes } from "./uk-time.js";
 
 /**
  * Matching an LDBWS service to the Darwin run that is actually carrying it.

@@ -1,3 +1,4 @@
+import { acquireSingletonLock } from "@mainline/db";
 import { Redis } from "ioredis";
 import { parseRtppm, parseTsr, parseVstp } from "./parse-feeds.js";
 import { parseMovements, parseSClass, parseTd } from "./parse.js";
@@ -109,6 +110,8 @@ async function runExtraFeeds(): Promise<void> {
 let reconnecting = false;
 let extraFeedsStarted = false;
 let activeClient: StompClient | null = null;
+/** Bumped whenever a client is retired, so its late events can be ignored. */
+let clientGeneration = 0;
 
 function installShutdown(): void {
   const shutdown = () => {
@@ -125,11 +128,32 @@ function installShutdown(): void {
   process.on("SIGTERM", shutdown);
 }
 
-/** Reconnect the positioning stream after a dropped socket, with backoff. */
+/**
+ * Reconnect the positioning stream after a dropped socket, with backoff.
+ *
+ * Tears the old client down first. Previously it didn't: runIngest() simply
+ * overwrote `activeClient`, and `disconnect()` appeared only in the shutdown
+ * handler. A socket that STOMP reported as errored but that was still
+ * delivering frames therefore stayed subscribed alongside its replacement, so
+ * the process would consume two streams at once and leak a connection per
+ * reconnect. The generation counter additionally stops a retired client's late
+ * `error` event from tearing down the healthy client that replaced it.
+ */
 function scheduleReconnect(reason: string): void {
   if (reconnecting) return;
   reconnecting = true;
   console.error(`[nr] positioning connection lost (${reason}); reconnecting in 10s.`);
+
+  // Retire the current client immediately: bump the generation so its late
+  // error events are ignored, and close the socket so it stops delivering.
+  clientGeneration++;
+  try {
+    activeClient?.disconnect();
+  } catch {
+    /* already dead; nothing to clean up */
+  }
+  activeClient = null;
+
   setTimeout(() => {
     reconnecting = false;
     runIngest().catch((e) => {
@@ -145,7 +169,14 @@ async function runIngest(): Promise<void> {
   console.log(`[nr] connected as ${cfg.login}`);
 
   // A dropped STOMP socket must not kill the process — reconnect instead.
-  client.on("error", (err: Error) => scheduleReconnect(err.message));
+  // Stamped with the generation this client belongs to: a client retired by a
+  // previous scheduleReconnect can still emit errors, and acting on those
+  // would tear down the healthy replacement that succeeded it.
+  const generation = clientGeneration;
+  client.on("error", (err: Error) => {
+    if (generation !== clientGeneration) return;
+    scheduleReconnect(err.message);
+  });
 
   const subscribe = (name: string, topic: string, handler: (body: string) => Promise<void>) =>
     subscribeOn(client, cfg.clientId, name, topic, handler);
@@ -157,7 +188,7 @@ async function runIngest(): Promise<void> {
         if (redis && crs) await redis.publish(`nr:crs:${crs}`, ev.trainId);
         processed++;
       } else if (ev.kind === "activation") {
-        await applyActivation(ev.trainId, ev.trainUid);
+        await applyActivation(ev.trainId, ev.trainUid, ev.scheduleStartDate, ev.originStanox);
       }
     }
   });
@@ -181,7 +212,18 @@ async function runIngest(): Promise<void> {
   }
 
   // Track the current client so the (once-registered) shutdown handler always
-  // closes the live one after a reconnect.
+  // closes the live one after a reconnect. If a reconnect was scheduled while
+  // we were awaiting connect() above, this client is already stale on arrival —
+  // close it rather than installing it, or it becomes exactly the orphaned
+  // second subscription this generation counter exists to prevent.
+  if (generation !== clientGeneration) {
+    try {
+      client.disconnect();
+    } catch {
+      /* nothing to clean up */
+    }
+    return;
+  }
   activeClient = client;
 }
 
@@ -205,6 +247,16 @@ if (command === "reference") {
   await loadSop();
   process.exit(0);
 } else {
+  // Exactly-one-writer: a second live ingester on the same database doesn't
+  // share the work, it overwrites it (see acquireSingletonLock's comment for
+  // the incident this prevents). The one-shot sub-commands above are exempt —
+  // they're idempotent loaders, safe to run while the ingester is up.
+  try {
+    await acquireSingletonLock("nr-ingest");
+  } catch (e) {
+    console.error(`[nr] ${(e as Error).message}`);
+    process.exit(1);
+  }
   installShutdown();
   await runIngest();
 }

@@ -8,6 +8,15 @@ import { bearingDegrees, lateLabel, nextPathStop, type LiveTrain, type LiveTrain
 import { TrainDetailPanel } from "./train-detail-panel";
 import { BusStopPanel } from "./bus-stop-panel";
 import { BusRoutePanel } from "./bus-route-panel";
+import {
+  addMapIcons,
+  arrowOffsetEms,
+  lateBucketColor,
+  ARROW_ICON,
+  BUS_ICON,
+  TRAIN_ICON,
+} from "../lib/map-icons";
+import { basemapTileUrl, BASEMAP_SOURCE, isDarkTheme, loadAbsoluteStyle } from "../lib/orm-style";
 
 /**
  * Live GB train map: full-bleed MapLibre canvas over the self-hosted
@@ -19,163 +28,6 @@ import { BusRoutePanel } from "./bus-route-panel";
  * unavailable.
  */
 
-// An empty NEXT_PUBLIC_TILES_URL must not silently degrade to "": that turns
-// every absolutize() call into a no-op, leaving the style's server-relative
-// paths pointing at the page origin, where they all 404. Treat blank as unset.
-const TILES_URL = (process.env.NEXT_PUBLIC_TILES_URL || "").replace(/\/$/, "") || "http://localhost:8081";
-const STYLE_URL = `${TILES_URL}/style/standard.json`;
-
-/**
- * The style JSON's vector source `url`s (TileJSON references, e.g.
- * "/operator_railway_symbols"), `sprite`, and `glyphs` are all plain
- * server-relative paths. MapLibre does not resolve any of these against the
- * style's own URL — passing STYLE_URL as a bare string makes it request them
- * against the PAGE's origin (localhost:3000) and 404, and calling
- * `map.setStyle()` with an object containing relative sprite/glyphs URLs
- * throws outright ("must be absolute"). Fetch the style ourselves and
- * absolutize every one of these fields against the tile server first.
- */
-function absolutize(path: string): string {
-  return path.startsWith("/") ? `${TILES_URL}${path}` : path;
-}
-
-/**
- * OpenRailwayMap-vector's "standard" style is a rail-only overlay: 460+
- * layers of track/signals/stations, but no background, land, water or place
- * labels — it's meant to sit over a general basemap (openrailwaymap.org
- * composites it over OSM the same way). We don't run our own basemap import
- * (see vendor/openrailwaymap-vector/SETUP.md — it only ingests railway
- * features), so this pulls CARTO's free, no-key raster tiles underneath it.
- *
- * Raster, not vector: CARTO's vector basemap ships its own sprite and glyph
- * URLs, and MapLibre allows only one sprite/glyphs pair per style — merging
- * it with OpenRailwayMap's own sprite/glyphs (which its 460+ layers reference
- * by name) would require rewriting every layer's icon/text references. A
- * raster tile source sidesteps that entirely: no sprite, no glyphs, just
- * pixels under the vector rail layers.
- */
-const BASEMAP_SOURCE = "carto-basemap";
-const BASEMAP_LAYER = "carto-basemap-layer";
-
-function basemapTileUrl(dark: boolean): string {
-  return `https://basemaps.cartocdn.com/${dark ? "dark_all" : "light_all"}/{z}/{x}/{y}.png`;
-}
-
-function isDarkTheme(): boolean {
-  return typeof document !== "undefined" && document.documentElement.dataset.theme === "dark";
-}
-
-function withBasemap(style: maplibregl.StyleSpecification, dark: boolean): maplibregl.StyleSpecification {
-  return {
-    ...style,
-    sources: {
-      ...style.sources,
-      [BASEMAP_SOURCE]: {
-        type: "raster",
-        tiles: [basemapTileUrl(dark)],
-        tileSize: 256,
-        maxzoom: 20,
-        attribution:
-          '&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      },
-    },
-    // Prepended so every OpenRailwayMap layer draws on top of it.
-    layers: [
-      { id: BASEMAP_LAYER, type: "raster", source: BASEMAP_SOURCE },
-      ...style.layers,
-    ],
-  };
-}
-
-async function loadAbsoluteStyle(dark: boolean): Promise<maplibregl.StyleSpecification> {
-  const res = await fetch(STYLE_URL);
-  const style = (await res.json()) as maplibregl.StyleSpecification;
-
-  for (const source of Object.values(style.sources ?? {})) {
-    if ("url" in source && typeof source.url === "string") {
-      source.url = absolutize(source.url);
-    }
-  }
-
-  if (typeof style.sprite === "string") {
-    style.sprite = absolutize(style.sprite);
-  } else if (Array.isArray(style.sprite)) {
-    style.sprite = style.sprite.map((s) => ({ ...s, url: absolutize(s.url) }));
-  }
-
-  if (typeof style.glyphs === "string") {
-    style.glyphs = absolutize(style.glyphs);
-  }
-
-  return withBasemap(style, dark);
-}
-
-/**
- * Renders an SVG path string to an SDF (signed-distance-field) image MapLibre
- * can recolor per-feature via `icon-color` — the same trick used for the
- * on-time/late/early train dots before this became icon-based, now applied to
- * a train/bus glyph instead of a plain circle. SDF wants a single-channel
- * alpha mask, so this fills the path solid black on a transparent canvas and
- * lets MapLibre derive the distance field from the alpha channel itself
- * (that's what `sdf: true` on addImage does — no manual distance-field math
- * needed here).
- */
-function rasterizeIcon(svgPath: string, viewBoxSize: number, outputSize: number): ImageData {
-  const canvas = document.createElement("canvas");
-  canvas.width = outputSize;
-  canvas.height = outputSize;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return new ImageData(outputSize, outputSize);
-  ctx.scale(outputSize / viewBoxSize, outputSize / viewBoxSize);
-  ctx.fillStyle = "#000";
-  ctx.fill(new Path2D(svgPath));
-  return ctx.getImageData(0, 0, outputSize, outputSize);
-}
-
-// Front-facing train glyph — the same path already used in the train detail
-// panel's "approaching" marker (train-detail-panel.tsx), so the map icon and
-// the panel icon read as the same symbol.
-const TRAIN_ICON_PATH =
-  "M12 2c-4 0-8 .5-8 4v9.5A3.5 3.5 0 0 0 7.5 19L6 20.5V21h2l2-2h4l2 2h2v-.5L16.5 19a3.5 3.5 0 0 0 3.5-3.5V6c0-3.5-4-4-8-4Zm-6 6h5v4H6V8Zm7 0h5v4h-5V8Zm-4.5 9A1.5 1.5 0 1 1 10 15.5 1.5 1.5 0 0 1 8.5 17Zm7 0A1.5 1.5 0 1 1 17 15.5 1.5 1.5 0 0 1 15.5 17Z";
-
-// Simple front-facing bus glyph in the same visual weight as the train icon.
-const BUS_ICON_PATH =
-  "M4 5.5C4 3 6.5 2 12 2s8 1 8 3.5v11A2.5 2.5 0 0 1 17.5 19H17l1 2h-2l-1-2H9l-1 2H6l1-2h-.5A2.5 2.5 0 0 1 4 16.5Zm2.5 2.5v5h11v-5ZM7 15.5A1.5 1.5 0 1 0 8.5 17 1.5 1.5 0 0 0 7 15.5Zm10 0A1.5 1.5 0 1 0 18.5 17 1.5 1.5 0 0 0 17 15.5Z";
-
-// A short arrowhead that sits just past the badge's edge (see the
-// *-arrow layers' icon-offset) and gets `icon-rotate`d per-feature — the
-// "arrow poking out of the circle" pointing along direction of travel.
-const ARROW_ICON_PATH = "M9 0 L15.5 11 L9 8.5 L2.5 11 Z";
-const ARROW_RASTER_SIZE = 64;
-
-/**
- * `icon-offset` is measured in ems of the icon's own *rendered* size, not
- * pixels — an earlier version assumed pixels outright (offset -34, which
- * placed the arrow ~34 icon-widths away, invisible off past the tile it was
- * drawn in) and a later fix still undershot by an arbitrary /2. This computes
- * the em value needed to push the arrow's center `pastPx` pixels beyond the
- * badge's edge: (badgeRadius + pastPx) converted into the arrow's own
- * rendered-size units, negative because -y is "up/outward" before rotation
- * (icon-rotate then turns that "up" to point along the real bearing).
- */
-function arrowOffsetEms(badgeRadius: number, arrowIconSize: number, pastPx = 4): number {
-  const arrowRenderedPx = arrowIconSize * ARROW_RASTER_SIZE;
-  return -(badgeRadius + pastPx) / arrowRenderedPx;
-}
-
-function addMapIcons(map: maplibregl.Map): void {
-  const size = 64;
-  if (!map.hasImage(TRAIN_ICON)) {
-    map.addImage(TRAIN_ICON, rasterizeIcon(TRAIN_ICON_PATH, 24, size), { sdf: true });
-  }
-  if (!map.hasImage(BUS_ICON)) {
-    map.addImage(BUS_ICON, rasterizeIcon(BUS_ICON_PATH, 24, size), { sdf: true });
-  }
-  if (!map.hasImage(ARROW_ICON)) {
-    map.addImage(ARROW_ICON, rasterizeIcon(ARROW_ICON_PATH, 18, size), { sdf: true });
-  }
-}
-
 const POLL_MS = 15_000;
 const BUS_POLL_MS = 20_000;
 const TRAINS_SOURCE = "live-trains";
@@ -183,10 +35,6 @@ const ROUTE_SOURCE = "selected-route";
 const BUS_ROUTE_SOURCE = "selected-bus-route";
 const TFL_STOPS_SOURCE = "tfl-stops";
 const TFL_BUSES_SOURCE = "tfl-buses";
-
-const TRAIN_ICON = "mainline-train-icon";
-const BUS_ICON = "mainline-bus-icon";
-const ARROW_ICON = "mainline-direction-arrow";
 
 interface TflStop {
   naptanId: string;
@@ -304,16 +152,33 @@ function busRouteToGeoJSON(route: BusRoute | null): FeatureCollection<LineString
   };
 }
 
+/**
+ * Build the selected train's route line. Each leg prefers the precomputed
+ * track-following corridor (rail_corridor, via pathGeometry) and falls back to
+ * a straight chord between the two calling points where none exists — so a
+ * route with partial coverage still draws end to end, just less faithfully on
+ * the uncovered legs.
+ */
 function routeToGeoJSON(train: LiveTrain | null): FeatureCollection<LineString> {
   if (!train?.path || train.path.length < 2) {
     return { type: "FeatureCollection", features: [] };
   }
+  const coordinates: [number, number][] = [];
+  for (let i = 1; i < train.path.length; i += 1) {
+    const from = train.path[i - 1]!;
+    const to = train.path[i]!;
+    const leg = train.pathGeometry?.[i - 1];
+    const segment: [number, number][] = leg ?? [
+      [from.lon, from.lat],
+      [to.lon, to.lat],
+    ];
+    // Drop the duplicated joint where this leg starts on the previous one's end.
+    for (const c of coordinates.length === 0 ? segment : segment.slice(1)) coordinates.push(c);
+  }
+  if (coordinates.length < 2) return { type: "FeatureCollection", features: [] };
   const feature: Feature<LineString> = {
     type: "Feature",
-    geometry: {
-      type: "LineString",
-      coordinates: train.path.map((s) => [s.lon, s.lat]),
-    },
+    geometry: { type: "LineString", coordinates },
     properties: {},
   };
   return { type: "FeatureCollection", features: [feature] };
@@ -334,10 +199,47 @@ export function LiveMap() {
   const [selectedBusRoute, setSelectedBusRoute] = useState<{ lineId: string; direction: string; lineName: string } | null>(null);
   const [busRoute, setBusRoute] = useState<BusRoute | null>(null);
   const trains = useMemo(() => data?.trains ?? [], [data]);
-  const selected = useMemo(
+  const baseSelected = useMemo(
     () => (selectedId ? (trains.find((t) => t.id === selectedId) ?? null) : null),
     [trains, selectedId],
   );
+  // Track-following route geometry is fetched per selected train rather than
+  // shipped with the whole map payload — see getLiveTrains, where attaching it
+  // to all ~800 trains produced a 58MB response.
+  const [selectedGeometry, setSelectedGeometry] = useState<{
+    rid: string;
+    legs: ([number, number][] | null)[];
+  } | null>(null);
+
+  useEffect(() => {
+    const rid = baseSelected?.rid;
+    if (!rid) {
+      setSelectedGeometry(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/live-trains?rid=${encodeURIComponent(rid)}`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: LiveTrainsResult | null) => {
+        const legs = json?.trains[0]?.pathGeometry;
+        if (!cancelled && legs) setSelectedGeometry({ rid, legs });
+      })
+      .catch(() => {
+        // Leave geometry unset — routeToGeoJSON falls back to straight chords.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [baseSelected?.rid]);
+
+  // Splice the fetched geometry onto the selected train, but only when it's
+  // for this train — a stale response from a previous selection must not draw
+  // the wrong route.
+  const selected = useMemo(() => {
+    if (!baseSelected) return null;
+    if (!selectedGeometry || selectedGeometry.rid !== baseSelected.rid) return baseSelected;
+    return { ...baseSelected, pathGeometry: selectedGeometry.legs };
+  }, [baseSelected, selectedGeometry]);
 
   const fetchTrains = useCallback(async () => {
     try {
@@ -578,17 +480,6 @@ export function LiveMap() {
       // was working well with plain coloured dots), plus a direction arrow
       // derived from the train's next calling point (see
       // trainsToGeoJSON/bearingDegrees — there's no GPS heading for GB rail).
-      const lateBucketColor: maplibregl.ExpressionSpecification = [
-        "match",
-        ["get", "lateBucket"],
-        "ontime",
-        "#076d3a",
-        "late",
-        "#d4202c",
-        "early",
-        "#0033a0",
-        "#5c6070",
-      ];
       map.addLayer({
         id: `${TRAINS_SOURCE}-badge`,
         type: "circle",
