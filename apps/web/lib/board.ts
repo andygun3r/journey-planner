@@ -7,6 +7,7 @@ import { enrichBoardWithFormation } from "./darwin-formation";
 import { enrichBoardWithPosition } from "./board-position";
 import { orderByExpectedDeparture } from "./board-order";
 import { type Disruption, fetchStationDisruptions } from "./disruptions";
+import { track, type Timer } from "./timing";
 import { fetchLdbwsBoard, ldbwsConfigured } from "./ldbws";
 import { getRtppmByOperatorName } from "./rtppm";
 import { stationName } from "./stations";
@@ -164,6 +165,12 @@ export async function getBoard(
   when?: string,
   limit = 20,
   callingAt?: string,
+  /**
+   * Optional. When passed, each stage of the pipeline is timed and reported in
+   * the response's Server-Timing header. Callers that don't care omit it and
+   * pay nothing.
+   */
+  timer?: Timer,
 ): Promise<BoardOutcome> {
   let crs: string;
   try {
@@ -193,7 +200,7 @@ export async function getBoard(
   // Primary source: LDBWS live board (real platforms, live estimates, messages).
   // "when" is only meaningful to the timetable engine — LDBWS is always "now".
   if (ldbwsConfigured() && !when) {
-    const ldbws = await fetchLdbwsBoard(crs, limit, filterCrs);
+    const ldbws = await track(timer, "ldbws", fetchLdbwsBoard(crs, limit, filterCrs));
     // With a filter, an empty result is authoritative ("nothing calls there") —
     // don't fall through to the unfiltered MOTIS board. Without a filter, an
     // empty LDBWS result means fall back.
@@ -205,9 +212,19 @@ export async function getBoard(
       }
       // Fill coach formation from Darwin where LDBWS didn't provide it, then
       // overlay the live Network Rail running position (where the train is now).
-      const withFormation = await enrichBoardWithFormation(crs, ldbws.departures);
-      const withPosition = await enrichBoardWithPosition(crs, withFormation);
-      const departures = inExpectedOrder(await withPunctuality(withPosition));
+      const withFormation = await track(
+        timer,
+        "formation",
+        enrichBoardWithFormation(crs, ldbws.departures),
+      );
+      const withPosition = await track(
+        timer,
+        "position",
+        enrichBoardWithPosition(crs, withFormation),
+      );
+      const departures = inExpectedOrder(
+        await track(timer, "punctuality", withPunctuality(withPosition)),
+      );
       return {
         ok: true,
         board: {
@@ -226,16 +243,25 @@ export async function getBoard(
   }
 
   // Fallback: MOTIS scheduled board, overlaid with any Darwin DB forecasts.
-  const engine = createEngine();
+  //
+  // createEngine() is inside the try on purpose: it throws when MOTIS_URL is
+  // unset, and that used to escape as a 500. An unconfigured routing engine is
+  // the same situation for a caller as an unreachable one, so both report
+  // engine-offline and the board degrades instead of erroring.
   let raw: RawDeparture[];
   try {
-    raw = await engine.departures({ stopId: crs, when, limit });
+    const engine = createEngine();
+    raw = await track(timer, "motis", engine.departures({ stopId: crs, when, limit }));
   } catch {
     return { ok: false, reason: "engine-offline" };
   }
 
   const scheduled = raw.map(scheduledRow);
-  const { departures: darwinDepartures, live } = await enrichBoardWithDarwin(crs, scheduled);
+  const { departures: darwinDepartures, live } = await track(
+    timer,
+    "darwin",
+    enrichBoardWithDarwin(crs, scheduled),
+  );
 
   for (const d of darwinDepartures) {
     if (!d.destinationName && d.destinationCrs) {
@@ -245,9 +271,15 @@ export async function getBoard(
 
   // Same formation/position enrichment as the LDBWS path — previously skipped
   // here, leaving fallback boards without coach detail or live NR position.
-  const withFormation = await enrichBoardWithFormation(crs, darwinDepartures);
-  const withPosition = await enrichBoardWithPosition(crs, withFormation);
-  const departures = inExpectedOrder(await withPunctuality(withPosition));
+  const withFormation = await track(
+    timer,
+    "formation",
+    enrichBoardWithFormation(crs, darwinDepartures),
+  );
+  const withPosition = await track(timer, "position", enrichBoardWithPosition(crs, withFormation));
+  const departures = inExpectedOrder(
+    await track(timer, "punctuality", withPunctuality(withPosition)),
+  );
 
   return {
     ok: true,
