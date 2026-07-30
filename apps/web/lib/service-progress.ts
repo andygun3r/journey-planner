@@ -6,6 +6,7 @@ import {
   nrTrainPositionHistory,
 } from "@mainline/db";
 import { and, eq, gt, inArray, like, sql } from "drizzle-orm";
+import { candidateServiceDays } from "./darwin-forecasts";
 import { getDb } from "./db";
 import type { PositionState, ServiceCall, ServiceProgress } from "./service-details";
 import {
@@ -170,11 +171,6 @@ async function nrPositionForRid(rid: string, routeCrs: Set<string>): Promise<NrP
   } catch {
     return null;
   }
-}
-
-/** The service days a currently-running train could belong to, London-local. */
-function candidateServiceDays(now: Date): string[] {
-  return [londonDateKey(new Date(now.getTime() - 86_400_000)), londonDateKey(now)];
 }
 
 interface TrustStop {

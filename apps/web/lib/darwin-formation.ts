@@ -1,5 +1,6 @@
-import { darwinFormation, darwinStopForecast, darwinTrain } from "@mainline/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { darwinFormation } from "@mainline/db";
+import { eq, inArray } from "drizzle-orm";
+import { stationForecasts } from "./darwin-forecasts";
 import type { BoardDeparture, Coach } from "./board";
 import { getDb } from "./db";
 import { londonDateKey, ukHhmm } from "./uk-time";
@@ -21,11 +22,6 @@ interface StoredCoach {
 
 const hhmm = (iso: string) => ukHhmm(iso);
 
-/** The service days a board's trains could belong to, London-local. */
-function candidateServiceDays(now: Date): string[] {
-  return [londonDateKey(new Date(now.getTime() - 86_400_000)), londonDateKey(now)];
-}
-
 export async function enrichBoardWithFormation(
   crs: string,
   departures: BoardDeparture[],
@@ -38,22 +34,7 @@ export async function enrichBoardWithFormation(
 
   // 1. rid by scheduled departure minute at this station, bounded to the
   //    current/previous service day.
-  let forecasts: Array<{ rid: string; schedDep: string | null }>;
-  try {
-    forecasts = await db
-      .select({ rid: darwinStopForecast.rid, schedDep: darwinStopForecast.schedDep })
-      .from(darwinStopForecast)
-      .innerJoin(darwinTrain, eq(darwinTrain.rid, darwinStopForecast.rid))
-      .where(
-        and(
-          eq(darwinStopForecast.crs, crs),
-          inArray(darwinTrain.ssd, candidateServiceDays(new Date())),
-          eq(darwinTrain.deactivated, false),
-        ),
-      );
-  } catch {
-    return departures; // DB/table not ready
-  }
+  const forecasts = await stationForecasts(crs);
   if (forecasts.length === 0) return departures;
 
   // Two trains sharing a scheduled minute can't be told apart by it, so an
