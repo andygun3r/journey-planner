@@ -5,7 +5,13 @@ import { parseMovements, parseSClass, parseTd } from "./parse.js";
 import { loadSop } from "./load-sop.js";
 import { loadCorpus, loadHeadcodes, loadSmart } from "./reference.js";
 import { applyRtppm, applyTsr, applyVstp } from "./store-feeds.js";
-import { applyActivation, applyBerthStep, applyMovement, applySClass } from "./store.js";
+import {
+  applyActivation,
+  applyBerthStep,
+  applyMovement,
+  applySClass,
+  flushHistory,
+} from "./store.js";
 import { connect, nrConfig, TOPICS } from "./stomp.js";
 
 /**
@@ -135,18 +141,26 @@ let activeClient: StompClient | null = null;
 let clientGeneration = 0;
 
 function installShutdown(): void {
-  const shutdown = () => {
+  let shuttingDown = false;
+  const shutdown = async () => {
+    // A second signal while the flush is in flight must not cut it short.
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log("[nr] shutting down…");
     try {
       activeClient?.disconnect();
     } catch {
       /* ignore */
     }
+    // Position history is buffered, so anything still queued has to be written
+    // before exiting or it is simply lost. Bounded by the flush size, so this
+    // is one statement, not a long wait.
+    await flushHistory().catch(() => {});
     redis?.disconnect();
     process.exit(0);
   };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", () => void shutdown());
+  process.on("SIGTERM", () => void shutdown());
 }
 
 /**

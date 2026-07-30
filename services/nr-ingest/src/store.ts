@@ -67,6 +67,75 @@ async function withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * Buffered writes for the position history log.
+ *
+ * This is the highest-insert-rate table in the system and carries four indexes,
+ * so every row costs four index writes. It used to be one INSERT per report,
+ * inside a transaction with the live-position upsert — meaning BEGIN, two
+ * statements and COMMIT for every berth step, on a feed doing thousands a
+ * minute.
+ *
+ * History is an append-only analytical log: it backs the service-detail
+ * advanced view and trajectory scoring, and nothing reads it to make a decision
+ * that must be correct to the millisecond. So it is safe to collect rows and
+ * write them together, which also lets the live upsert drop its transaction.
+ *
+ * The trade is that a crash can lose up to one flush window of history while
+ * the live position survives. That is the right way round: the snapshot is what
+ * the app shows.
+ */
+const HISTORY_FLUSH_MS = Number(process.env.NR_HISTORY_FLUSH_MS ?? 250);
+const HISTORY_BATCH_MAX = Number(process.env.NR_HISTORY_BATCH_MAX ?? 200);
+
+type HistoryRow = typeof nrTrainPositionHistory.$inferInsert;
+
+let historyBuffer: HistoryRow[] = [];
+let historyTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Write whatever is buffered. Safe to call at any time, including on shutdown. */
+export async function flushHistory(): Promise<void> {
+  if (historyTimer) {
+    clearTimeout(historyTimer);
+    historyTimer = null;
+  }
+  if (historyBuffer.length === 0) return;
+
+  // Taken before the await so reports arriving mid-flush queue for the next one
+  // rather than being dropped.
+  const rows = historyBuffer;
+  historyBuffer = [];
+  try {
+    await db.insert(nrTrainPositionHistory).values(rows);
+  } catch (err) {
+    // Losing analytical history must never stop the live feed.
+    console.error(`[nr] history flush failed (${rows.length} rows):`, (err as Error).message);
+  }
+}
+
+function queueHistory(row: HistoryRow): void {
+  historyBuffer.push(row);
+  if (historyBuffer.length >= HISTORY_BATCH_MAX) {
+    void flushHistory();
+    return;
+  }
+  historyTimer ??= setTimeout(() => void flushHistory(), HISTORY_FLUSH_MS);
+}
+
+/**
+ * Buffered rows for one train, so a reader sees its own writes.
+ *
+ * Trajectory scoring reads this table right after writing to it. Without this
+ * it could miss the most recent report or two, and the margin it needs is only
+ * two stops.
+ */
+function pendingHistoryFor(trainId: string, since: Date): Array<{ crs: string | null }> {
+  return historyBuffer
+    .filter((r) => r.trainId === trainId && r.reportedAt >= since)
+    .sort((a, b) => a.reportedAt.getTime() - b.reportedAt.getTime())
+    .map((r) => ({ crs: r.lastCrs ?? null }));
+}
+
 // Retention lives in darwin-ingest's nightly pruneExpiredData, not here. There
 // used to be a sweep-on-write on this path that fired on Math.random() < 0.001
 // and issued an un-awaited bulk DELETE from inside the busiest loop in the
@@ -301,16 +370,22 @@ async function scoreCandidateByTrajectory(
 ): Promise<number> {
   // The train's own recent reports, oldest first. 3h covers a long-distance
   // working without dragging in a previous, unrelated diagram.
-  const history = await db
+  const since = new Date(at.getTime() - 3 * 3_600_000);
+  const stored = await db
     .select({ crs: nrTrainPositionHistory.lastCrs })
     .from(nrTrainPositionHistory)
     .where(
       and(
         eq(nrTrainPositionHistory.trainId, trainId),
-        gte(nrTrainPositionHistory.reportedAt, new Date(at.getTime() - 3 * 3_600_000)),
+        gte(nrTrainPositionHistory.reportedAt, since),
       ),
     )
     .orderBy(nrTrainPositionHistory.reportedAt);
+
+  // History writes are buffered, so the newest reports for this train may not
+  // have reached the table yet. They are appended rather than merged because
+  // anything still buffered is by definition newer than anything stored.
+  const history = [...stored, ...pendingHistoryFor(trainId, since)];
 
   // Collapse consecutive duplicates: several berth steps inside one station
   // are one visit, and would otherwise inflate the score.
@@ -665,12 +740,31 @@ async function applyMovementLocked(m: MovementReport): Promise<string | undefine
     ).catch(() => null);
   }
 
-  await db.transaction(async (tx) => {
-    await tx
-      .insert(nrTrainPosition)
-      .values({
-        trainId: m.trainId,
+  // No transaction here: the live snapshot is a single statement, and history
+  // is buffered and written separately. Wrapping one upsert in BEGIN/COMMIT
+  // cost two extra round trips per report and bought nothing.
+  await db
+    .insert(nrTrainPosition)
+    .values({
+      trainId: m.trainId,
+      headcode: trustHeadcode,
+      rid,
+      lastStanox: m.stanox,
+      lastTiploc: tiploc,
+      lastCrs: crs,
+      lastEventType: m.eventType,
+      lastReportedAt: reportedAt,
+      lateness: m.latenessSeconds ?? null,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: nrTrainPosition.trainId,
+      set: {
         headcode: trustHeadcode,
+        // `rid` here already reflects revalidateRid + the retry above — it
+        // must be written as-is, including null, rather than coalesced back
+        // to whatever the row already had: that would resurrect a rid this
+        // report just failed its plausibility check against.
         rid,
         lastStanox: m.stanox,
         lastTiploc: tiploc,
@@ -679,45 +773,27 @@ async function applyMovementLocked(m: MovementReport): Promise<string | undefine
         lastReportedAt: reportedAt,
         lateness: m.latenessSeconds ?? null,
         updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: nrTrainPosition.trainId,
-        set: {
-          headcode: trustHeadcode,
-          // `rid` here already reflects revalidateRid + the retry above — it
-          // must be written as-is, including null, rather than coalesced back
-          // to whatever the row already had: that would resurrect a rid this
-          // report just failed its plausibility check against.
-          rid,
-          lastStanox: m.stanox,
-          lastTiploc: tiploc,
-          lastCrs: crs,
-          lastEventType: m.eventType,
-          lastReportedAt: reportedAt,
-          lateness: m.latenessSeconds ?? null,
-          updatedAt: new Date(),
-        },
-        // Only apply if this report is at least as new as what's stored. See
-        // the note above applyBerthStepLocked's identical guard for the full
-        // reasoning; in short, nothing upstream guarantees frames arrive in
-        // reportedAt order, so without this an older report can overwrite a
-        // newer one's rid. Mirrors darwin-ingest/src/store.ts's lastMsgTs
-        // guard, which exists for the same reason.
-        where: or(
-          sql`${nrTrainPosition.lastReportedAt} is null`,
-          sql`${reportedAt.toISOString()}::timestamptz >= ${nrTrainPosition.lastReportedAt}`,
-        ),
-      });
-    await tx.insert(nrTrainPositionHistory).values({
-      trainId: m.trainId,
-      rid,
-      lastStanox: m.stanox,
-      lastTiploc: tiploc,
-      lastCrs: crs,
-      lastEventType: m.eventType,
-      reportedAt,
-      lateness: m.latenessSeconds ?? null,
+      },
+      // Only apply if this report is at least as new as what's stored. See
+      // the note above applyBerthStepLocked's identical guard for the full
+      // reasoning; in short, nothing upstream guarantees frames arrive in
+      // reportedAt order, so without this an older report can overwrite a
+      // newer one's rid. Mirrors darwin-ingest/src/store.ts's lastMsgTs
+      // guard, which exists for the same reason.
+      where: or(
+        sql`${nrTrainPosition.lastReportedAt} is null`,
+        sql`${reportedAt.toISOString()}::timestamptz >= ${nrTrainPosition.lastReportedAt}`,
+      ),
     });
+  queueHistory({
+    trainId: m.trainId,
+    rid,
+    lastStanox: m.stanox,
+    lastTiploc: tiploc,
+    lastCrs: crs,
+    lastEventType: m.eventType,
+    reportedAt,
+    lateness: m.latenessSeconds ?? null,
   });
   return crs ?? undefined;
 }
@@ -912,46 +988,12 @@ async function applyBerthStepLocked(b: BerthStep): Promise<string | undefined> {
   // concurrently, not by out-of-order delivery within this service. The guard
   // is kept because it is cheap and genuinely prevents stale overwrites, but
   // it was not the fix for that symptom — see the note on tdTrainId.
-  await db.transaction(async (tx) => {
-    await tx
-      .insert(nrTrainPosition)
-      .values({
-        trainId: tdTrainId(b),
-        headcode: b.headcode,
-        rid,
-        tdArea: b.tdArea,
-        berth,
-        lastStanox: smart?.stanox ?? null,
-        lastCrs: crs,
-        lastEventType,
-        lastReportedAt: reportedAt,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: nrTrainPosition.trainId,
-        set: {
-          headcode: b.headcode,
-          // Write rid as computed above, including null — see the comment
-          // above for why this must not silently keep a stale value.
-          rid,
-          tdArea: b.tdArea,
-          berth,
-          lastStanox: smart?.stanox ?? null,
-          lastCrs: crs,
-          lastEventType,
-          lastReportedAt: reportedAt,
-          updatedAt: new Date(),
-        },
-        // Only apply if this report is at least as new as what's stored —
-        // see the comment above. `>=` not `>`: two reports can share a
-        // whole-second timestamp, and the later-arriving one is still the
-        // better value for a berth step (it's the further-along berth).
-        where: or(
-          sql`${nrTrainPosition.lastReportedAt} is null`,
-          sql`${reportedAt.toISOString()}::timestamptz >= ${nrTrainPosition.lastReportedAt}`,
-        ),
-      });
-    await tx.insert(nrTrainPositionHistory).values({
+  // No transaction here: the live snapshot is a single statement, and history
+  // is buffered and written separately. Wrapping one upsert in BEGIN/COMMIT
+  // cost two extra round trips per report and bought nothing.
+  await db
+    .insert(nrTrainPosition)
+    .values({
       trainId: tdTrainId(b),
       headcode: b.headcode,
       rid,
@@ -960,8 +1002,43 @@ async function applyBerthStepLocked(b: BerthStep): Promise<string | undefined> {
       lastStanox: smart?.stanox ?? null,
       lastCrs: crs,
       lastEventType,
-      reportedAt,
+      lastReportedAt: reportedAt,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: nrTrainPosition.trainId,
+      set: {
+        headcode: b.headcode,
+        // Write rid as computed above, including null — see the comment
+        // above for why this must not silently keep a stale value.
+        rid,
+        tdArea: b.tdArea,
+        berth,
+        lastStanox: smart?.stanox ?? null,
+        lastCrs: crs,
+        lastEventType,
+        lastReportedAt: reportedAt,
+        updatedAt: new Date(),
+      },
+      // Only apply if this report is at least as new as what's stored —
+      // see the comment above. `>=` not `>`: two reports can share a
+      // whole-second timestamp, and the later-arriving one is still the
+      // better value for a berth step (it's the further-along berth).
+      where: or(
+        sql`${nrTrainPosition.lastReportedAt} is null`,
+        sql`${reportedAt.toISOString()}::timestamptz >= ${nrTrainPosition.lastReportedAt}`,
+      ),
     });
+  queueHistory({
+    trainId: tdTrainId(b),
+    headcode: b.headcode,
+    rid,
+    tdArea: b.tdArea,
+    berth,
+    lastStanox: smart?.stanox ?? null,
+    lastCrs: crs,
+    lastEventType,
+    reportedAt,
   });
   return crs ?? undefined;
 }
