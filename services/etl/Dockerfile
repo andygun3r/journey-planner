@@ -10,7 +10,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.base.js
 COPY packages ./packages
 COPY services/etl ./services/etl
 RUN pnpm install --frozen-lockfile --filter @mainline/etl... \
-  && chmod +x services/etl/cron/run-and-reload-motis.sh
+  && chmod +x services/etl/cron/run-and-reload-motis.sh services/etl/cron/motis-reimport.sh
 RUN pnpm exec turbo build --filter=@mainline/etl^...
 COPY services/etl/cron/timetable-daily /etc/crontabs/root
 WORKDIR /app/services/etl

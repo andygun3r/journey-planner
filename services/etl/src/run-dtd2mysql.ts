@@ -8,10 +8,31 @@ import { spawn } from "node:child_process";
  * and handles associations; postprocess-gtfs.ts fills any gaps.
  */
 
+/**
+ * Heap ceiling for dtd2mysql, in MB.
+ *
+ * dtd2mysql is a Node process, so it is bound by V8's old-space limit and not
+ * just by how much RAM the box has — the default lands around 4GB, and once it
+ * is hit the process dies with "JavaScript heap out of memory" even with memory
+ * to spare. Converting the full GB timetable is the job that runs this server
+ * out of memory, so give it room explicitly rather than relying on a default
+ * that varies with the host.
+ *
+ * Raising this trades speed for completing at all: a bigger heap means more GC
+ * pressure and more swapping, but a slow import beats a dead one. Set
+ * ETL_DTD2MYSQL_HEAP_MB=0 to leave Node's default alone.
+ */
+const HEAP_MB = Number(process.env.ETL_DTD2MYSQL_HEAP_MB ?? 6144);
+
 function mysqlEnv(): NodeJS.ProcessEnv {
   const url = new URL(process.env.ETL_MYSQL_URL ?? "mysql://root:etl@mariadb:3306/dtd");
+  // Keep anything the operator already set; only add our own flag.
+  const nodeOptions = [process.env.NODE_OPTIONS, HEAP_MB > 0 ? `--max-old-space-size=${HEAP_MB}` : ""]
+    .filter(Boolean)
+    .join(" ");
   return {
     ...process.env,
+    ...(nodeOptions ? { NODE_OPTIONS: nodeOptions } : {}),
     DATABASE_HOSTNAME: url.hostname,
     DATABASE_PORT: url.port || "3306",
     DATABASE_USERNAME: decodeURIComponent(url.username),

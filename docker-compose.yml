@@ -132,6 +132,11 @@ services:
       - motis-data:/data
       - gtfs-data:/input
     restart: unless-stopped
+    # Sized for SERVING only. `motis import` — the memory-hungry preprocessing
+    # step — deliberately runs as its own throwaway container (see
+    # cron/motis-reimport.sh) rather than `docker exec` into this one, so it
+    # gets its own budget and never competes with the live server for this
+    # cgroup's memory. If you put the import back in here, raise this a lot.
     mem_limit: ${MOTIS_MEM_LIMIT:-2g}
     healthcheck:
       # MOTIS has no dedicated /health path; hitting any real API route and
@@ -353,7 +358,12 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
-    mem_limit: 1g
+    # Generous on purpose. This is where dtd2mysql bulk-loads the whole CIF
+    # extract, and that job is already the thing that runs the server out of
+    # memory. A tight cap here starves exactly the work this container exists
+    # to do. It sits idle the rest of the day, so the ceiling costs nothing
+    # until the nightly run needs it.
+    mem_limit: ${MARIADB_MEM_LIMIT:-4g}
 
   # Darwin real-time ingester (RDM Kafka -> Postgres + Redis pub/sub).
   # The board works without it (LDBWS is primary); this is the deep feed for
@@ -383,11 +393,25 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'tsx src/index.ts' || exit 1"]
+      # Progress, not liveness. The old check was `pgrep -f 'tsx src/index.ts'`,
+      # which only proves a process exists — a consumer can sit there connected
+      # and consuming nothing after a silent auth failure or a dropped
+      # subscription, and this reported healthy throughout. The service touches
+      # the heartbeat file as it works (see heartbeat.ts), so a stale mtime means
+      # the feed has genuinely stopped and the container should be restarted.
+      #
+      # 5 minutes is generous on purpose: both feeds carry traffic around the
+      # clock, but a quiet few minutes overnight must not cause a restart loop.
+      # node, not `find -newermt`: these images are node:22-alpine, and busybox
+      # find has no -newermt, so that check would fail forever and restart-loop
+      # the container. node -e is already the pattern the web healthcheck uses.
+      test:
+        - CMD-SHELL
+        - node -e "let m=0;try{m=require('fs').statSync(process.env.INGEST_HEARTBEAT_FILE||'/tmp/ingest-heartbeat').mtimeMs}catch{};process.exit(Date.now()-m<300000?0:1)"
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 60s
     restart: unless-stopped
     mem_limit: 768m
 
@@ -417,11 +441,25 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'tsx src/index.ts' || exit 1"]
+      # Progress, not liveness. The old check was `pgrep -f 'tsx src/index.ts'`,
+      # which only proves a process exists — a consumer can sit there connected
+      # and consuming nothing after a silent auth failure or a dropped
+      # subscription, and this reported healthy throughout. The service touches
+      # the heartbeat file as it works (see heartbeat.ts), so a stale mtime means
+      # the feed has genuinely stopped and the container should be restarted.
+      #
+      # 5 minutes is generous on purpose: both feeds carry traffic around the
+      # clock, but a quiet few minutes overnight must not cause a restart loop.
+      # node, not `find -newermt`: these images are node:22-alpine, and busybox
+      # find has no -newermt, so that check would fail forever and restart-loop
+      # the container. node -e is already the pattern the web healthcheck uses.
+      test:
+        - CMD-SHELL
+        - node -e "let m=0;try{m=require('fs').statSync(process.env.INGEST_HEARTBEAT_FILE||'/tmp/ingest-heartbeat').mtimeMs}catch{};process.exit(Date.now()-m<300000?0:1)"
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 60s
     restart: unless-stopped
     mem_limit: 768m
 

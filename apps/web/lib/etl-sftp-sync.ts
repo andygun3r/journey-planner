@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type { ApplyProgress } from "./etl-apply";
+import { reloadMotis } from "./motis-reload";
 
 /**
  * Triggers an on-demand SFTP pull-and-import, streaming its output back to
@@ -31,13 +32,10 @@ export async function syncTimetableFromSftp(onProgress: ApplyProgress): Promise<
     child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`sftp sync exited ${code}`))));
   });
 
-  onProgress("Restarting motis to reimport...");
-  await new Promise<void>((resolve, reject) => {
-    const motisContainer = process.env.MOTIS_CONTAINER_NAME ?? "mainline-motis-1";
-    const child = spawn("docker", ["restart", motisContainer], { stdio: "ignore" });
-    child.on("error", reject);
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`motis restart exited ${code}`))));
-  });
+  // Import AND restart. This used to only restart, which does nothing at all
+  // against already-preprocessed data — so this path reported success while
+  // leaving routing on the old timetable, with Postgres and MOTIS disagreeing.
+  await reloadMotis(onProgress);
 
   onProgress("Done.");
 }

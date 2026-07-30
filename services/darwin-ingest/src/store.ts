@@ -233,6 +233,7 @@ export async function applySchedule(sch: ParsedSchedule): Promise<void> {
       crs: tiplocToCrs.get(stop.tiploc) ?? null,
       schedArr: normaliseTime(stop.wta),
       schedDep: normaliseTime(stop.wtd),
+      schedPass: normaliseTime(stop.wtp),
       updatedAt: new Date(),
     });
   }
@@ -255,6 +256,7 @@ export async function applySchedule(sch: ParsedSchedule): Promise<void> {
         crs: sql`excluded.crs`,
         schedArr: sql`excluded.sched_arr`,
         schedDep: sql`excluded.sched_dep`,
+        schedPass: sql`excluded.sched_pass`,
         updatedAt: new Date(),
       },
     });

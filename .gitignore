@@ -9,3 +9,6 @@ data/gtfs/
 *.log
 .DS_Store
 .dev-logs/
+
+# TypeScript incremental build state — rebuilt on every compile.
+*.tsbuildinfo

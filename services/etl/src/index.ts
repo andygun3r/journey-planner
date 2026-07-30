@@ -10,6 +10,7 @@ import { loadFares } from "./load-fares.js";
 import { loadIntoPostgres } from "./load-postgres.js";
 import { packageBundle } from "./package-bundle.js";
 import { railCorridors } from "./rail-corridors.js";
+import { guarded } from "./run-guard.js";
 import { snapStations } from "./snap-stations.js";
 
 const ARCHIVE_DIR = process.env.ETL_ARCHIVE_DIR ?? "/data/dtd/archive";
@@ -37,15 +38,36 @@ async function latestImportedTimetableMtime(): Promise<number> {
   return latest;
 }
 
+/**
+ * Times one stage and reports it.
+ *
+ * There was no instrumentation here at all, so "which step is slow" and "which
+ * step ran the box out of memory" were both guesswork. Peak RSS is per-process
+ * rather than per-stage, but it still shows which stage the high-water mark
+ * appeared during.
+ */
+async function stage<T>(name: string, work: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    return await work();
+  } finally {
+    const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+    const peakMb = (process.resourceUsage().maxRSS / 1024).toFixed(0);
+    console.log(`[etl] ${name}: ${seconds}s (peak rss ${peakMb}MB)`);
+  }
+}
+
 /** Runs the full pipeline (dtd2mysql import -> GTFS export -> postprocess -> Postgres) for one zip. */
 async function importTimetableZip(rawZip: string, sourceModifiedAt?: number): Promise<void> {
   const feedVersion = path.basename(rawZip, path.extname(rawZip));
-  const zip = await prepareTimetableZip(rawZip, ARCHIVE_DIR);
-  await importTimetable(zip);
+  const zip = await stage("prepare", () => prepareTimetableZip(rawZip, ARCHIVE_DIR));
+  await stage("dtd2mysql import", () => importTimetable(zip));
   const rawGtfs = path.join(GTFS_OUT_DIR, "gb-rail.raw.gtfs.zip");
-  await exportGtfs(rawGtfs);
-  const result = await postprocessGtfs(rawGtfs, GTFS_OUT_DIR);
-  await loadIntoPostgres(result, feedVersion, sourceModifiedAt ? new Date(sourceModifiedAt) : undefined);
+  await stage("gtfs export", () => exportGtfs(rawGtfs));
+  const result = await stage("postprocess", () => postprocessGtfs(rawGtfs, GTFS_OUT_DIR));
+  await stage("postgres load", () =>
+    loadIntoPostgres(result, feedVersion, sourceModifiedAt ? new Date(sourceModifiedAt) : undefined),
+  );
   console.log(`GTFS ready: ${result.gtfsZip} (${feedVersion})`);
 }
 
@@ -114,17 +136,19 @@ async function fares(source?: string): Promise<void> {
 
 const command = process.argv[2];
 switch (command) {
+  // Everything that touches the MariaDB scratch or truncates a Postgres table
+  // runs under a lock — see run-guard.ts for why.
   case "timetable":
-    await timetable(process.argv[3]);
+    await guarded("etl-timetable", "timetable", () => timetable(process.argv[3]));
     break;
   case "package":
-    await packageCommand(process.argv[3]);
+    await guarded("etl-timetable", "timetable", () => packageCommand(process.argv[3]));
     break;
   case "postprocess":
-    await postprocessOnly(process.argv[3]);
+    await guarded("etl-timetable", "timetable", () => postprocessOnly(process.argv[3]));
     break;
   case "fares":
-    await fares(process.argv[3]);
+    await guarded("etl-fares", "fares", () => fares(process.argv[3]));
     break;
   case "snap-stations":
     // Recompute station.track_lat/lon from the orm-db PostGIS import.
@@ -140,7 +164,7 @@ switch (command) {
     break;
   case "load-fares":
     // Re-load fares from the MariaDB scratch DB into Postgres (skips download/import).
-    await loadFares();
+    await guarded("etl-fares", "fares", () => loadFares());
     break;
   default:
     console.error(

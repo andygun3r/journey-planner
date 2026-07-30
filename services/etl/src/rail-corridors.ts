@@ -453,18 +453,27 @@ export async function railCorridors(): Promise<void> {
 
     // Replace wholesale: a re-run reflects a fresh OSM import, so stale rows for
     // pairs that no longer solve should not survive.
-    await db.execute(sql`truncate table ${railCorridor}`);
-    for (let i = 0; i < solved.length; i += 500) {
-      const batch = solved.slice(i, i + 500);
-      await db.insert(railCorridor).values(
-        batch.map((s) => ({
-          fromCrs: s.fromCrs,
-          toCrs: s.toCrs,
-          geometry: s.coords.flat(),
-          lengthM: s.length,
-        })),
-      );
-    }
+    //
+    // All inside ONE transaction. The truncate used to autocommit and the
+    // inserts followed after it, so for the whole write the map read an empty
+    // (then partial) table and silently drew straight lines between stations
+    // instead of following the track. Wrapping it means readers stay on the
+    // previous set until the new one is complete — the same thing the other two
+    // loaders already do.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`truncate table ${railCorridor}`);
+      for (let i = 0; i < solved.length; i += 500) {
+        const batch = solved.slice(i, i + 500);
+        await tx.insert(railCorridor).values(
+          batch.map((s) => ({
+            fromCrs: s.fromCrs,
+            toCrs: s.toCrs,
+            geometry: s.coords.flat(),
+            lengthM: s.length,
+          })),
+        );
+      }
+    });
     console.log(`[rail-corridors] wrote ${solved.length} corridors`);
   } finally {
     await mainClient.end();

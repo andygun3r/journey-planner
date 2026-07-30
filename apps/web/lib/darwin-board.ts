@@ -1,7 +1,6 @@
-import { darwinStopForecast, darwinTrain } from "@mainline/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { stationForecasts } from "./darwin-forecasts";
 import type { BoardDeparture } from "./board";
-import { getDb } from "./db";
 import { hhmmToIso, londonDateKey, minutesLate, ukHhmm } from "./uk-time";
 
 /**
@@ -31,50 +30,9 @@ function hhmm(value: string | null): string | null {
   return value ? value.slice(0, 5) : null;
 }
 
-/** The service days a board's trains could belong to, London-local. */
-function candidateServiceDays(now: Date): string[] {
-  return [londonDateKey(new Date(now.getTime() - 86_400_000)), londonDateKey(now)];
-}
-
 async function loadForecasts(crs: string): Promise<Map<string, DarwinForecast[]>> {
   const byTime = new Map<string, DarwinForecast[]>();
-  let rows: Array<{
-    rid: string;
-    schedDep: string | null;
-    estDep: string | null;
-    actDep: string | null;
-    platform: string | null;
-    platformChanged: boolean;
-    suppressed: boolean;
-    cancelled: boolean;
-  }>;
-  try {
-    rows = await getDb()
-      .select({
-        rid: darwinStopForecast.rid,
-        schedDep: darwinStopForecast.schedDep,
-        estDep: darwinStopForecast.estDep,
-        actDep: darwinStopForecast.actDep,
-        platform: darwinStopForecast.platform,
-        platformChanged: darwinStopForecast.platformChanged,
-        suppressed: darwinStopForecast.suppressed,
-        cancelled: darwinTrain.cancelled,
-      })
-      .from(darwinStopForecast)
-      .innerJoin(darwinTrain, eq(darwinStopForecast.rid, darwinTrain.rid))
-      // Bounded to the current/previous service day. Without this, a scheduled
-      // minute matches every train that has ever departed at that minute from
-      // this station, and the row picks up an arbitrary one.
-      .where(
-        and(
-          eq(darwinStopForecast.crs, crs),
-          inArray(darwinTrain.ssd, candidateServiceDays(new Date())),
-          eq(darwinTrain.deactivated, false),
-        ),
-      );
-  } catch {
-    return byTime; // table/DB not ready — treat as no live data
-  }
+  const rows = await stationForecasts(crs);
 
   for (const r of rows) {
     const key = hhmm(r.schedDep);

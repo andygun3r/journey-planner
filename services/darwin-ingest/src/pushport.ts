@@ -43,6 +43,8 @@ export interface ParsedScheduleStop {
   seq: number;
   wta?: string;
   wtd?: string;
+  /** Working time PASSING — the only time a PP row carries. */
+  wtp?: string;
 }
 
 export interface ParsedSchedule {
@@ -130,6 +132,8 @@ interface RawLocation {
   tpl?: string;
   wta?: string;
   wtd?: string;
+  /** Working time PASSING — set on PP (passing point) rows, which never stop. */
+  wtp?: string;
   pta?: string;
   ptd?: string;
   arr?: RawTime;
@@ -192,6 +196,56 @@ function scheduleLocations(sch: Record<string, unknown>): RawLocation[] {
   return locs;
 }
 
+/** Minutes since midnight for an HH:MM[:SS] booked time. */
+function minutesOf(t?: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(t ?? "");
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+/**
+ * Put a schedule's locations into travel order before seq is assigned.
+ *
+ * Necessary because scheduleLocations concatenates whole ARRAYS — origins, then
+ * intermediates, then passing points, then destinations — and each array is
+ * internally in route order but they are not interleaved. A passing point
+ * physically between two stations therefore lands after every intermediate stop.
+ *
+ * That was harmless while PP rows carried no times, because everything
+ * downstream orders by time and falls back to seq only for untimed rows. The
+ * moment wtp is written (see parseSchedule) those rows have times, and anything
+ * ordering by seq places them wrongly — including the map's route line, which is
+ * drawn in seq order and would visibly jump backwards.
+ *
+ * Ordering is by booked time relative to the journey's own start, so a service
+ * running past midnight stays in one increasing sequence instead of wrapping.
+ * A GB working is comfortably under 24 hours, which is what makes that safe.
+ * Untimed rows inherit the last known position so they stay beside the stop they
+ * were listed next to.
+ */
+export function orderScheduleLocations(locs: RawLocation[]): RawLocation[] {
+  // Prefer arrival, then departure, then passing — the same preference the rest
+  // of the app uses to decide "when is the train at this stop".
+  const timeOf = (loc: RawLocation) => minutesOf(loc.wta ?? loc.wtd ?? loc.wtp);
+
+  // The journey's start. The feed lists origins first, so the first timed row is
+  // the earliest, and every later time is measured forward from it.
+  const anchor = locs.map(timeOf).find((t) => t !== null) ?? null;
+  if (anchor === null) return locs;
+
+  let last = 0;
+  const keyed = locs.map((loc, index) => {
+    const t = timeOf(loc);
+    // Forward distance from the anchor, wrapping once past midnight.
+    const key = t === null ? last : (((t - anchor) % 1440) + 1440) % 1440;
+    if (t !== null) last = key;
+    return { loc, index, key };
+  });
+
+  // Index breaks ties, so rows sharing a minute keep the feed's own order.
+  return keyed.sort((a, b) => a.key - b.key || a.index - b.index).map((k) => k.loc);
+}
+
 function parseSchedule(sch: Record<string, unknown>): ParsedSchedule | null {
   const rid = sch.rid as string | undefined;
   const uid = sch.uid as string | undefined;
@@ -205,14 +259,19 @@ function parseSchedule(sch: Record<string, unknown>): ParsedSchedule | null {
   const reasonCode =
     typeof cancelReason === "string" ? cancelReason : (cancelReason?.[""] as string | undefined);
 
-  const stops: ParsedScheduleStop[] = scheduleLocations(sch)
-    .filter((loc) => loc.tpl)
-    .map((loc, seq) => ({
-      tiploc: loc.tpl!,
-      seq,
-      wta: loc.wta,
-      wtd: loc.wtd,
-    }));
+  const stops: ParsedScheduleStop[] = orderScheduleLocations(
+    scheduleLocations(sch).filter((loc) => loc.tpl),
+  ).map((loc, seq) => ({
+    tiploc: loc.tpl!,
+    seq,
+    wta: loc.wta,
+    wtd: loc.wtd,
+    // Passing points only ever carry wtp. Not reading it left roughly half of
+    // darwin_stop_forecast with no time in any column, which is why nr-ingest
+    // had to interpolate one from neighbouring stops just to decide whether a
+    // train could plausibly be where it said it was.
+    wtp: loc.wtp,
+  }));
 
   return {
     kind: "schedule",

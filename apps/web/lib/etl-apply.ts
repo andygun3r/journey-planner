@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { getDb } from "./db";
 import { etlRun, station, tripMapping } from "@mainline/db";
+import { reloadMotis } from "./motis-reload";
 
 const exec = promisify(execFile);
 const BATCH = 2000;
@@ -51,13 +52,17 @@ function parseCsv(text: string): string[][] {
 }
 
 async function loadStationsCsv(csvPath: string): Promise<
-  { crs: string; name: string; tiploc: string; lat: number; lon: number; interchangeMin: number }[]
+  { crs: string; name: string; tiplocs: string[]; lat: number; lon: number; interchangeMin: number }[]
 > {
   const rows = parseCsv(await readFile(csvPath, "utf8"));
-  return rows.slice(1).map(([crs, name, tiploc, lat, lon, interchangeMin]) => ({
+  return rows.slice(1).map(([crs, name, tiplocs, lat, lon, interchangeMin]) => ({
     crs: crs!,
     name: name!,
-    tiploc: tiploc!,
+    // Pipe-separated, because a station has subsidiary TIPLOCs beyond the one
+    // GTFS names — and without them live tracking silently fails for any train
+    // first seen at one. Older bundles wrote a single value with no pipe, which
+    // splits to a one-element list, so they still load.
+    tiplocs: (tiplocs ?? "").split("|").filter(Boolean),
     lat: Number(lat),
     lon: Number(lon),
     interchangeMin: Number(interchangeMin),
@@ -120,7 +125,7 @@ export async function applyBundle(bundlePath: string, onProgress: ApplyProgress)
           stations.slice(i, i + BATCH).map((s) => ({
             crs: s.crs,
             name: s.name,
-            tiplocs: s.tiploc ? [s.tiploc] : [],
+            tiplocs: s.tiplocs,
             lat: s.lat,
             lon: s.lon,
             interchangeMin: s.interchangeMin,
@@ -134,6 +139,13 @@ export async function applyBundle(bundlePath: string, onProgress: ApplyProgress)
         await tx.insert(tripMapping).values(tripMappings.slice(i, i + BATCH));
       }
 
+      // KNOWN GAP: source_modified_at is left null, because the bundle manifest
+      // doesn't carry the source file's SFTP mtime — `package` uses
+      // downloadFeedViaSftp, which returns only a path. So an uploaded bundle
+      // does not advance the SFTP watermark, and a later cron run will re-import
+      // the same file. Harmless (the import is idempotent, just wasted work),
+      // but it means the two paths cannot be mixed freely. Fixing it properly
+      // means threading the mtime through package -> manifest -> here.
       await tx.insert(etlRun).values({
         feed: "timetable",
         version: manifest.feedVersion,
@@ -147,11 +159,7 @@ export async function applyBundle(bundlePath: string, onProgress: ApplyProgress)
     await mkdir(gtfsOutDir, { recursive: true });
     await copyFile(path.join(tmp, "gb-rail.gtfs.zip"), path.join(gtfsOutDir, "gb-rail.gtfs.zip"));
 
-    onProgress("Reimporting into motis...");
-    const motisContainer = process.env.MOTIS_CONTAINER_NAME ?? "mainline-motis-1";
-    await exec("docker", ["exec", motisContainer, "/motis", "import", "-d", "/data/data", "-c", "/data/config.yml"]);
-    onProgress("Restarting motis to serve the new data...");
-    await exec("docker", ["restart", motisContainer]);
+    await reloadMotis(onProgress);
 
     onProgress("Done.");
   } finally {

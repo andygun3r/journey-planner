@@ -1,12 +1,26 @@
 import { execFile } from "node:child_process";
-import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { copyFile, mkdtemp, rename, rm } from "node:fs/promises";
+import { createWriteStream, existsSync, type WriteStream } from "node:fs";
+import { once } from "node:events";
+import { finished as finishedCb } from "node:stream";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { readGtfsCsv } from "./gtfs-csv.js";
 
 const exec = promisify(execFile);
+const finished = promisify(finishedCb);
+
+/**
+ * Write one chunk, respecting backpressure.
+ *
+ * Without the drain wait, Node buffers everything the consumer hasn't drained
+ * yet in memory — which would put the whole file back on the heap and defeat
+ * the point of streaming it.
+ */
+async function write(out: WriteStream, chunk: string): Promise<void> {
+  if (!out.write(chunk)) await once(out, "drain");
+}
 
 /**
  * Post-processes the dtd2mysql GTFS export (verified against RJTTF906 output):
@@ -38,8 +52,18 @@ export interface StationRow {
 
 export interface PostprocessResult {
   gtfsZip: string;
+  /**
+   * Path to the derived trip mappings, as CSV.
+   *
+   * The rows are deliberately NOT returned as an array. There are roughly a
+   * million of them, and holding them — then building one joined string to
+   * write them out — was several hundred MB of peak heap in a pipeline that
+   * already runs this server out of memory. They stream to disk as trips.txt is
+   * read, and everything downstream reads the file.
+   */
   tripMappingCsv: string;
-  tripMappings: TripMappingRow[];
+  tripMappingCount: number;
+  /** Small enough to keep in memory: a few thousand rows, and every caller needs it. */
   stations: StationRow[];
 }
 
@@ -79,28 +103,38 @@ export async function postprocessGtfs(rawGtfsZip: string, outDir: string): Promi
       });
     }
 
-    // trips.txt -> trip_mapping rows (trip_headsign = train UID)
-    const tripMappings: TripMappingRow[] = [];
+    // trips.txt -> trip_mapping rows (trip_headsign = train UID), written
+    // straight out rather than collected. readGtfsCsv is already an async
+    // iterator, so nothing bigger than one row is ever held.
+    const tripMappingCsv = path.join(outDir, "trip_mapping.csv");
+    const csvOut = createWriteStream(`${tripMappingCsv}.tmp`);
+    let tripMappingCount = 0;
     let missingService = 0;
-    for await (const row of readGtfsCsv(path.join(tmp, "trips.txt"))) {
-      const service = services.get(row["service_id"]!);
-      if (!service) {
-        missingService++;
-        continue;
+    try {
+      await write(csvOut, "gtfs_trip_id,train_uid,date_runs_from,date_runs_to,days_mask,stp_indicator\n");
+      for await (const row of readGtfsCsv(path.join(tmp, "trips.txt"))) {
+        const service = services.get(row["service_id"]!);
+        if (!service) {
+          missingService++;
+          continue;
+        }
+        // stp_indicator is always 'P' — dtd2mysql has already merged overlays.
+        await write(
+          csvOut,
+          `${row["trip_id"]},${row["trip_headsign"]},${service.from},${service.to},${service.daysMask},P\n`,
+        );
+        tripMappingCount++;
       }
-      tripMappings.push({
-        gtfsTripId: row["trip_id"]!,
-        trainUid: row["trip_headsign"]!,
-        dateRunsFrom: service.from,
-        dateRunsTo: service.to,
-        daysMask: service.daysMask,
-        stpIndicator: "P",
-      });
+    } finally {
+      await finished(csvOut.end());
     }
-    if (tripMappings.length === 0) throw new Error("postprocess: no trips found in GTFS export");
+    if (tripMappingCount === 0) throw new Error("postprocess: no trips found in GTFS export");
     if (missingService > 0) {
       console.warn(`postprocess: ${missingService} trips had no calendar.txt entry (skipped)`);
     }
+    // Rename only once complete, so a crash never leaves a short CSV that a
+    // later run would happily load as if it were the whole timetable.
+    await rename(`${tripMappingCsv}.tmp`, tripMappingCsv);
 
     // stops.txt -> stations (stop_id = CRS, stop_code = TIPLOC)
     const stations: StationRow[] = [];
@@ -136,23 +170,18 @@ export async function postprocessGtfs(rawGtfsZip: string, outDir: string): Promi
       if (minutes !== undefined) s.interchangeMin = minutes;
     }
 
-    const tripMappingCsv = path.join(outDir, "trip_mapping.csv");
-    await writeFile(
-      tripMappingCsv,
-      "gtfs_trip_id,train_uid,date_runs_from,date_runs_to,days_mask,stp_indicator\n" +
-        tripMappings
-          .map((t) => `${t.gtfsTripId},${t.trainUid},${t.dateRunsFrom},${t.dateRunsTo},${t.daysMask},${t.stpIndicator}`)
-          .join("\n"),
-    );
-
+    // Publish the GTFS atomically. copyFile truncates the destination in place,
+    // so a crash mid-copy left a corrupt zip at the exact path MOTIS imports.
+    // Write beside it and rename, which is atomic within the volume.
     const gtfsZip = path.join(outDir, "gb-rail.gtfs.zip");
-    await copyFile(rawGtfsZip, gtfsZip);
+    await copyFile(rawGtfsZip, `${gtfsZip}.tmp`);
+    await rename(`${gtfsZip}.tmp`, gtfsZip);
 
     console.log(
-      `postprocess: ${tripMappings.length} trips mapped, ${stations.length} stations, ` +
+      `postprocess: ${tripMappingCount} trips mapped, ${stations.length} stations, ` +
         `${interchange.size} interchange times, ${degenerate} stops without coords`,
     );
-    return { gtfsZip, tripMappingCsv, tripMappings, stations };
+    return { gtfsZip, tripMappingCsv, tripMappingCount, stations };
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }

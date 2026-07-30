@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import Redis from "ioredis";
 import { getDb } from "@/lib/db";
+import { timetableStatus } from "@/lib/timetable-status";
 
 export const dynamic = "force-dynamic";
 
@@ -40,10 +41,20 @@ async function checkRedis(): Promise<boolean> {
 }
 
 export async function GET() {
-  const [postgres, redis] = await Promise.all([checkPostgres(), checkRedis()]);
+  const [postgres, redis, timetable] = await Promise.all([
+    checkPostgres(),
+    checkRedis(),
+    timetableStatus(),
+  ]);
+
+  // A stale timetable is reported but deliberately does NOT fail the check.
+  // Docker restarts this container when the check fails, and restarting the web
+  // app cannot fix a timetable import that stopped running — it would just add a
+  // restart loop to an existing problem. `ok` stays about "can this process
+  // serve requests"; the timetable block is there to be read.
   const ok = postgres && redis;
   return NextResponse.json(
-    { ok, postgres, redis, service: "mainline-web" },
+    { ok, postgres, redis, timetable, service: "mainline-web" },
     { status: ok ? 200 : 503 },
   );
 }
