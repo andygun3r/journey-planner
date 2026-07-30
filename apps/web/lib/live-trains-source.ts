@@ -1,5 +1,8 @@
-import { getLiveTrains, type LiveTrain } from "./live-trains";
+import { getLiveTrains } from "./live-trains";
 import { subscribeToSource, type Unsubscribe } from "./live-source";
+import { toMapTrain, type MapDelta, type MapTrain } from "@/components/map-types";
+
+export type { MapDelta, MapTrain };
 
 /**
  * The shared live-train computation behind the map's stream.
@@ -30,73 +33,20 @@ const TICK_MS = Number(process.env.LIVE_TRAINS_TICK_MS ?? 5_000);
  */
 const DEBOUNCE_MS = Number(process.env.LIVE_TRAINS_DEBOUNCE_MS ?? 750);
 
-/**
- * What the map actually draws.
- *
- * The full LiveTrain carries `path` — every calling point with coordinates and
- * times — which is roughly 2KB per train and the bulk of a 1.5-3MB response.
- * The map layer reads none of it: `trainsToGeoJSON` uses the position, the
- * headcode, the lateness and the next stop for the arrow. The route line is only
- * ever drawn for the one selected train, which fetches `?rid=` separately.
- */
-export interface MapTrain {
-  id: string;
-  lat: number;
-  lon: number;
-  headcode?: string;
-  operator?: string;
-  latenessMinutes?: number;
-  reportedAgoSeconds: number;
-  rid?: string;
-  atName?: string;
-  atCrs?: string;
-  event?: string;
-  towardName?: string;
-  destName?: string;
-  /** Just the next stop's coordinates, for the direction arrow. */
-  nextLat?: number;
-  nextLon?: number;
-}
-
 export interface MapSnapshot {
   generatedAt: string;
   count: number;
   trains: MapTrain[];
 }
 
-/** Added or changed since the previous tick, and gone since the previous tick. */
-export interface MapDelta {
-  generatedAt: string;
-  count: number;
-  upserted: MapTrain[];
-  removed: string[];
-}
-
-function toMapTrain(t: LiveTrain): MapTrain {
-  // The arrow points at the first calling point the train has not reached, which
-  // is what the client derives from `path` today.
-  const next = t.path?.find((p) => p.status !== "departed" && p.lat != null && p.lon != null);
-  return {
-    id: t.id,
-    lat: t.lat,
-    lon: t.lon,
-    headcode: t.headcode,
-    operator: t.operator,
-    latenessMinutes: t.latenessMinutes,
-    reportedAgoSeconds: t.reportedAgoSeconds,
-    rid: t.rid,
-    atName: t.atName,
-    atCrs: t.atCrs,
-    event: t.event,
-    towardName: t.towardName,
-    destName: t.destName,
-    nextLat: next?.lat ?? undefined,
-    nextLon: next?.lon ?? undefined,
-  };
-}
-
-/** Cheap equality on the fields that actually reach the screen. */
-function changed(a: MapTrain, b: MapTrain): boolean {
+/**
+ * Cheap equality on the fields that actually reach the screen.
+ *
+ * `reportedAgoSeconds` is deliberately excluded: it climbs every second, so
+ * including it would mark every train changed on every tick and turn the delta
+ * back into a full resend.
+ */
+export function changed(a: MapTrain, b: MapTrain): boolean {
   return (
     a.lat !== b.lat ||
     a.lon !== b.lon ||
@@ -107,6 +57,22 @@ function changed(a: MapTrain, b: MapTrain): boolean {
     a.nextLat !== b.nextLat ||
     a.nextLon !== b.nextLon
   );
+}
+
+/** What one tick changed: new or moved trains, and trains that have gone. */
+export function diff(
+  previous: Map<string, MapTrain>,
+  current: Map<string, MapTrain>,
+  generatedAt: string,
+): MapDelta {
+  const upserted: MapTrain[] = [];
+  for (const [id, train] of current) {
+    const before = previous.get(id);
+    if (!before || changed(before, train)) upserted.push(train);
+  }
+  const removed: string[] = [];
+  for (const id of previous.keys()) if (!current.has(id)) removed.push(id);
+  return { generatedAt, count: current.size, upserted, removed };
 }
 
 interface Emission {
@@ -122,17 +88,7 @@ async function compute(): Promise<Emission> {
   const trains = result.trains.map(toMapTrain);
   const current = new Map(trains.map((t) => [t.id, t]));
 
-  let delta: MapDelta | undefined;
-  if (previous) {
-    const upserted: MapTrain[] = [];
-    for (const [id, train] of current) {
-      const before = previous.get(id);
-      if (!before || changed(before, train)) upserted.push(train);
-    }
-    const removed: string[] = [];
-    for (const id of previous.keys()) if (!current.has(id)) removed.push(id);
-    delta = { generatedAt: result.generatedAt, count: current.size, upserted, removed };
-  }
+  const delta = previous ? diff(previous, current, result.generatedAt) : undefined;
   previous = current;
 
   return {

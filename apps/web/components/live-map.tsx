@@ -4,7 +4,16 @@ import maplibregl, { type GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Feature, FeatureCollection, LineString, Point } from "geojson";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { bearingDegrees, lateLabel, nextPathStop, type LiveTrain, type LiveTrainsResult } from "./map-types";
+import {
+  applyMapDelta,
+  bearingDegrees,
+  lateLabel,
+  toMapTrain,
+  type LiveTrain,
+  type LiveTrainsResult,
+  type MapDelta,
+  type MapTrain,
+} from "./map-types";
 import { TrainDetailPanel } from "./train-detail-panel";
 import { BusStopPanel } from "./bus-stop-panel";
 import { BusRoutePanel } from "./bus-route-panel";
@@ -76,10 +85,7 @@ const INITIAL_ZOOM = 13.85;
 // than the whole-GB overview (which was the old fallback behaviour).
 const DEFAULT_CENTER: [number, number] = [-0.1276, 51.5072];
 
-function trainsToGeoJSON(
-  trains: LiveTrain[],
-  selectedId: string | null,
-): FeatureCollection<Point> {
+function trainsToGeoJSON(trains: MapTrain[]): FeatureCollection<Point> {
   return {
     type: "FeatureCollection",
     features: trains.map((t) => {
@@ -87,7 +93,12 @@ function trainsToGeoJSON(
       // position toward its next calling point (see bearingDegrees's comment).
       // Falls back to 0 (icon points north) when there's no known next stop,
       // e.g. an uncorrelated train with no path at all.
-      const next = nextPathStop(t);
+      //
+      // The stream sends just that next stop's coordinates rather than the whole
+      // calling pattern: the pattern is ~2KB a train and the map never draws it
+      // for anything but the one selected service.
+      const next =
+        t.nextLat != null && t.nextLon != null ? { lat: t.nextLat, lon: t.nextLon } : undefined;
       const bearing = next ? bearingDegrees(t, next) : 0;
       return {
         type: "Feature",
@@ -96,7 +107,6 @@ function trainsToGeoJSON(
           id: t.id,
           headcode: t.headcode ?? "",
           lateBucket: lateLabel(t.latenessMinutes).cls || "unknown",
-          selected: t.id === selectedId,
           bearing,
           hasBearing: Boolean(next),
         },
@@ -187,7 +197,12 @@ function routeToGeoJSON(train: LiveTrain | null): FeatureCollection<LineString> 
 export function LiveMap() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const [data, setData] = useState<LiveTrainsResult | null>(null);
+  // Keyed by train id rather than a whole-array replace, because the stream
+  // sends what changed rather than resending every train each tick.
+  const [trainsById, setTrainsById] = useState<Map<string, MapTrain>>(new Map());
+  // Distinguishes "nothing has arrived yet" from "arrived, and there genuinely
+  // are no trains" — an empty map is a real answer at 3am.
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tflStops, setTflStops] = useState<TflStop[]>([]);
@@ -198,54 +213,71 @@ export function LiveMap() {
   const [selectedStop, setSelectedStop] = useState<TflStop | null>(null);
   const [selectedBusRoute, setSelectedBusRoute] = useState<{ lineId: string; direction: string; lineName: string } | null>(null);
   const [busRoute, setBusRoute] = useState<BusRoute | null>(null);
-  const trains = useMemo(() => data?.trains ?? [], [data]);
+  const trains = useMemo(() => [...trainsById.values()], [trainsById]);
   const baseSelected = useMemo(
-    () => (selectedId ? (trains.find((t) => t.id === selectedId) ?? null) : null),
-    [trains, selectedId],
+    () => (selectedId ? (trainsById.get(selectedId) ?? null) : null),
+    [trainsById, selectedId],
   );
-  // Track-following route geometry is fetched per selected train rather than
-  // shipped with the whole map payload — see getLiveTrains, where attaching it
-  // to all ~800 trains produced a 58MB response.
-  const [selectedGeometry, setSelectedGeometry] = useState<{
-    rid: string;
-    legs: ([number, number][] | null)[];
-  } | null>(null);
+  // The full record for whichever train is selected — its calling pattern and
+  // track-following route geometry. Fetched per selection rather than streamed,
+  // because the pattern is ~2KB a train and the route line is only ever drawn
+  // for one of them (see getLiveTrains, where attaching geometry to all ~800
+  // produced a 58MB response).
+  const [selectedDetail, setSelectedDetail] = useState<LiveTrain | null>(null);
 
   useEffect(() => {
     const rid = baseSelected?.rid;
     if (!rid) {
-      setSelectedGeometry(null);
+      setSelectedDetail(null);
       return;
     }
     let cancelled = false;
     fetch(`/api/live-trains?rid=${encodeURIComponent(rid)}`, { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((json: LiveTrainsResult | null) => {
-        const legs = json?.trains[0]?.pathGeometry;
-        if (!cancelled && legs) setSelectedGeometry({ rid, legs });
+        const full = json?.trains[0];
+        if (!cancelled && full) setSelectedDetail(full);
       })
       .catch(() => {
-        // Leave geometry unset — routeToGeoJSON falls back to straight chords.
+        // Leave detail unset — the panel falls back to the streamed summary and
+        // routeToGeoJSON to straight chords.
       });
     return () => {
       cancelled = true;
     };
   }, [baseSelected?.rid]);
 
-  // Splice the fetched geometry onto the selected train, but only when it's
-  // for this train — a stale response from a previous selection must not draw
-  // the wrong route.
-  const selected = useMemo(() => {
+  // Prefer the detailed record, but only when it is for this train — a stale
+  // response from a previous selection must not draw the wrong route. Keep the
+  // streamed position, which is fresher than the one that came with the detail.
+  const selected = useMemo((): LiveTrain | null => {
     if (!baseSelected) return null;
-    if (!selectedGeometry || selectedGeometry.rid !== baseSelected.rid) return baseSelected;
-    return { ...baseSelected, pathGeometry: selectedGeometry.legs };
-  }, [baseSelected, selectedGeometry]);
+    if (!selectedDetail || selectedDetail.rid !== baseSelected.rid) {
+      return { ...baseSelected, reportedAgoSeconds: baseSelected.reportedAgoSeconds } as LiveTrain;
+    }
+    return { ...selectedDetail, lat: baseSelected.lat, lon: baseSelected.lon };
+  }, [baseSelected, selectedDetail]);
 
-  const fetchTrains = useCallback(async () => {
+  /**
+   * Live trains over SSE, falling back to polling.
+   *
+   * Replaces a 15-second poll of `/api/live-trains` that ran three queries
+   * returning tens of thousands of rows — identical for every viewer, so the
+   * work multiplied by the number of people watching. The stream shares one
+   * computation between everyone and sends only what changed.
+   *
+   * Same shape as alert-feed.tsx, which is the working template: `ready` stops
+   * the fallback poll, `unavailable` is terminal, and an error covers the gap
+   * with polling before retrying with backoff. The mutual-exclusion guard in
+   * startPolling is what stops a tab running both at once.
+   */
+  const fetchTrainsOnce = useCallback(async () => {
     try {
       const res = await fetch("/api/live-trains", { cache: "no-store" });
       if (!res.ok) throw new Error("bad");
-      setData((await res.json()) as LiveTrainsResult);
+      const json = (await res.json()) as LiveTrainsResult;
+      setTrainsById(new Map(json.trains.map((t) => [t.id, toMapTrain(t)])));
+      setLoaded(true);
       setError(false);
     } catch {
       setError(true);
@@ -253,10 +285,85 @@ export function LiveMap() {
   }, []);
 
   useEffect(() => {
-    fetchTrains();
-    const id = setInterval(fetchTrains, POLL_MS);
-    return () => clearInterval(id);
-  }, [fetchTrains]);
+    let stopped = false;
+    let poll: ReturnType<typeof setInterval> | undefined;
+    let reconnect: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+
+    const startPolling = () => {
+      if (stopped || poll) return;
+      void fetchTrainsOnce();
+      poll = setInterval(() => void fetchTrainsOnce(), POLL_MS);
+    };
+    const stopPolling = () => {
+      if (poll) clearInterval(poll);
+      poll = undefined;
+    };
+
+    const open = () => {
+      if (stopped) return;
+      if (typeof window === "undefined" || !("EventSource" in window)) {
+        startPolling();
+        return;
+      }
+
+      // Poll straight away rather than waiting on the stream. It paints the map
+      // immediately, and if a proxy buffers the stream — which looks exactly
+      // like a working connection that never says anything — polling is what
+      // keeps the map alive instead of leaving it stuck on "Loading". `ready`
+      // stands it down within a moment on a healthy connection.
+      startPolling();
+
+      const es = new EventSource("/api/live/trains");
+
+      es.addEventListener("ready", () => {
+        attempt = 0;
+        stopPolling();
+      });
+
+      // The server has no Redis, so the stream will never carry anything.
+      // Retrying cannot help; stay on polling.
+      es.addEventListener("unavailable", () => {
+        es.close();
+        startPolling();
+      });
+
+      es.addEventListener("snapshot", (ev) => {
+        const data = JSON.parse((ev as MessageEvent<string>).data) as {
+          trains: MapTrain[];
+        };
+        // A snapshot replaces everything. It arrives on connect and reconnect,
+        // and after a gap it is the only thing that can be trusted — Redis
+        // pub/sub has no replay, so anything published while away is gone.
+        attempt = 0;
+        stopPolling();
+        setTrainsById(new Map(data.trains.map((t) => [t.id, t])));
+        setLoaded(true);
+        setError(false);
+      });
+
+      es.addEventListener("delta", (ev) => {
+        const data = JSON.parse((ev as MessageEvent<string>).data) as MapDelta;
+        setTrainsById((prev) => applyMapDelta(prev, data));
+      });
+
+      es.onerror = () => {
+        es.close();
+        if (stopped) return;
+        startPolling();
+        attempt += 1;
+        reconnect = setTimeout(open, Math.min(1000 * 2 ** attempt, 60_000));
+      };
+    };
+
+    open();
+
+    return () => {
+      stopped = true;
+      stopPolling();
+      if (reconnect) clearTimeout(reconnect);
+    };
+  }, [fetchTrainsOnce]);
 
   // TfL stop/station backdrop: static, loaded once — the API route serves it
   // from a Postgres cache refreshed server-side, so no need to poll.
@@ -386,6 +493,11 @@ export function LiveMap() {
       map.addSource(TRAINS_SOURCE, {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
+        // Lets selection be a feature-state flag keyed on the train id instead
+        // of a property baked into the data. Without this, picking a train
+        // meant rebuilding and re-uploading all ~800 features just to flip one
+        // boolean.
+        promoteId: "id",
       });
       map.addSource(ROUTE_SOURCE, {
         type: "geojson",
@@ -485,9 +597,9 @@ export function LiveMap() {
         type: "circle",
         source: TRAINS_SOURCE,
         paint: {
-          "circle-radius": ["case", ["get", "selected"], 14, 11],
+          "circle-radius": ["case", ["boolean", ["feature-state", "selected"], false], 14, 11],
           "circle-color": lateBucketColor,
-          "circle-stroke-width": ["case", ["get", "selected"], 2.5, 1.5],
+          "circle-stroke-width": ["case", ["boolean", ["feature-state", "selected"], false], 2.5, 1.5],
           "circle-stroke-color": "#f4f4f6",
         },
       });
@@ -497,7 +609,7 @@ export function LiveMap() {
         source: TRAINS_SOURCE,
         layout: {
           "icon-image": TRAIN_ICON,
-          "icon-size": ["case", ["get", "selected"], 0.42, 0.34],
+          "icon-size": ["case", ["boolean", ["feature-state", "selected"], false], 0.42, 0.34],
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
         },
@@ -510,12 +622,12 @@ export function LiveMap() {
         filter: ["==", ["get", "hasBearing"], true],
         layout: {
           "icon-image": ARROW_ICON,
-          "icon-size": ["case", ["get", "selected"], 0.34, 0.3],
+          "icon-size": ["case", ["boolean", ["feature-state", "selected"], false], 0.34, 0.3],
           "icon-rotate": ["get", "bearing"],
           "icon-rotation-alignment": "map",
           "icon-offset": [
             "case",
-            ["get", "selected"],
+            ["boolean", ["feature-state", "selected"], false],
             ["literal", [0, arrowOffsetEms(14, 0.34)]],
             ["literal", [0, arrowOffsetEms(11, 0.3)]],
           ],
@@ -625,19 +737,55 @@ export function LiveMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Push fresh train data into the map's GeoJSON sources.
+  // Push fresh train positions into the map's GeoJSON source.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const apply = () => {
       const trainsSource = map.getSource(TRAINS_SOURCE) as GeoJSONSource | undefined;
-      trainsSource?.setData(trainsToGeoJSON(trains, selectedId));
+      trainsSource?.setData(trainsToGeoJSON(trains));
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [trains]);
+
+  // Selection is a feature-state flag, not part of the data. Clicking a train
+  // used to re-serialise and re-upload every feature on the map purely to flip
+  // one boolean; this touches two.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      if (!selectedId) return;
+      try {
+        map.setFeatureState({ source: TRAINS_SOURCE, id: selectedId }, { selected: true });
+      } catch {
+        // The source can be mid-load. The next data push re-runs this effect.
+      }
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+    return () => {
+      if (!selectedId) return;
+      try {
+        map.removeFeatureState({ source: TRAINS_SOURCE, id: selectedId }, "selected");
+      } catch {
+        // The style can be gone if the map unmounted first.
+      }
+    };
+  }, [selectedId, trains]);
+
+  // The selected train's route line, drawn for one train only.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
       const routeSource = map.getSource(ROUTE_SOURCE) as GeoJSONSource | undefined;
       routeSource?.setData(routeToGeoJSON(selected));
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [trains, selectedId, selected]);
+  }, [selected]);
 
   // Push fresh TfL stop/bus data, respecting the visibility toggle.
   useEffect(() => {
@@ -671,10 +819,10 @@ export function LiveMap() {
         <div className="map-stat">
           {error ? (
             <span className="map-stat-off">● data offline</span>
-          ) : data ? (
+          ) : loaded ? (
             <>
               <span className="map-live-dot" aria-hidden="true" />
-              <strong>{data.count}</strong> trains live
+              <strong>{trains.length}</strong> trains live
             </>
           ) : (
             "Loading live positions…"

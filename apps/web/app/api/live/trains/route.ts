@@ -12,6 +12,7 @@ export const runtime = "nodejs";
  * computation is shared: one run per tick however many people are watching.
  *
  * Events:
+ *   ready     the stream is open and flowing — the client stands its poll down
  *   snapshot  the full set, sent on connect and on reconnect
  *   delta     { upserted, removed } — only what changed since the last tick
  *
@@ -43,6 +44,11 @@ export async function GET(req: Request) {
           // The client went away between the check and the write.
         }
       };
+
+      // Sent before anything else so the client knows the stream really is
+      // flowing — the first snapshot can be a second or two behind it when this
+      // is the only viewer and the computation still has to run.
+      send("ready", {});
 
       const unsubscribe = subscribeToMap(
         (snapshot) => send("snapshot", snapshot),

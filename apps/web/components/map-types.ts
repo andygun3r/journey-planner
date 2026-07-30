@@ -41,6 +41,62 @@ export interface LiveTrainsResult {
 }
 
 /**
+ * What the map stream actually sends, and all the map layer actually draws.
+ *
+ * A full LiveTrain carries `path` — every calling point with coordinates and
+ * times — which is around 2KB per train and the bulk of a 1.5-3MB response. The
+ * map reads none of it: it needs the position, the headcode, the lateness, and
+ * the next stop's coordinates for the direction arrow. The route line is only
+ * ever drawn for the one selected train, which fetches `?rid=` separately.
+ *
+ * This lives here, next to the other wire shapes, because both sides need it:
+ * the server builds it and the client's polling fallback has to produce the
+ * same thing from a full LiveTrain.
+ */
+export interface MapTrain {
+  id: string;
+  lat: number;
+  lon: number;
+  headcode?: string;
+  operator?: string;
+  latenessMinutes?: number;
+  reportedAgoSeconds: number;
+  rid?: string;
+  atName?: string;
+  atCrs?: string;
+  event?: string;
+  towardName?: string;
+  destName?: string;
+  /** Just the next stop's coordinates, for the direction arrow. */
+  nextLat?: number;
+  nextLon?: number;
+}
+
+/** What changed since the last tick: added or moved, and gone. */
+export interface MapDelta {
+  generatedAt: string;
+  count: number;
+  upserted: MapTrain[];
+  removed: string[];
+}
+
+/**
+ * Apply a delta to the trains the map is holding.
+ *
+ * Always returns a new Map, because React only re-renders on a changed
+ * reference. Mutating in place looks correct and draws nothing.
+ */
+export function applyMapDelta(
+  previous: Map<string, MapTrain>,
+  delta: Pick<MapDelta, "upserted" | "removed">,
+): Map<string, MapTrain> {
+  const next = new Map(previous);
+  for (const train of delta.upserted) next.set(train.id, train);
+  for (const id of delta.removed) next.delete(id);
+  return next;
+}
+
+/**
  * Initial compass bearing (0-359°) from one point toward another. There's no
  * GPS heading for GB rail (see live-trains.ts), so the map derives a train's
  * direction arrow from its plotted position toward the next calling point
@@ -67,6 +123,29 @@ export function nextPathStop(train: LiveTrain): PathStop | undefined {
   if (!path || path.length === 0) return undefined;
   const currentIndex = path.findIndex((s) => s.status === "current");
   return path[currentIndex + 1] ?? path.find((s) => s.status === "upcoming");
+}
+
+/** Strip a full train down to what the map draws. */
+export function toMapTrain(t: LiveTrain): MapTrain {
+  const next = nextPathStop(t);
+  const hasCoords = next != null && next.lat != null && next.lon != null;
+  return {
+    id: t.id,
+    lat: t.lat,
+    lon: t.lon,
+    headcode: t.headcode,
+    operator: t.operator,
+    latenessMinutes: t.latenessMinutes,
+    reportedAgoSeconds: t.reportedAgoSeconds,
+    rid: t.rid,
+    atName: t.atName,
+    atCrs: t.atCrs,
+    event: t.event,
+    towardName: t.towardName,
+    destName: t.destName,
+    nextLat: hasCoords ? next.lat : undefined,
+    nextLon: hasCoords ? next.lon : undefined,
+  };
 }
 
 export function lateLabel(m?: number): { text: string; cls: string } {
