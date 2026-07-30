@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdvancedViewToggle } from "@/components/advanced-view-toggle";
 import { BoardRefresher } from "@/components/board-refresher";
+import { ServiceRefresher } from "@/components/service-refresher";
 import { LiveCountdown } from "@/components/live-countdown";
 import { ServicePositionMap } from "@/components/service-position-map";
 import { callLiveStatus, deltaChip, type CallLiveStatus } from "@/lib/call-status";
@@ -348,7 +349,14 @@ export default async function ServicePage({
           {" · "}
           {service.progress.tracking && !service.progress.arrived && (
             <>
-              <BoardRefresher intervalMs={30_000} />
+              {/* With a rid the refresh follows the service's own live stream;
+                  without one there is nothing to subscribe to, so fall back to
+                  the plain timer. */}
+              {service.rid ? (
+                <ServiceRefresher rid={service.rid} intervalMs={30_000} />
+              ) : (
+                <BoardRefresher intervalMs={30_000} />
+              )}
               {" · "}
             </>
           )}
