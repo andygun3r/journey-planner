@@ -95,7 +95,7 @@ function sanitiseCoords(
  * unavailable for any reason, station rows just fall back to the primary
  * tiploc only (same as before this existed), not a hard failure.
  */
-async function loadTiplocAliases(): Promise<Map<string, string[]>> {
+export async function loadTiplocAliases(): Promise<Map<string, string[]>> {
   const aliasesByCrs = new Map<string, string[]>();
   const mysqlUrl = process.env.ETL_MYSQL_URL ?? "mysql://root:etl@mariadb:3306/dtd";
   let conn: mysql.Connection | undefined;

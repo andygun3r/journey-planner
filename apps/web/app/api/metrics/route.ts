@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import Redis from "ioredis";
 import { getDb } from "@/lib/db";
 import { busStats } from "@/lib/live-bus";
+import { timetableStatus } from "@/lib/timetable-status";
 
 export const dynamic = "force-dynamic";
 
@@ -137,10 +138,11 @@ async function redisStats() {
 
 export async function GET() {
   const startedAt = Date.now();
-  const [postgres, freshness, redis] = await Promise.all([
+  const [postgres, freshness, redis, timetable] = await Promise.all([
     postgresStats().catch(() => null),
     ingestFreshness().catch(() => null),
     redisStats().catch(() => null),
+    timetableStatus().catch(() => null),
   ]);
 
   return NextResponse.json(
@@ -148,6 +150,9 @@ export async function GET() {
       collected_in_ms: Date.now() - startedAt,
       postgres,
       ingest_freshness: freshness,
+      // How old the routing timetable is, and whether the last import failed.
+      // Nothing read etl_run before this, so a stopped nightly job was invisible.
+      timetable,
       redis,
       // Open live streams, and the channels behind them. `listeners` grows with
       // viewers; `channels` should not, and `redis.connected_clients` above

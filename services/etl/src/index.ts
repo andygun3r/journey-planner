@@ -10,6 +10,7 @@ import { loadFares } from "./load-fares.js";
 import { loadIntoPostgres } from "./load-postgres.js";
 import { packageBundle } from "./package-bundle.js";
 import { railCorridors } from "./rail-corridors.js";
+import { guarded } from "./run-guard.js";
 import { snapStations } from "./snap-stations.js";
 
 const ARCHIVE_DIR = process.env.ETL_ARCHIVE_DIR ?? "/data/dtd/archive";
@@ -135,17 +136,19 @@ async function fares(source?: string): Promise<void> {
 
 const command = process.argv[2];
 switch (command) {
+  // Everything that touches the MariaDB scratch or truncates a Postgres table
+  // runs under a lock — see run-guard.ts for why.
   case "timetable":
-    await timetable(process.argv[3]);
+    await guarded("etl-timetable", "timetable", () => timetable(process.argv[3]));
     break;
   case "package":
-    await packageCommand(process.argv[3]);
+    await guarded("etl-timetable", "timetable", () => packageCommand(process.argv[3]));
     break;
   case "postprocess":
-    await postprocessOnly(process.argv[3]);
+    await guarded("etl-timetable", "timetable", () => postprocessOnly(process.argv[3]));
     break;
   case "fares":
-    await fares(process.argv[3]);
+    await guarded("etl-fares", "fares", () => fares(process.argv[3]));
     break;
   case "snap-stations":
     // Recompute station.track_lat/lon from the orm-db PostGIS import.
@@ -161,7 +164,7 @@ switch (command) {
     break;
   case "load-fares":
     // Re-load fares from the MariaDB scratch DB into Postgres (skips download/import).
-    await loadFares();
+    await guarded("etl-fares", "fares", () => loadFares());
     break;
   default:
     console.error(
