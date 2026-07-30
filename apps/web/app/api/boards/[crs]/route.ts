@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBoard } from "@/lib/board";
+import { cachedBoard } from "@/lib/board-cache";
 import { startTimer } from "@/lib/timing";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export async function GET(
   // This is the app's busiest route. Server-Timing shows up in browser dev
   // tools, so "the board is slow" becomes a number instead of a feeling.
   const timer = startTimer();
-  const outcome = await getBoard(
+  const outcome = await cachedBoard(
     crs,
     when,
     Number.isFinite(limit) ? limit : 20,

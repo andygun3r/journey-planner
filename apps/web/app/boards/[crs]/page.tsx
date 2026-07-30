@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { BoardFilter } from "@/components/board-filter";
 import { BoardRefresher } from "@/components/board-refresher";
 import { LiveCountdown } from "@/components/live-countdown";
-import { getBoard, type BoardDeparture } from "@/lib/board";
+import { type BoardDeparture } from "@/lib/board";
+import { cachedBoard } from "@/lib/board-cache";
 import { getStations, stationName } from "@/lib/stations";
 
 export const dynamic = "force-dynamic";
@@ -93,7 +94,7 @@ export default async function BoardPage({
   const { crs } = await params;
   const { callingAt } = await searchParams;
   const [outcome, stations] = await Promise.all([
-    getBoard(crs, undefined, 20, callingAt),
+    cachedBoard(crs, undefined, 20, callingAt),
     getStations().catch(() => []),
   ]);
 

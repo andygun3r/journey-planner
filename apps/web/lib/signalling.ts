@@ -38,15 +38,24 @@ export interface DiagramTrain {
   focus: boolean;
 }
 
-export interface CorridorDiagram {
+/**
+ * The part of the diagram that moves: aspects and where the trains are.
+ *
+ * Split from the layout because they change on completely different timescales.
+ * This is what the stream sends every time something happens.
+ */
+export interface DiagramState {
   generatedAt: string;
   areas: string[];
   focusHeadcode?: string;
-  layout: DiagramLayout;
   signals: DiagramSignal[];
   trains: DiagramTrain[];
   /** How many of the corridor's areas have any SOP coverage. */
   mappedAreas: number;
+}
+
+export interface CorridorDiagram extends DiagramState {
+  layout: DiagramLayout;
 }
 
 const EMPTY = (areas: string[] = []): CorridorDiagram => ({
@@ -59,7 +68,7 @@ const EMPTY = (areas: string[] = []): CorridorDiagram => ({
 });
 
 /** Resolve the TD area(s) that make up the corridor for a given train. */
-async function resolveAreas(opts: {
+export async function resolveAreas(opts: {
   trainId?: string;
   rid?: string;
   area?: string;
@@ -85,17 +94,32 @@ async function resolveAreas(opts: {
   return { areas, focusHeadcode };
 }
 
-export async function getDiagramForTrain(opts: {
-  trainId?: string;
-  rid?: string;
-  area?: string;
-}): Promise<CorridorDiagram> {
-  const db = getDb();
-  const { areas, focusHeadcode } = await resolveAreas(opts);
-  if (areas.length === 0) return EMPTY();
+/**
+ * The corridor's shape, cached.
+ *
+ * SMART is reference data — it changes when someone runs `nr-ingest reference`,
+ * not while anyone is watching. The layout derived from it dominates the
+ * diagram's payload (hundreds of berth nodes) and was rebuilt from scratch on
+ * every 8-second poll. Deriving it once per area set and holding it is the
+ * single biggest saving in this file.
+ *
+ * The TTL is long because the input is static, but not infinite, because a
+ * reference reload should eventually show up without a restart.
+ */
+const LAYOUT_TTL_MS = 10 * 60_000;
 
-  // 1. Berth graph → layout.
-  const smart = await db
+const layoutCache = new Map<string, { at: number; layout: DiagramLayout }>();
+
+export function areaKey(areas: string[]): string {
+  return [...areas].sort().join(",");
+}
+
+export async function getLayout(areas: string[]): Promise<DiagramLayout> {
+  const key = areaKey(areas);
+  const hit = layoutCache.get(key);
+  if (hit && Date.now() - hit.at < LAYOUT_TTL_MS) return hit.layout;
+
+  const smart = await getDb()
     .select({ tdArea: nrSmart.tdArea, from: nrSmart.fromBerth, to: nrSmart.toBerth })
     .from(nrSmart)
     .where(inArray(nrSmart.tdArea, areas));
@@ -103,7 +127,25 @@ export async function getDiagramForTrain(opts: {
     .filter((s) => s.from && s.to)
     .map((s) => ({ tdArea: s.tdArea, from: s.from as string, to: s.to as string }));
   const layout = layoutBerths(edges);
-  if (layout.berths.length === 0) return EMPTY(areas);
+
+  if (layoutCache.size > 200) layoutCache.clear();
+  layoutCache.set(key, { at: Date.now(), layout });
+  return layout;
+}
+
+/**
+ * The live overlay for a corridor whose layout is already known: which berths
+ * are occupied, and what the signals are showing.
+ *
+ * Takes the layout rather than fetching it, so a stream can hold the shape
+ * still and send only this.
+ */
+export async function getDiagramState(
+  areas: string[],
+  layout: DiagramLayout,
+  focusHeadcode?: string,
+): Promise<DiagramState> {
+  const db = getDb();
   const berthIds = new Set(layout.berths.map((b) => b.id));
 
   // 2. Live occupancy: recent trains in these areas, positioned by berth.
@@ -207,9 +249,29 @@ export async function getDiagramForTrain(opts: {
     generatedAt: new Date().toISOString(),
     areas,
     focusHeadcode,
-    layout,
     signals,
     trains,
     mappedAreas,
   };
+}
+
+/**
+ * The whole diagram in one go — layout and live state together.
+ *
+ * Still what `/api/signalling` serves, so the polling fallback keeps working
+ * unchanged. The stream sends the same two pieces separately.
+ */
+export async function getDiagramForTrain(opts: {
+  trainId?: string;
+  rid?: string;
+  area?: string;
+}): Promise<CorridorDiagram> {
+  const { areas, focusHeadcode } = await resolveAreas(opts);
+  if (areas.length === 0) return EMPTY();
+
+  const layout = await getLayout(areas);
+  if (layout.berths.length === 0) return EMPTY(areas);
+
+  const state = await getDiagramState(areas, layout, focusHeadcode);
+  return { ...state, layout };
 }

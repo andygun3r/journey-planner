@@ -4,7 +4,15 @@ import maplibregl, { type GeoJSONSource } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { FeatureCollection, LineString, Point } from "geojson";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { bearingDegrees, lateLabel, nextPathStop, type LiveTrain, type LiveTrainsResult } from "./map-types";
+import {
+  bearingDegrees,
+  lateLabel,
+  nextPathStop,
+  type LiveTrain,
+  type LiveTrainsResult,
+  type MapTrain,
+} from "./map-types";
+import { useServicePosition } from "./service-live";
 import { addMapIcons, arrowOffsetEms, lateBucketColor, ARROW_ICON, TRAIN_ICON } from "../lib/map-icons";
 import { basemapTileUrl, BASEMAP_SOURCE, isDarkTheme, loadAbsoluteStyle } from "../lib/orm-style";
 
@@ -13,8 +21,13 @@ import { basemapTileUrl, BASEMAP_SOURCE, isDarkTheme, loadAbsoluteStyle } from "
  * schematic (MapCanvas over a hand-rolled corridor projection); it's now the
  * same real OpenRailwayMap-vector cartography the live map uses, so a train's
  * position is shown against actual track geometry rather than a stylised
- * abstraction. Polls less aggressively than the full map since one train's
- * position is less time-critical to refresh.
+ * abstraction.
+ *
+ * The route and the position are fetched separately now, because they change on
+ * completely different timescales. The calling pattern and its track-following
+ * geometry are the train's plan — settled before it left — and were being
+ * re-downloaded every 25 seconds to redraw an identical line. They are fetched
+ * once; only the position streams.
  */
 
 const POLL_MS = 25_000;
@@ -27,10 +40,14 @@ const BADGE_RADIUS = 12;
 const FIT_PADDING = 48;
 const MAX_FIT_ZOOM = 12.5;
 
-function trainToGeoJSON(train: LiveTrain): FeatureCollection<Point> {
+function trainToGeoJSON(train: MapTrain): FeatureCollection<Point> {
   // No GPS heading for GB rail — derive a bearing from the train's plotted
-  // position toward its next calling point (see bearingDegrees's comment).
-  const next = nextPathStop(train);
+  // position toward its next calling point (see bearingDegrees's comment). The
+  // stream sends just that next point's coordinates rather than the whole path.
+  const next =
+    train.nextLat != null && train.nextLon != null
+      ? { lat: train.nextLat, lon: train.nextLon }
+      : undefined;
   return {
     type: "FeatureCollection",
     features: [
@@ -80,9 +97,9 @@ function routeToGeoJSON(train: LiveTrain): FeatureCollection<LineString> {
   };
 }
 
-function corridorBounds(train: LiveTrain): maplibregl.LngLatBounds {
+function corridorBounds(train: LiveTrain, at: { lat: number; lon: number }): maplibregl.LngLatBounds {
   const bounds = new maplibregl.LngLatBounds();
-  bounds.extend([train.lon, train.lat]);
+  bounds.extend([at.lon, at.lat]);
   for (const p of train.path ?? []) bounds.extend([p.lon, p.lat]);
   // Real track curves away from the straight calling-point chords, so fit to
   // the drawn geometry too or the route can bow outside the initial view.
@@ -95,12 +112,19 @@ function corridorBounds(train: LiveTrain): maplibregl.LngLatBounds {
 export function ServicePositionMap({ rid }: { rid: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const [data, setData] = useState<LiveTrainsResult | null>(null);
+  // The train's plan: calling pattern and track-following geometry. Fetched
+  // once — this is settled before the train leaves.
+  const [route, setRoute] = useState<LiveTrain | null>(null);
+  const [loadedRoute, setLoadedRoute] = useState(false);
   const [error, setError] = useState(false);
   // Fit the view to the train's corridor once, on the first position we get —
-  // refitting on every poll would yank the map out from under a user who has
+  // refitting on every update would yank the map out from under a user who has
   // panned or zoomed to look at something.
   const fittedRef = useRef(false);
+
+  const { position: streamed, streaming } = useServicePosition(rid);
+  // Where the poll's answer lands when the stream isn't carrying anything.
+  const [polled, setPolled] = useState<MapTrain | null | undefined>(undefined);
 
   const fetchTrain = useCallback(async () => {
     try {
@@ -108,20 +132,48 @@ export function ServicePositionMap({ rid }: { rid: string }) {
         cache: "no-store",
       });
       if (!res.ok) throw new Error("bad");
-      setData((await res.json()) as LiveTrainsResult);
+      const json = (await res.json()) as LiveTrainsResult;
+      const train = json.trains[0] ?? null;
+      // The route only needs setting once — but take it from whichever response
+      // first carries one, since a train may not be correlated straight away.
+      setRoute((current) => (current?.path?.length ? current : train));
+      setLoadedRoute(true);
+      setPolled(
+        train
+          ? {
+              id: train.id,
+              lat: train.lat,
+              lon: train.lon,
+              latenessMinutes: train.latenessMinutes,
+              reportedAgoSeconds: train.reportedAgoSeconds,
+              rid: train.rid,
+              nextLat: nextPathStop(train)?.lat,
+              nextLon: nextPathStop(train)?.lon,
+            }
+          : null,
+      );
       setError(false);
     } catch {
       setError(true);
     }
   }, [rid]);
 
+  // Fetch the route once on mount. This is also what fills the first position,
+  // so the map draws immediately rather than waiting on the stream.
   useEffect(() => {
-    fetchTrain();
-    const id = setInterval(fetchTrain, POLL_MS);
-    return () => clearInterval(id);
+    void fetchTrain();
   }, [fetchTrain]);
 
-  const train = data?.trains[0];
+  // Poll only while the stream isn't working — behind a buffering proxy, or on
+  // a server with no Redis. The stream stands this down as soon as it delivers.
+  useEffect(() => {
+    if (streaming) return;
+    const id = setInterval(() => void fetchTrain(), POLL_MS);
+    return () => clearInterval(id);
+  }, [fetchTrain, streaming]);
+
+  const train = streamed !== undefined ? streamed : (polled ?? null);
+  const loaded = streamed !== undefined || polled !== undefined || loadedRoute;
 
   // Create the map once we know there's a train to show — see
   // loadAbsoluteStyle's comment for why the style is fetched and absolutized
@@ -229,16 +281,29 @@ export function ServicePositionMap({ rid }: { rid: string }) {
     return () => observer.disconnect();
   }, []);
 
-  // Push each fresh position into the map's sources.
+  // The route line, drawn once. It was being redrawn from a fresh download
+  // every 25 seconds to produce the identical line.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !route) return;
+    const apply = () => {
+      (map.getSource(ROUTE_SOURCE) as GeoJSONSource | undefined)?.setData(routeToGeoJSON(route));
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("load", apply);
+  }, [route]);
+
+  // Push each fresh position into the map's train source.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !train) return;
     const apply = () => {
       (map.getSource(TRAIN_SOURCE) as GeoJSONSource | undefined)?.setData(trainToGeoJSON(train));
-      (map.getSource(ROUTE_SOURCE) as GeoJSONSource | undefined)?.setData(routeToGeoJSON(train));
-      if (!fittedRef.current) {
+      // Needs the route, so it may have to wait for it — hence the guard rather
+      // than doing this in the route effect.
+      if (!fittedRef.current && route) {
         fittedRef.current = true;
-        const bounds = corridorBounds(train);
+        const bounds = corridorBounds(route, train);
         if (!bounds.isEmpty()) {
           map.fitBounds(bounds, { padding: FIT_PADDING, maxZoom: MAX_FIT_ZOOM, animate: false });
         }
@@ -246,10 +311,10 @@ export function ServicePositionMap({ rid }: { rid: string }) {
     };
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
-  }, [train]);
+  }, [train, route]);
 
   if (error) return null; // honest uncertainty: no map rather than a broken one
-  if (!data) return <p className="notice-muted">Loading live position…</p>;
+  if (!loaded) return <p className="notice-muted">Loading live position…</p>;
   if (!train) return null; // not currently correlated — text banner above still covers it
 
   return <div ref={containerRef} className="service-position-map" />;

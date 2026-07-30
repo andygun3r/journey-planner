@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import Redis from "ioredis";
 import { getDb } from "@/lib/db";
+import { boardCacheStats } from "@/lib/board-cache";
 import { busStats } from "@/lib/live-bus";
+import { sourceStats } from "@/lib/live-source";
 import { timetableStatus } from "@/lib/timetable-status";
 
 export const dynamic = "force-dynamic";
@@ -158,6 +160,14 @@ export async function GET() {
       // viewers; `channels` should not, and `redis.connected_clients` above
       // should stay flat regardless — that is the whole point of the shared bus.
       live_streams: busStats(),
+      // The fan-out, made visible: `subscribers` should climb with viewers while
+      // `sources` and the compute rate stay flat. That gap is the whole point of
+      // sharing the computation instead of running it per viewer.
+      live_sources: sourceStats(),
+      // Board builds saved. Each miss is an external LDBWS call plus the whole
+      // enrichment pipeline; each hit is none of it. A hit rate near zero with
+      // real traffic means something is keying the cache apart.
+      board_cache: boardCacheStats(),
     },
     { headers: { "Cache-Control": "no-store" } },
   );

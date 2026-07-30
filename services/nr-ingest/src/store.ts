@@ -20,6 +20,7 @@ import {
   type PatternRow,
 } from "./correlation.js";
 import type { BerthStep, MovementReport, SClassReport } from "./parse.js";
+import { publishPosition, publishSignalling } from "./publish.js";
 
 const db = getSharedDb();
 
@@ -795,6 +796,10 @@ async function applyMovementLocked(m: MovementReport): Promise<string | undefine
     reportedAt,
     lateness: m.latenessSeconds ?? null,
   });
+  // Announced from here, not the caller. The caller only publishes when the
+  // report resolved to a station, which silently dropped every movement that
+  // didn't.
+  publishPosition(rid, m.trainId);
   return crs ?? undefined;
 }
 
@@ -1040,6 +1045,7 @@ async function applyBerthStepLocked(b: BerthStep): Promise<string | undefined> {
     lastEventType,
     reportedAt,
   });
+  publishPosition(rid, tdTrainId(b));
   return crs ?? undefined;
 }
 
@@ -1070,4 +1076,9 @@ export async function applySClass(reports: SClassReport[]): Promise<void> {
       target: [nrSignallingState.tdArea, nrSignallingState.address],
       set: { data: sql`excluded.data`, updatedAt: sql`excluded.updated_at` },
     });
+
+  // One message per area, not per address: a refresh scan can carry hundreds of
+  // addresses and the diagram redraws the whole area regardless. Nothing
+  // announced signalling changes before this, so the diagram could only poll.
+  publishSignalling(new Set(rows.map((r) => r.tdArea)));
 }
