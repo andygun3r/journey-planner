@@ -8,12 +8,15 @@ UK rail journey & commute planner — live Darwin/Network Rail data, self-hosted
   timetable, with indicative fares computed from DTD fares data (no National
   Rail journey-planner licence required — see "What this is" in CLAUDE.md).
 - **Live departure boards** (`/boards/[crs]`) — LDBWS-backed, real platforms and
-  live estimates.
+  live estimates; one board build is shared across everyone watching a
+  station rather than one per viewer.
 - **Per-service detail** (`/services/[id]`) — full calling pattern, coach/loading
-  formation, live position, and history for a single train.
+  formation, live position, and history for a single train, pushed over a
+  live stream rather than polled.
 - **Live GB train map** (`/map`) — live Network Rail train positions plus TfL
   stops/buses, rendered over a self-hosted OpenRailwayMap-vector tile stack
-  (see `vendor/openrailwaymap-vector`, a git submodule).
+  (see `vendor/openrailwaymap-vector`, a git submodule). Positions are
+  computed once and pushed to every viewer over SSE, not re-queried per tab.
 - **TfL integration** — tube/bus/DLR/Overground/Elizabeth line/tram data
   (`apps/web/lib/tfl*.ts`) stitched onto rail journeys for interchange status
   and last-mile bus arrivals.
@@ -22,9 +25,17 @@ UK rail journey & commute planner — live Darwin/Network Rail data, self-hosted
   disruption on a matched corridor.
 - **Signalling diagrams** — real signal aspects decoded from Network Rail TD
   S-class messages against per-area SOP maps (see CLAUDE.md's signalling note).
+  The static berth layout is sent once; aspects and train positions stream
+  live after that.
 - **Disruptions & favourites** — station incident/TOC status feed, saved
   favourite journeys/stations.
 - **Status page** (`/status`) — feed/system health beyond the bare `/api/health` JSON.
+
+The board, map, signalling diagram and per-service position all push updates
+over Server-Sent Events rather than polling: one shared computation per
+station/corridor/train regardless of how many people are watching, falling
+back to polling automatically if Redis isn't configured or a proxy buffers
+the stream.
 
 ## Layout
 
@@ -63,6 +74,12 @@ docker compose up --build
 ```
 
 Health check: `curl localhost:3000/api/health` → `{ ok, postgres, redis }`.
+
+Operational metrics: `curl localhost:3000/api/metrics` → plain JSON (no
+dashboard, just something to read with curl) covering Postgres connection
+pool state, feed freshness, live-stream fan-out (computations vs. subscriber
+count — the number that proves the SSE sharing above is actually working),
+and board cache hit rate.
 
 ## Deploying (Coolify)
 
