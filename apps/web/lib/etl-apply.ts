@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { getDb } from "./db";
 import { etlRun, station, tripMapping } from "@mainline/db";
+import { reloadMotis } from "./motis-reload";
 
 const exec = promisify(execFile);
 const BATCH = 2000;
@@ -147,11 +148,7 @@ export async function applyBundle(bundlePath: string, onProgress: ApplyProgress)
     await mkdir(gtfsOutDir, { recursive: true });
     await copyFile(path.join(tmp, "gb-rail.gtfs.zip"), path.join(gtfsOutDir, "gb-rail.gtfs.zip"));
 
-    onProgress("Reimporting into motis...");
-    const motisContainer = process.env.MOTIS_CONTAINER_NAME ?? "mainline-motis-1";
-    await exec("docker", ["exec", motisContainer, "/motis", "import", "-d", "/data/data", "-c", "/data/config.yml"]);
-    onProgress("Restarting motis to serve the new data...");
-    await exec("docker", ["restart", motisContainer]);
+    await reloadMotis(onProgress);
 
     onProgress("Done.");
   } finally {

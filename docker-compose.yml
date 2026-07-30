@@ -132,6 +132,11 @@ services:
       - motis-data:/data
       - gtfs-data:/input
     restart: unless-stopped
+    # Sized for SERVING only. `motis import` — the memory-hungry preprocessing
+    # step — deliberately runs as its own throwaway container (see
+    # cron/motis-reimport.sh) rather than `docker exec` into this one, so it
+    # gets its own budget and never competes with the live server for this
+    # cgroup's memory. If you put the import back in here, raise this a lot.
     mem_limit: ${MOTIS_MEM_LIMIT:-2g}
     healthcheck:
       # MOTIS has no dedicated /health path; hitting any real API route and
@@ -353,7 +358,12 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
-    mem_limit: 1g
+    # Generous on purpose. This is where dtd2mysql bulk-loads the whole CIF
+    # extract, and that job is already the thing that runs the server out of
+    # memory. A tight cap here starves exactly the work this container exists
+    # to do. It sits idle the rest of the day, so the ceiling costs nothing
+    # until the nightly run needs it.
+    mem_limit: ${MARIADB_MEM_LIMIT:-4g}
 
   # Darwin real-time ingester (RDM Kafka -> Postgres + Redis pub/sub).
   # The board works without it (LDBWS is primary); this is the deep feed for

@@ -1,6 +1,8 @@
-import { createDb, etlRun, station, tripMapping } from "@mainline/db";
 import { isCrs } from "@mainline/shared";
+import { createReadStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import mysql from "mysql2/promise";
+import postgres from "postgres";
 import type { PostprocessResult } from "./postprocess-gtfs.js";
 
 const BATCH = 2000;
@@ -127,7 +129,6 @@ export async function loadIntoPostgres(
   feedVersion: string,
   sourceModifiedAt?: Date,
 ): Promise<void> {
-  const db = createDb();
   // stops.txt carries the odd junk row with a fake CRS (e.g. "3/0") from
   // tiploc-only locations — real stations always have a 3-letter CRS.
   const stations = result.stations.filter((s) => isCrs(s.crs));
@@ -139,11 +140,16 @@ export async function loadIntoPostgres(
 
   const repairs: string[] = [];
 
-  await db.transaction(async (tx) => {
-    await tx.delete(station);
-    for (let i = 0; i < result.stations.length; i += BATCH) {
-      await tx.insert(station).values(
-        result.stations.slice(i, i + BATCH).map((s) => {
+  // Raw postgres.js rather than Drizzle for this one function, because the trip
+  // mappings are loaded with COPY and Drizzle has no way to expose the copy
+  // stream. Everything still happens in ONE transaction, which is what keeps
+  // readers on a consistent snapshot for the whole load.
+  const sql = postgres(process.env.DATABASE_URL!, { max: 1 });
+  try {
+    await sql.begin(async (tx) => {
+      await tx`delete from station`;
+      for (let i = 0; i < result.stations.length; i += BATCH) {
+        const rows = result.stations.slice(i, i + BATCH).map((s) => {
           const tiplocs = new Set(s.tiploc ? [s.tiploc] : []);
           for (const alias of aliasesByCrs.get(s.crs) ?? []) tiplocs.add(alias);
           const coords = sanitiseCoords(s.crs, s.lat, s.lon);
@@ -154,34 +160,34 @@ export async function loadIntoPostgres(
             tiplocs: [...tiplocs],
             lat: coords.lat,
             lon: coords.lon,
-            interchangeMin: s.interchangeMin,
+            interchange_min: s.interchangeMin,
           };
-        }),
-      );
-    }
+        });
+        // A few thousand rows total, so plain inserts are fine here — and
+        // `tiplocs` is a text[], whose COPY encoding is easy to get silently
+        // wrong for no gain.
+        await tx`insert into station ${tx(rows, "crs", "name", "tiplocs", "lat", "lon", "interchange_min")}`;
+      }
 
-    await tx.delete(tripMapping);
-    for (let i = 0; i < result.tripMappings.length; i += BATCH) {
-      await tx.insert(tripMapping).values(
-        result.tripMappings.slice(i, i + BATCH).map((t) => ({
-          gtfsTripId: t.gtfsTripId,
-          trainUid: t.trainUid,
-          dateRunsFrom: t.dateRunsFrom,
-          dateRunsTo: t.dateRunsTo,
-          daysMask: t.daysMask,
-          stpIndicator: t.stpIndicator,
-        })),
-      );
-    }
+      await tx`delete from trip_mapping`;
+      // Stream the CSV straight in. This used to be ~500 round trips of
+      // 2,000-row parameterised inserts, built from an array of a million
+      // objects that no longer exists.
+      const copy = await tx`
+        copy trip_mapping (gtfs_trip_id, train_uid, date_runs_from, date_runs_to, days_mask, stp_indicator)
+        from stdin with (format csv, header true)
+      `.writable();
+      await pipeline(createReadStream(result.tripMappingCsv), copy);
 
-    await tx.insert(etlRun).values({
-      feed: "timetable",
-      version: feedVersion,
-      sourceModifiedAt,
-      ok: true,
-      detail: `${result.stations.length} stations, ${result.tripMappings.length} trip mappings`,
+      await tx`
+        insert into etl_run (feed, version, source_modified_at, ok, detail)
+        values ('timetable', ${feedVersion}, ${sourceModifiedAt ?? null}, true,
+                ${`${result.stations.length} stations, ${result.tripMappingCount} trip mappings`})
+      `;
     });
-  });
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
 
   if (repairs.length > 0) {
     console.warn(`postgres: repaired/dropped ${repairs.length} station coordinates`);
@@ -189,6 +195,6 @@ export async function loadIntoPostgres(
   }
 
   console.log(
-    `postgres: loaded ${result.stations.length} stations + ${result.tripMappings.length} trip mappings (${feedVersion})`,
+    `postgres: loaded ${result.stations.length} stations + ${result.tripMappingCount} trip mappings (${feedVersion})`,
   );
 }

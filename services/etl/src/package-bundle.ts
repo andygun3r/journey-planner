@@ -32,13 +32,10 @@ export async function packageBundle(
     ].join("\n");
     await writeFile(path.join(tmp, "stations.csv"), stationsCsv);
 
-    const tripMappingsCsv = [
-      "gtfs_trip_id,train_uid,date_runs_from,date_runs_to,days_mask,stp_indicator",
-      ...result.tripMappings.map((t) =>
-        [t.gtfsTripId, t.trainUid, t.dateRunsFrom, t.dateRunsTo, t.daysMask, t.stpIndicator].join(","),
-      ),
-    ].join("\n");
-    await writeFile(path.join(tmp, "trip_mappings.csv"), tripMappingsCsv);
+    // Copy the CSV postprocess already streamed out, rather than rebuilding it
+    // from an in-memory array — there are roughly a million rows and holding
+    // them was a large part of what made this pipeline run out of memory.
+    await exec("cp", [result.tripMappingCsv, path.join(tmp, "trip_mappings.csv")]);
 
     await writeFile(
       path.join(tmp, "manifest.json"),
@@ -47,7 +44,7 @@ export async function packageBundle(
           feedVersion,
           createdAt: new Date().toISOString(),
           stationCount: result.stations.length,
-          tripMappingCount: result.tripMappings.length,
+          tripMappingCount: result.tripMappingCount,
         },
         null,
         2,
