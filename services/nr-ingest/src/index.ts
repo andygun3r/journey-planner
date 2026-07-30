@@ -5,7 +5,13 @@ import { parseMovements, parseSClass, parseTd } from "./parse.js";
 import { loadSop } from "./load-sop.js";
 import { loadCorpus, loadHeadcodes, loadSmart } from "./reference.js";
 import { applyRtppm, applyTsr, applyVstp } from "./store-feeds.js";
-import { applyActivation, applyBerthStep, applyMovement, applySClass } from "./store.js";
+import {
+  applyActivation,
+  applyBerthStep,
+  applyMovement,
+  applySClass,
+  flushHistory,
+} from "./store.js";
 import { connect, nrConfig, TOPICS } from "./stomp.js";
 
 /**
@@ -44,6 +50,13 @@ async function runReference(): Promise<void> {
 
 type StompClient = Awaited<ReturnType<typeof connect>>;
 
+/**
+ * How many unacknowledged messages the broker may have outstanding per
+ * subscription. Small enough to bound in-flight work, large enough that the
+ * consumer is never idle waiting for the next frame.
+ */
+const PREFETCH = Number(process.env.NR_STOMP_PREFETCH ?? 100);
+
 function subscribeOn(
   client: StompClient,
   clientId: string,
@@ -52,7 +65,21 @@ function subscribeOn(
   handler: (body: string) => Promise<void>,
 ) {
   client.subscribe(
-    { destination: topic, ack: "client-individual", "activemq.subscriptionName": `${clientId}-${name}` },
+    {
+      destination: topic,
+      ack: "client-individual",
+      "activemq.subscriptionName": `${clientId}-${name}`,
+      // Cap how far ahead the broker may run.
+      //
+      // The ack below already happens after the handler resolves, which looks
+      // like backpressure — but ActiveMQ's default topic prefetch is around
+      // 32,000 messages, so it ships that many regardless and every one in
+      // flight holds a promise chain and its own database work. On the TD feed
+      // (thousands of messages a minute) that is how a slow moment turns into
+      // unbounded memory growth. With a small prefetch the existing ack
+      // becomes real flow control.
+      "activemq.prefetchSize": String(PREFETCH),
+    },
     (err, message) => {
       if (err) {
         console.error(`[nr] subscribe ${name} error:`, err.message);
@@ -114,18 +141,26 @@ let activeClient: StompClient | null = null;
 let clientGeneration = 0;
 
 function installShutdown(): void {
-  const shutdown = () => {
+  let shuttingDown = false;
+  const shutdown = async () => {
+    // A second signal while the flush is in flight must not cut it short.
+    if (shuttingDown) return;
+    shuttingDown = true;
     console.log("[nr] shutting down…");
     try {
       activeClient?.disconnect();
     } catch {
       /* ignore */
     }
+    // Position history is buffered, so anything still queued has to be written
+    // before exiting or it is simply lost. Bounded by the flush size, so this
+    // is one statement, not a long wait.
+    await flushHistory().catch(() => {});
     redis?.disconnect();
     process.exit(0);
   };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", () => void shutdown());
+  process.on("SIGTERM", () => void shutdown());
 }
 
 /**

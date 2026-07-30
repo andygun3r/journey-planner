@@ -108,6 +108,9 @@ export const darwinTrain = pgTable(
     index("darwin_train_uid_ssd_idx").on(t.uid, t.ssd),
     // Serves findRidForHeadcode's Darwin-native candidate lookup.
     index("darwin_train_headcode_ssd_idx").on(t.headcode, t.ssd),
+    // The prune filters on ssd alone. The two composites above both lead with
+    // another column, so neither can serve that range scan.
+    index("darwin_train_ssd_idx").on(t.ssd),
   ],
 );
 
@@ -300,6 +303,9 @@ export const nrTrainPosition = pgTable(
     index("nr_pos_rid_idx").on(t.rid),
     // The live map scans for recently-reported trains.
     index("nr_pos_reported_idx").on(t.lastReportedAt),
+    // The nightly prune deletes on updated_at, which is a DIFFERENT column to
+    // last_reported_at above. Without this it scanned the whole table.
+    index("nr_pos_updated_idx").on(t.updatedAt),
   ],
 );
 
@@ -366,6 +372,9 @@ export const nrTrainPositionHistory = pgTable(
     index("nr_pos_hist_train_time_idx").on(t.trainId, t.reportedAt),
     index("nr_pos_hist_rid_time_idx").on(t.rid, t.reportedAt),
     index("nr_pos_hist_recorded_idx").on(t.recordedAt),
+    // The service-detail history view falls back to a headcode lookup when it
+    // has no train id. Without this it scanned the largest table in the system.
+    index("nr_pos_hist_headcode_time_idx").on(t.headcode, t.reportedAt),
   ],
 );
 
@@ -661,7 +670,11 @@ export const commuteCorridor = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.commuteId, t.serviceDate, t.direction, t.trainUid] }),
-    index("corridor_uid_idx").on(t.trainUid),
+    // Leading train_uid alone forced a filter step on the alert path, which
+    // looks up (train_uid, service_date) for every tracked train.
+    index("corridor_uid_date_idx").on(t.trainUid, t.serviceDate),
+    // The tracked-uid refresh scans by service_date every 5 minutes.
+    index("corridor_service_date_idx").on(t.serviceDate),
   ],
 );
 

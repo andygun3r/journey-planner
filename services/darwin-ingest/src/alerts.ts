@@ -1,4 +1,4 @@
-import { alert, commute, commuteCorridor, commuteHoliday, createDb, device } from "@mainline/db";
+import { alert, commute, commuteCorridor, commuteHoliday, getSharedDb, device } from "@mainline/db";
 import { isDateInHolidayRange } from "@mainline/shared";
 import { and, eq, sql } from "drizzle-orm";
 import type { Redis } from "ioredis";
@@ -17,7 +17,7 @@ import { sendPush } from "./push.js";
  * are dropped without touching the database.
  */
 
-const db = createDb();
+const db = getSharedDb();
 
 /** Minutes late before a delay is worth alerting on. */
 const DELAY_THRESHOLD_MIN = 5;

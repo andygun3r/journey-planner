@@ -6,9 +6,8 @@ import {
   londonWallTimeToIso,
   resolveActiveLeg,
 } from "@mainline/shared";
-import { getBoard } from "./board";
 import { listCommutes } from "./commutes";
-import { type Disruption as BoardDisruption } from "./disruptions";
+import { type Disruption as BoardDisruption, fetchStationDisruptions } from "./disruptions";
 import { holidayRangesFor } from "./holidays";
 import { planJourneys, type JourneyView } from "./journeys";
 
@@ -30,7 +29,8 @@ export type DashboardState =
  * Resolves the single commute leg in play right now and fetches the next real
  * journeys along it. Journeys come from planJourneys() because it knows a train
  * actually calls at the destination — the departure board only exposes each
- * train's final destination. Live disruption context is layered from getBoard().
+ * train's final destination. Live disruption context comes straight from the
+ * disruptions API.
  */
 export async function getDashboardData(deviceId: string, now = new Date()): Promise<DashboardState> {
   const commutes = await listCommutes(deviceId);
@@ -70,10 +70,16 @@ export async function getDashboardData(deviceId: string, now = new Date()): Prom
   const engineOffline = !outcome.ok && outcome.reason === "engine-offline";
 
   // Origin-station disruptions (best-effort; never block the dashboard).
+  //
+  // Calls the disruptions API directly rather than going through getBoard().
+  // getBoard() only produces this field by calling fetchStationDisruptions()
+  // itself, so the result is identical — but the board pipeline also does an
+  // LDBWS request, several forecast queries, a full RTPPM scan and the ordering
+  // pass, all of which were thrown away. This page refreshes every 30 seconds
+  // per user, so that was the most repeated waste in the app.
   let disruptions: BoardDisruption[] = [];
   try {
-    const board = await getBoard(leg.originCrs);
-    if (board.ok) disruptions = board.board.disruptions;
+    disruptions = await fetchStationDisruptions(leg.originCrs);
   } catch {
     /* disruptions are supplementary */
   }

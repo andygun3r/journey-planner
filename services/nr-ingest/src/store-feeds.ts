@@ -1,8 +1,8 @@
-import { createDb, nrRtppm, nrTsr, nrVstpSchedule } from "@mainline/db";
+import { getSharedDb, nrRtppm, nrTsr, nrVstpSchedule } from "@mainline/db";
 import { eq } from "drizzle-orm";
 import type { RtppmRow, Tsr, VstpSchedule } from "./parse-feeds.js";
 
-const db = createDb();
+const db = getSharedDb();
 
 export async function applyVstp(s: VstpSchedule): Promise<void> {
   // A Delete transaction withdraws the schedule entirely.

@@ -1,4 +1,4 @@
-import { createDb, darwinFormation, darwinStopForecast, darwinTrain, station } from "@mainline/db";
+import { getSharedDb, darwinFormation, darwinStopForecast, darwinTrain, station } from "@mainline/db";
 import { eq, or, sql } from "drizzle-orm";
 import type {
   ParsedCoach,
@@ -9,7 +9,7 @@ import type {
   ParsedTS,
 } from "./pushport.js";
 
-const db = createDb();
+const db = getSharedDb();
 
 /** TIPLOC -> CRS, loaded once from the station table (refreshed hourly). */
 let tiplocToCrs = new Map<string, string>();
@@ -112,6 +112,14 @@ export async function applyTS(ts: ParsedTS): Promise<string[]> {
   const msgTs = ts.msgTs !== undefined ? new Date(ts.msgTs) : null;
 
   const touchedCrs = new Set<string>();
+
+  // Collect every stop, then write them in one statement.
+  //
+  // Keyed by tiploc so a message that mentions the same location twice keeps
+  // only its last entry. That is not hypothetical — a circular working calls at
+  // one station twice — and Postgres rejects an upsert that would touch the
+  // same row twice in a single statement.
+  const byTiploc = new Map<string, typeof darwinStopForecast.$inferInsert>();
   for (const [stopIndex, stop] of ts.stops.entries()) {
     const crs = tiplocToCrs.get(stop.tiploc) ?? null;
     if (crs) touchedCrs.add(crs);
@@ -119,55 +127,65 @@ export async function applyTS(ts: ParsedTS): Promise<string[]> {
     const seq =
       existingSeqByTiploc.get(stop.tiploc) ??
       (bookedTime ? seqForTime(bookedTime) : seqForUntimedAt(stopIndex));
-    await db
-      .insert(darwinStopForecast)
-      .values({
-        rid: ts.rid,
-        seq,
-        tiploc: stop.tiploc,
-        crs,
-        schedArr: normaliseTime(stop.wta),
-        schedDep: normaliseTime(stop.wtd),
-        estArr: normaliseTime(stop.arrEt),
-        estDep: normaliseTime(stop.depEt),
-        actArr: normaliseTime(stop.arrAt),
-        actDep: normaliseTime(stop.depAt),
-        platform: stop.platform ?? null,
-        platformChanged: stop.platformConfirmed,
-        suppressed: stop.suppressed,
-        lastMsgTs: msgTs,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [darwinStopForecast.rid, darwinStopForecast.tiploc],
-        set: {
-          // seq intentionally NOT overwritten here: once a row exists (seeded
-          // by applySchedule with the authoritative order, or by an earlier
-          // TS), a later TS message must not reshuffle its position.
-          crs,
-          estArr: normaliseTime(stop.arrEt),
-          estDep: normaliseTime(stop.depEt),
-          actArr: normaliseTime(stop.arrAt),
-          actDep: normaliseTime(stop.depAt),
-          platform: stop.platform ?? null,
-          platformChanged: stop.platformConfirmed,
-          suppressed: stop.suppressed,
-          lastMsgTs: msgTs,
-          updatedAt: new Date(),
-        },
-        // Reject an out-of-order/replayed message (see CLAUDE.md's Kafka-offset-
-        // reset gotcha): only overwrite live fields if this update is at least
-        // as new as what's already stored, or nothing was stored yet. A message
-        // with no timestamp of its own can't be compared, so it always applies.
-        where:
-          msgTs === null
-            ? undefined
-            : or(
-                sql`${darwinStopForecast.lastMsgTs} is null`,
-                sql`${msgTs.toISOString()}::timestamptz >= ${darwinStopForecast.lastMsgTs}`,
-              ),
-      });
+    byTiploc.set(stop.tiploc, {
+      rid: ts.rid,
+      seq,
+      tiploc: stop.tiploc,
+      crs,
+      schedArr: normaliseTime(stop.wta),
+      schedDep: normaliseTime(stop.wtd),
+      estArr: normaliseTime(stop.arrEt),
+      estDep: normaliseTime(stop.depEt),
+      actArr: normaliseTime(stop.arrAt),
+      actDep: normaliseTime(stop.depAt),
+      platform: stop.platform ?? null,
+      platformChanged: stop.platformConfirmed,
+      suppressed: stop.suppressed,
+      lastMsgTs: msgTs,
+      updatedAt: new Date(),
+    });
   }
+
+  if (byTiploc.size === 0) return [...touchedCrs];
+
+  // One statement for the whole message, not one per stop. A TS message can
+  // carry a couple of dozen locations, and each used to be its own awaited
+  // round trip on the busiest write path in the app.
+  await db
+    .insert(darwinStopForecast)
+    .values([...byTiploc.values()])
+    .onConflictDoUpdate({
+      target: [darwinStopForecast.rid, darwinStopForecast.tiploc],
+      set: {
+        // seq intentionally NOT overwritten here: once a row exists (seeded
+        // by applySchedule with the authoritative order, or by an earlier
+        // TS), a later TS message must not reshuffle its position.
+        //
+        // `excluded` is the row this statement tried to insert. With one row
+        // per statement these could be plain values; with many they cannot,
+        // because each row needs its own.
+        crs: sql`excluded.crs`,
+        estArr: sql`excluded.est_arr`,
+        estDep: sql`excluded.est_dep`,
+        actArr: sql`excluded.act_arr`,
+        actDep: sql`excluded.act_dep`,
+        platform: sql`excluded.platform`,
+        platformChanged: sql`excluded.platform_changed`,
+        suppressed: sql`excluded.suppressed`,
+        lastMsgTs: sql`excluded.last_msg_ts`,
+        updatedAt: new Date(),
+      },
+      // Reject an out-of-order/replayed message (see CLAUDE.md's Kafka-offset-
+      // reset gotcha): only overwrite live fields if this update is at least
+      // as new as what's already stored, or nothing was stored yet. A message
+      // with no timestamp of its own can't be compared, so it always applies.
+      where: or(
+        sql`excluded.last_msg_ts is null`,
+        sql`${darwinStopForecast.lastMsgTs} is null`,
+        sql`excluded.last_msg_ts >= ${darwinStopForecast.lastMsgTs}`,
+      ),
+    });
+
   return [...touchedCrs];
 }
 
@@ -203,33 +221,43 @@ export async function applySchedule(sch: ParsedSchedule): Promise<void> {
   // message itself — the only Darwin message that carries the full route in
   // one shot. TS messages (applyTS) only ever patch existing rows by tiploc
   // from here on; they never get to assign seq for a row this seeded.
+  // Keyed by tiploc, last entry winning, for the same two reasons as applyTS:
+  // a circular working lists one station twice, and Postgres refuses an upsert
+  // that would touch the same row twice in one statement.
+  const byTiploc = new Map<string, typeof darwinStopForecast.$inferInsert>();
   for (const stop of sch.stops) {
-    const crs = tiplocToCrs.get(stop.tiploc) ?? null;
-    await db
-      .insert(darwinStopForecast)
-      .values({
-        rid: sch.rid,
-        seq: stop.seq,
-        tiploc: stop.tiploc,
-        crs,
-        schedArr: normaliseTime(stop.wta),
-        schedDep: normaliseTime(stop.wtd),
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [darwinStopForecast.rid, darwinStopForecast.tiploc],
-        set: {
-          // A later SC re-issue (e.g. after a VSTP amendment) is itself
-          // authoritative for ordering — safe to overwrite seq/crs/sched here,
-          // unlike TS updates.
-          seq: stop.seq,
-          crs,
-          schedArr: normaliseTime(stop.wta),
-          schedDep: normaliseTime(stop.wtd),
-          updatedAt: new Date(),
-        },
-      });
+    byTiploc.set(stop.tiploc, {
+      rid: sch.rid,
+      seq: stop.seq,
+      tiploc: stop.tiploc,
+      crs: tiplocToCrs.get(stop.tiploc) ?? null,
+      schedArr: normaliseTime(stop.wta),
+      schedDep: normaliseTime(stop.wtd),
+      updatedAt: new Date(),
+    });
   }
+
+  if (byTiploc.size === 0) return;
+
+  // One statement for the whole calling pattern. This was the most expensive
+  // message type in the app: a long-distance schedule carries 40-60 stops, and
+  // every one of them was its own awaited round trip.
+  await db
+    .insert(darwinStopForecast)
+    .values([...byTiploc.values()])
+    .onConflictDoUpdate({
+      target: [darwinStopForecast.rid, darwinStopForecast.tiploc],
+      set: {
+        // A later SC re-issue (e.g. after a VSTP amendment) is itself
+        // authoritative for ordering — safe to overwrite seq/crs/sched here,
+        // unlike TS updates. No freshness guard for the same reason.
+        seq: sql`excluded.seq`,
+        crs: sql`excluded.crs`,
+        schedArr: sql`excluded.sched_arr`,
+        schedDep: sql`excluded.sched_dep`,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 export async function applyDeactivation(d: ParsedDeactivation): Promise<void> {

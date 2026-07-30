@@ -3,7 +3,7 @@ import {
   commuteCorridor,
   commuteHoliday,
   commuteLeg,
-  createDb,
+  getSharedDb,
   tripMapping,
 } from "@mainline/db";
 import { createEngine, gtfsTripIdFromEngine, type RawItinerary } from "@mainline/routing-adapter";
@@ -33,7 +33,7 @@ import { and, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
  * previous corridors in place.
  */
 
-const db = createDb();
+const db = getSharedDb();
 
 /** How many service dates ahead to resolve (today + tomorrow). */
 const HORIZON_DAYS = 2;

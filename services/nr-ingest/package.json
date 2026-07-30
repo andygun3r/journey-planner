@@ -9,7 +9,8 @@
     "reference": "tsx src/index.ts reference",
     "headcodes": "tsx src/index.ts headcodes",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
   },
   "dependencies": {
     "@mainline/db": "workspace:*",
@@ -22,6 +23,7 @@
     "@types/node": "^24.0.0",
     "@types/stompit": "^0.26.6",
     "tsx": "^4.19.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
   }
 }

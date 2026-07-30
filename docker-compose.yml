@@ -12,6 +12,28 @@ services:
       POSTGRES_USER: mainline
       POSTGRES_PASSWORD: mainline
       POSTGRES_DB: mainline
+    # Ran entirely on defaults before this, which meant a 128MB shared_buffers
+    # against multi-million-row tables under continuous write.
+    #
+    # max_connections is deliberately LOWER than the default 100. The app's
+    # steady-state need is well under 40, and a leak that exhausts a small
+    # ceiling fails loudly and early instead of quietly eating the last few
+    # connections the ingest services needed. pg_stat_statements makes "which
+    # query is expensive" answerable without guessing.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - max_connections=${PG_MAX_CONNECTIONS:-60}
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-512MB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-1536MB}
+      - -c
+      - work_mem=${PG_WORK_MEM:-16MB}
+      - -c
+      - maintenance_work_mem=${PG_MAINTENANCE_WORK_MEM:-256MB}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,15 +42,37 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    mem_limit: ${PG_MEM_LIMIT:-2g}
 
   redis:
     image: redis:8-alpine
+    # A hard ceiling inside Redis as well as on the container, so it refuses a
+    # write before the kernel's OOM killer takes the whole process out.
+    #
+    # noeviction, NOT allkeys-lru. Today Redis only carries pub/sub, but once it
+    # holds live train state (planned) an eviction policy would silently drop
+    # trains under pressure and there would be no way to tell. A refused write
+    # is a bug report; a missing train is a mystery.
+    #
+    # Snapshots off: there is no redis volume, so the default RDB writes went to
+    # the container's own layer and were thrown away on every recreate. That was
+    # disk I/O bought for nothing. If Redis later holds state worth keeping, add
+    # a volume and turn this back on deliberately.
+    command:
+      - redis-server
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-256mb}
+      - --maxmemory-policy
+      - noeviction
+      - --save
+      - ""
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    mem_limit: ${REDIS_MEM_LIMIT:-384m}
 
   web:
     build:
@@ -71,6 +115,7 @@ services:
       retries: 5
       start_period: 20s
     restart: unless-stopped
+    mem_limit: 1g
 
   # VERIFY ON FIRST INTEGRATION: image tag pullability and the import/server
   # invocation for this release (config.yml keys move between versions).
@@ -87,6 +132,7 @@ services:
       - motis-data:/data
       - gtfs-data:/input
     restart: unless-stopped
+    mem_limit: ${MOTIS_MEM_LIMIT:-2g}
     healthcheck:
       # MOTIS has no dedicated /health path; hitting any real API route and
       # accepting non-5xx confirms the HTTP server came up after import.
@@ -125,6 +171,7 @@ services:
     volumes:
       - orm-db-data:/data
     restart: unless-stopped
+    mem_limit: 1g
 
   # Run-to-completion import: docker compose run --rm orm-import import
   # (re-run manually to pick up a refreshed data.osm.pbf; see SETUP.md).
@@ -153,6 +200,7 @@ services:
       DATABASE_URL: postgresql://postgres@orm-db:5432/gis
       POSTGRES_RELOAD_INTERVAL: 10s
     restart: unless-stopped
+    mem_limit: 512m
 
   # Facility/milestone search API behind the proxy's /api path — the map
   # itself only needs tiles, but the proxy's nginx template hard-references
@@ -171,6 +219,7 @@ services:
       POSTGRES_HOST: orm-db
       POSTGRES_DB: gis
     restart: unless-stopped
+    mem_limit: 256m
 
   # Serves the styled map UI + tiles on :8000 (see docker-compose.override.yml
   # for the host port publish) — this is what NEXT_PUBLIC_TILES_URL points at.
@@ -190,14 +239,28 @@ services:
       # wherever orm-proxy:8000 is actually published/routed for this
       # environment (see docker-compose.override.yml for local dev's 8081).
       PUBLIC_HOST: ${ORM_PUBLIC_HOST:-localhost:8000}
-      NGINX_CACHE_TTL: "0"
-      CLIENT_CACHE_TTL_ASSETS_FRESH: "0"
-      CLIENT_CACHE_TTL_ASSETS_STALE: "0"
-      CLIENT_CACHE_TTL_API_FRESH: "0"
-      CLIENT_CACHE_TTL_API_STALE: "0"
-      CLIENT_CACHE_TTL_TILES_FRESH: "0"
-      CLIENT_CACHE_TTL_TILES_STALE: "0"
+      # Tile caching, on.
+      #
+      # These were all "0", which switched off both the nginx cache and the
+      # browser's. The whole caching setup in proxy.conf.template — proxy_cache,
+      # cache_lock, revalidate — was already there and doing nothing, so every
+      # map pan re-rendered every tile from a PostGIS query. That is a standing
+      # CPU cost for data that only changes when someone re-runs orm-import by
+      # hand.
+      #
+      # A week is safe for the same reason. After an import, bump ORM_CACHE_TTL
+      # down briefly or clear the cache volume if a change needs to show sooner.
+      NGINX_CACHE_TTL: "${ORM_CACHE_TTL:-604800}"
+      CLIENT_CACHE_TTL_ASSETS_FRESH: "${ORM_CACHE_TTL:-604800}"
+      CLIENT_CACHE_TTL_ASSETS_STALE: "2592000"
+      # The style/tilejson endpoints: cheap, but they carry the rewritten tile
+      # URLs, so keep them fresher than the tiles themselves.
+      CLIENT_CACHE_TTL_API_FRESH: "300"
+      CLIENT_CACHE_TTL_API_STALE: "86400"
+      CLIENT_CACHE_TTL_TILES_FRESH: "${ORM_CACHE_TTL:-604800}"
+      CLIENT_CACHE_TTL_TILES_STALE: "2592000"
     restart: unless-stopped
+    mem_limit: 256m
 
   # Run-to-completion ETL: docker compose --profile etl run --rm etl timetable
   # Writes into the same named `gtfs-data` volume MOTIS reads from, so on a
@@ -265,6 +328,15 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    # Deliberately NOT capped. This container is idle 23h59m a day, then runs
+    # the whole DTD conversion in one go — an OOM-killed timetable update at 2am
+    # is far worse than an uncapped container that is asleep almost always.
+    #
+    # It and mariadb below are the two obvious candidates for coming off
+    # always-on (that is 23 hours a day of a standing MariaDB for one nightly
+    # job). Left alone on purpose: moving the schedule to a host cron or a
+    # `docker compose --profile etl run` is an operational change, and getting
+    # it wrong stops timetable updates silently.
 
   # MariaDB scratch for dtd2mysql only — canonical storage is Postgres.
   # Not profile-gated: etl-cron (a standing service) needs it always up.
@@ -281,6 +353,7 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
+    mem_limit: 1g
 
   # Darwin real-time ingester (RDM Kafka -> Postgres + Redis pub/sub).
   # The board works without it (LDBWS is primary); this is the deep feed for
@@ -316,6 +389,7 @@ services:
       retries: 3
       start_period: 15s
     restart: unless-stopped
+    mem_limit: 768m
 
   # Network Rail ingester (TRUST movements + Train Describer over STOMP ->
   # Postgres). Adds between-station live positioning on top of Darwin.
@@ -349,6 +423,7 @@ services:
       retries: 3
       start_period: 15s
     restart: unless-stopped
+    mem_limit: 768m
 
 volumes:
   pgdata:
