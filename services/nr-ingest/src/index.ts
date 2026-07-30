@@ -1,5 +1,4 @@
 import { acquireSingletonLock } from "@mainline/db";
-import { Redis } from "ioredis";
 import { parseRtppm, parseTsr, parseVstp } from "./parse-feeds.js";
 import { parseMovements, parseSClass, parseTd } from "./parse.js";
 import { loadSop } from "./load-sop.js";
@@ -13,6 +12,7 @@ import {
   flushHistory,
 } from "./store.js";
 import { beat } from "./heartbeat.js";
+import { closePublisher, publishCrs } from "./publish.js";
 import { connect, nrConfig, TOPICS } from "./stomp.js";
 
 /**
@@ -36,8 +36,6 @@ import { connect, nrConfig, TOPICS } from "./stomp.js";
  *   sop         load SOP/ECS signalling bit-maps from data/sop/, then exit
  */
 
-const redisUrl = process.env.REDIS_URL;
-const redis = redisUrl ? new Redis(redisUrl) : null;
 
 let processed = 0;
 let lastLog = Date.now();
@@ -157,7 +155,7 @@ function installShutdown(): void {
     // before exiting or it is simply lost. Bounded by the flush size, so this
     // is one statement, not a long wait.
     await flushHistory().catch(() => {});
-    redis?.disconnect();
+    closePublisher();
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown());
@@ -221,7 +219,10 @@ async function runIngest(): Promise<void> {
     for (const ev of parseMovements(body)) {
       if (ev.kind === "movement") {
         const crs = await applyMovement(ev);
-        if (redis && crs) await redis.publish(`nr:crs:${crs}`, ev.trainId);
+        // Position updates are published from inside the store, so they cover
+        // reports that never resolve to a station. This CRS-keyed one stays for
+        // consumers that watch a station rather than a train.
+        if (crs) publishCrs(crs, ev.trainId);
         processed++;
       } else if (ev.kind === "activation") {
         await applyActivation(ev.trainId, ev.trainUid, ev.scheduleStartDate, ev.originStanox);
@@ -234,7 +235,7 @@ async function runIngest(): Promise<void> {
     // state) messages; each parser ignores the other's message types.
     for (const step of parseTd(body)) {
       const crs = await applyBerthStep(step);
-      if (redis && crs) await redis.publish(`nr:crs:${crs}`, step.headcode);
+      if (crs) publishCrs(crs, step.headcode);
       processed++;
     }
     await applySClass(parseSClass(body));

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import Redis from "ioredis";
 import { getDb } from "@/lib/db";
 import { busStats } from "@/lib/live-bus";
+import { sourceStats } from "@/lib/live-source";
 import { timetableStatus } from "@/lib/timetable-status";
 
 export const dynamic = "force-dynamic";
@@ -158,6 +159,10 @@ export async function GET() {
       // viewers; `channels` should not, and `redis.connected_clients` above
       // should stay flat regardless — that is the whole point of the shared bus.
       live_streams: busStats(),
+      // The fan-out, made visible: `subscribers` should climb with viewers while
+      // `sources` and the compute rate stay flat. That gap is the whole point of
+      // sharing the computation instead of running it per viewer.
+      live_sources: sourceStats(),
     },
     { headers: { "Cache-Control": "no-store" } },
   );

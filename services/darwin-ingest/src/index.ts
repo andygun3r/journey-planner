@@ -43,10 +43,17 @@ async function handle(value: string): Promise<void> {
     if (update.kind === "TS") {
       const touchedCrs = await applyTS(update);
       if (redis) {
-        for (const crs of touchedCrs) {
-          await redis.publish(`darwin:station:${crs}`, update.rid);
-        }
-        await redis.publish(`darwin:rid:${update.rid}`, "ts");
+        // One pipeline, not one awaited round trip per station. A TS message for
+        // a long-distance service touches 20-30 stops, and this sits on the
+        // busiest ingest path in the app — so that was 20-30 sequential waits
+        // per message purely to announce a change.
+        //
+        // Not awaited: a live-update hint is never worth slowing ingestion for,
+        // and a Redis blip must not stall the Kafka loop.
+        const pipeline = redis.pipeline();
+        for (const crs of touchedCrs) pipeline.publish(`darwin:station:${crs}`, update.rid);
+        pipeline.publish(`darwin:rid:${update.rid}`, "ts");
+        void pipeline.exec().catch(() => {});
       }
       // Commute alerting is best-effort; never let it break ingestion.
       await matchDelay(update, redis).catch((err) =>
