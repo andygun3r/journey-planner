@@ -33,6 +33,8 @@ const groupId =
 let consumer: ReturnType<ReturnType<typeof createKafka>["consumer"]> | null = null;
 
 let processed = 0;
+/** Messages whose handler threw. Their offsets still advanced — see the catch. */
+let failed = 0;
 let lastLog = Date.now();
 
 async function handle(value: string): Promise<void> {
@@ -69,7 +71,9 @@ async function handle(value: string): Promise<void> {
   }
 
   if (Date.now() - lastLog > 15_000) {
-    console.log(`[darwin] processed ${processed} updates`);
+    console.log(
+      `[darwin] processed ${processed} updates` + (failed > 0 ? `, ${failed} failed` : ""),
+    );
     lastLog = Date.now();
   }
 }
@@ -152,6 +156,13 @@ async function main(): Promise<void> {
         try {
           await handle(value);
         } catch (err) {
+          // Swallowing this keeps the consumer moving, but the offset still
+          // advances — so a message that always fails is skipped for good.
+          // That is a deliberate trade (one bad message must not wedge the
+          // feed), but it was previously invisible: count the failures so a
+          // systematic parse or write problem shows up as a number instead of
+          // scrolling past in the logs.
+          failed++;
           console.error("[darwin] handle error:", (err as Error).message);
         }
       }

@@ -44,6 +44,13 @@ async function runReference(): Promise<void> {
 
 type StompClient = Awaited<ReturnType<typeof connect>>;
 
+/**
+ * How many unacknowledged messages the broker may have outstanding per
+ * subscription. Small enough to bound in-flight work, large enough that the
+ * consumer is never idle waiting for the next frame.
+ */
+const PREFETCH = Number(process.env.NR_STOMP_PREFETCH ?? 100);
+
 function subscribeOn(
   client: StompClient,
   clientId: string,
@@ -52,7 +59,21 @@ function subscribeOn(
   handler: (body: string) => Promise<void>,
 ) {
   client.subscribe(
-    { destination: topic, ack: "client-individual", "activemq.subscriptionName": `${clientId}-${name}` },
+    {
+      destination: topic,
+      ack: "client-individual",
+      "activemq.subscriptionName": `${clientId}-${name}`,
+      // Cap how far ahead the broker may run.
+      //
+      // The ack below already happens after the handler resolves, which looks
+      // like backpressure — but ActiveMQ's default topic prefetch is around
+      // 32,000 messages, so it ships that many regardless and every one in
+      // flight holds a promise chain and its own database work. On the TD feed
+      // (thousands of messages a minute) that is how a slow moment turns into
+      // unbounded memory growth. With a small prefetch the existing ack
+      // becomes real flow control.
+      "activemq.prefetchSize": String(PREFETCH),
+    },
     (err, message) => {
       if (err) {
         console.error(`[nr] subscribe ${name} error:`, err.message);
