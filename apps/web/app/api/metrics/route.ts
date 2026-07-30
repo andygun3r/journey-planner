@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import Redis from "ioredis";
 import { getDb } from "@/lib/db";
+import { busStats } from "@/lib/live-bus";
 
 export const dynamic = "force-dynamic";
 
@@ -148,6 +149,10 @@ export async function GET() {
       postgres,
       ingest_freshness: freshness,
       redis,
+      // Open live streams, and the channels behind them. `listeners` grows with
+      // viewers; `channels` should not, and `redis.connected_clients` above
+      // should stay flat regardless — that is the whole point of the shared bus.
+      live_streams: busStats(),
     },
     { headers: { "Cache-Control": "no-store" } },
   );
