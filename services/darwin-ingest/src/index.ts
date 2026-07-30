@@ -2,6 +2,7 @@ import { acquireSingletonLock } from "@mainline/db";
 import { Redis } from "ioredis";
 import cron from "node-cron";
 import { invalidateTrackedUids, matchCancellation, matchDelay } from "./alerts.js";
+import { beat } from "./heartbeat.js";
 import { createKafka, kafkaTopic } from "./kafka.js";
 import { pruneExpiredData } from "./maintenance.js";
 import { corridorsEmptyForToday, precomputeAllCorridors } from "./precompute.js";
@@ -69,6 +70,10 @@ async function handle(value: string): Promise<void> {
     }
     processed++;
   }
+
+  // Records that the consumer is genuinely still consuming, for the container
+  // health check — see heartbeat.ts.
+  beat();
 
   if (Date.now() - lastLog > 15_000) {
     console.log(

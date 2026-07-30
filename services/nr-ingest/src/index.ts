@@ -12,6 +12,7 @@ import {
   applySClass,
   flushHistory,
 } from "./store.js";
+import { beat } from "./heartbeat.js";
 import { connect, nrConfig, TOPICS } from "./stomp.js";
 
 /**
@@ -263,6 +264,9 @@ async function runIngest(): Promise<void> {
 }
 
 function maybeLog() {
+  // Called after every handled frame, so this is also the natural place to
+  // record that the consumer is genuinely still consuming — see heartbeat.ts.
+  beat();
   if (Date.now() - lastLog > 15_000) {
     console.log(`[nr] processed ${processed} position updates`);
     lastLog = Date.now();

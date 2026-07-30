@@ -383,11 +383,25 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'tsx src/index.ts' || exit 1"]
+      # Progress, not liveness. The old check was `pgrep -f 'tsx src/index.ts'`,
+      # which only proves a process exists — a consumer can sit there connected
+      # and consuming nothing after a silent auth failure or a dropped
+      # subscription, and this reported healthy throughout. The service touches
+      # the heartbeat file as it works (see heartbeat.ts), so a stale mtime means
+      # the feed has genuinely stopped and the container should be restarted.
+      #
+      # 5 minutes is generous on purpose: both feeds carry traffic around the
+      # clock, but a quiet few minutes overnight must not cause a restart loop.
+      # node, not `find -newermt`: these images are node:22-alpine, and busybox
+      # find has no -newermt, so that check would fail forever and restart-loop
+      # the container. node -e is already the pattern the web healthcheck uses.
+      test:
+        - CMD-SHELL
+        - node -e "let m=0;try{m=require('fs').statSync(process.env.INGEST_HEARTBEAT_FILE||'/tmp/ingest-heartbeat').mtimeMs}catch{};process.exit(Date.now()-m<300000?0:1)"
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 60s
     restart: unless-stopped
     mem_limit: 768m
 
@@ -417,11 +431,25 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'tsx src/index.ts' || exit 1"]
+      # Progress, not liveness. The old check was `pgrep -f 'tsx src/index.ts'`,
+      # which only proves a process exists — a consumer can sit there connected
+      # and consuming nothing after a silent auth failure or a dropped
+      # subscription, and this reported healthy throughout. The service touches
+      # the heartbeat file as it works (see heartbeat.ts), so a stale mtime means
+      # the feed has genuinely stopped and the container should be restarted.
+      #
+      # 5 minutes is generous on purpose: both feeds carry traffic around the
+      # clock, but a quiet few minutes overnight must not cause a restart loop.
+      # node, not `find -newermt`: these images are node:22-alpine, and busybox
+      # find has no -newermt, so that check would fail forever and restart-loop
+      # the container. node -e is already the pattern the web healthcheck uses.
+      test:
+        - CMD-SHELL
+        - node -e "let m=0;try{m=require('fs').statSync(process.env.INGEST_HEARTBEAT_FILE||'/tmp/ingest-heartbeat').mtimeMs}catch{};process.exit(Date.now()-m<300000?0:1)"
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 60s
     restart: unless-stopped
     mem_limit: 768m
 
