@@ -8,7 +8,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * their berths and signal aspects decoded from S-class where SOP data exists.
  * Signals with no SOP mapping render "unknown" (grey) — honest to the data.
  *
- * Shown in a modal launched from a train's detail panel; polls every 8s.
+ * Shown in a modal launched from a train's detail panel. Live over SSE, with
+ * polling as the fallback.
+ *
+ * The layout arrives once and stays put. It comes from SMART reference data and
+ * does not change while the modal is open, but it used to be re-sent — hundreds
+ * of berth nodes — on every 8-second poll. Only the aspects and the trains move,
+ * so only those are streamed.
  */
 
 interface LaidBerth {
@@ -33,19 +39,23 @@ interface DiagramTrain {
   lateness?: number;
   focus: boolean;
 }
-interface CorridorDiagram {
+interface DiagramLayout {
+  berths: LaidBerth[];
+  edges: Array<{ from: string; to: string }>;
+  width: number;
+  height: number;
+}
+/** The moving part: what the signals show and where the trains are. */
+interface DiagramState {
   generatedAt: string;
   areas: string[];
   focusHeadcode?: string;
-  layout: {
-    berths: LaidBerth[];
-    edges: Array<{ from: string; to: string }>;
-    width: number;
-    height: number;
-  };
   signals: DiagramSignal[];
   trains: DiagramTrain[];
   mappedAreas: number;
+}
+interface CorridorDiagram extends DiagramState {
+  layout: DiagramLayout;
 }
 
 export function SignallingDiagram({
@@ -57,25 +67,98 @@ export function SignallingDiagram({
   title: string;
   onClose: () => void;
 }) {
-  const [data, setData] = useState<CorridorDiagram | null>(null);
+  const [layout, setLayout] = useState<DiagramLayout | null>(null);
+  const [data, setData] = useState<DiagramState | null>(null);
   const [error, setError] = useState(false);
 
   const fetchDiagram = useCallback(async () => {
     try {
       const res = await fetch(`/api/signalling?${query}`, { cache: "no-store" });
       if (!res.ok) throw new Error("bad");
-      setData((await res.json()) as CorridorDiagram);
+      const json = (await res.json()) as CorridorDiagram;
+      // The polling endpoint still returns both halves together; split them so
+      // the rest of the component doesn't care which path the data came from.
+      setLayout(json.layout);
+      setData(json);
       setError(false);
     } catch {
       setError(true);
     }
   }, [query]);
 
+  // Same shape as the map and the alert feed: stream first, poll to cover the
+  // gaps, and the mutual-exclusion guard in startPolling is what stops a tab
+  // doing both at once.
   useEffect(() => {
-    fetchDiagram();
-    const id = setInterval(fetchDiagram, 8_000);
-    return () => clearInterval(id);
-  }, [fetchDiagram]);
+    let stopped = false;
+    let poll: ReturnType<typeof setInterval> | undefined;
+    let reconnect: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+
+    const startPolling = () => {
+      if (stopped || poll) return;
+      void fetchDiagram();
+      poll = setInterval(() => void fetchDiagram(), 8_000);
+    };
+    const stopPolling = () => {
+      if (poll) clearInterval(poll);
+      poll = undefined;
+    };
+
+    const open = () => {
+      if (stopped) return;
+      if (typeof window === "undefined" || !("EventSource" in window)) {
+        startPolling();
+        return;
+      }
+
+      // Draw something immediately, and keep drawing if a proxy buffers the
+      // stream — a failure that otherwise looks exactly like a quiet corridor.
+      startPolling();
+
+      const es = new EventSource(`/api/live/signalling?${query}`);
+
+      es.addEventListener("ready", () => {
+        attempt = 0;
+        stopPolling();
+      });
+
+      // No Redis on the server, so the stream has no trigger. Retrying won't
+      // help; stay on polling.
+      es.addEventListener("unavailable", () => {
+        es.close();
+        startPolling();
+      });
+
+      es.addEventListener("layout", (ev) => {
+        const parsed = JSON.parse((ev as MessageEvent<string>).data) as { layout: DiagramLayout };
+        setLayout(parsed.layout);
+      });
+
+      es.addEventListener("state", (ev) => {
+        attempt = 0;
+        stopPolling();
+        setData(JSON.parse((ev as MessageEvent<string>).data) as DiagramState);
+        setError(false);
+      });
+
+      es.onerror = () => {
+        es.close();
+        if (stopped) return;
+        startPolling();
+        attempt += 1;
+        reconnect = setTimeout(open, Math.min(1000 * 2 ** attempt, 60_000));
+      };
+    };
+
+    open();
+
+    return () => {
+      stopped = true;
+      stopPolling();
+      if (reconnect) clearTimeout(reconnect);
+    };
+  }, [fetchDiagram, query]);
 
   // Close on Escape.
   useEffect(() => {
@@ -84,13 +167,15 @@ export function SignallingDiagram({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Keyed on the layout, not the data, so it stops rebuilding on every update.
+  // It used to be thrown away and reconstructed 7.5 times a minute even though
+  // the berths it indexes never moved.
   const berthById = useMemo(() => {
     const m = new Map<string, LaidBerth>();
-    for (const b of data?.layout.berths ?? []) m.set(b.id, b);
+    for (const b of layout?.berths ?? []) m.set(b.id, b);
     return m;
-  }, [data]);
+  }, [layout]);
 
-  const layout = data?.layout;
   const hasBerths = (layout?.berths.length ?? 0) > 0;
 
   return (
@@ -123,7 +208,7 @@ export function SignallingDiagram({
               area(s).
             </p>
           )}
-          {hasBerths && layout && (
+          {hasBerths && layout && data && (
             <svg
               viewBox={`0 0 ${layout.width} ${layout.height}`}
               className="sig-svg"
