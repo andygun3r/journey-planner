@@ -1636,6 +1636,19 @@ a {
 .btn-link-danger:hover {
   text-decoration: underline;
 }
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+  min-height: 44px;
+}
+.btn-link:hover {
+  text-decoration: underline;
+}
 
 .form-error {
   color: var(--danger);
@@ -2931,6 +2944,36 @@ details[open] > .commute-dep-link .commute-dep-chevron {
   border-radius: var(--radius-control);
   background: var(--surface);
   font-size: 0.9rem;
+}
+
+.dashboard-regions {
+  margin-bottom: 1.5rem;
+}
+.dashboard-region-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.dashboard-region {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+.dashboard-region-name {
+  font-weight: 600;
+}
+.dashboard-region-tocs {
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 .commute-backup {

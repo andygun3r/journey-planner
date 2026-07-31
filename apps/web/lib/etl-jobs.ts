@@ -61,6 +61,21 @@ export function startSftpSyncJob(): string {
   });
 }
 
+/**
+ * `hostZipPath` is where the web container just wrote the upload (under the
+ * shared dtd-archive volume); `containerZipPath` is the same file's path as
+ * seen from inside etl-cron, which is what actually runs the import.
+ */
+export function startRawZipImportJob(hostZipPath: string, containerZipPath: string): string {
+  return startJob(
+    async (onProgress) => {
+      const { importUploadedTimetableZip } = await import("./etl-sftp-sync");
+      await importUploadedTimetableZip(containerZipPath, onProgress);
+    },
+    () => rm(hostZipPath, { force: true }),
+  );
+}
+
 export function getJob(id: string): EtlJob | undefined {
   return jobs.get(id);
 }

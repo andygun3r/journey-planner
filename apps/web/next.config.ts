@@ -37,6 +37,11 @@ loadRootEnv();
 const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@mainline/shared", "@mainline/db", "@mainline/routing-adapter"],
+  experimental: {
+    // Default is 10MB — too small for a raw DTD timetable zip (RJTTF*.ZIP
+    // runs well past that) uploaded via /api/etl/upload-raw or /api/etl/upload.
+    proxyClientMaxBodySize: "500mb",
+  },
   // NEXT_PUBLIC_* vars are inlined into the client bundle by the bundler, which
   // snapshots process.env *before* this config module is evaluated — so the
   // loadRootEnv() call above is too late to reach browser code, and

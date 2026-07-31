@@ -1,5 +1,4 @@
 import { TimetableUploadForm } from "@/components/timetable-upload-form";
-import { TimetableSftpSyncForm } from "@/components/timetable-sftp-sync-form";
 import { timetableStatus } from "@/lib/timetable-status";
 
 export const dynamic = "force-dynamic";
@@ -62,34 +61,27 @@ async function CurrentState() {
 }
 
 export default function TimetableSettingsPage() {
+  const sftpAvailable = Boolean(process.env.DTD_SFTP_HOST);
+
   return (
     <main>
       <div className="results-head">
-        <h1>Timetable upload</h1>
+        <h1>Timetable</h1>
       </div>
       <CurrentState />
-      <div className="notice">
-        <p>
-          Run <code>docker compose --profile etl run --rm etl package</code> locally to produce a bundle
-          (this runs dtd2mysql on your own machine, not the server), then upload it here. The server
-          loads the station and trip mapping data into Postgres, drops the GTFS zip into the shared
-          volume, and restarts MOTIS to reimport — no heavy conversion runs on the server.
-        </p>
-      </div>
-      <TimetableUploadForm />
 
-      <div className="results-head">
-        <h1>SFTP sync</h1>
-      </div>
-      <div className="notice">
+      <TimetableUploadForm sftpAvailable={sftpAvailable} />
+
+      <details className="notice" style={{ marginTop: "1.5rem" }}>
+        <summary>How this works</summary>
         <p>
-          Pulls every timetable file from the RDG SFTP folder not yet imported — RDG drops a full
-          timetable monthly plus daily updates in the same folder, and this applies whatever's new,
-          oldest first, same as the nightly 2am cron. Runs dtd2mysql inside the etl-cron container, so
-          it needs <code>DTD_SFTP_HOST</code> configured there.
+          {sftpAvailable &&
+            "\"Get latest timetable\" fetches the newest file from the rail data provider and loads it in automatically. "}
+          You can also upload a timetable file directly — either the original zip from the data
+          provider, or a bundle produced by the <code>etl package</code> tool. Either way it&apos;s
+          loaded in automatically, and journey planning uses it as soon as it&apos;s done.
         </p>
-      </div>
-      <TimetableSftpSyncForm />
+      </details>
     </main>
   );
 }

@@ -99,6 +99,11 @@ services:
       - "3000:3000"
     volumes:
       - gtfs-data:/data/gtfs
+      # Landing spot for an uploaded raw DTD zip (see /api/etl/upload-raw) —
+      # shared with etl-cron, which is the one that actually reads it (the
+      # dtd2mysql conversion needs real memory, which this container doesn't
+      # have — same reasoning as the SFTP sync path in etl-sftp-sync.ts).
+      - dtd-archive:/data/dtd
       # Needed to reimport + restart motis after applying an uploaded
       # timetable bundle (MOTIS has no live-reload API) — same pattern as
       # etl-cron's reimport+restart.

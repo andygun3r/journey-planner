@@ -3,22 +3,20 @@ import type { ApplyProgress } from "./etl-apply";
 import { reloadMotis } from "./motis-reload";
 
 /**
- * Triggers an on-demand SFTP pull-and-import, streaming its output back to
- * the caller. The web container has no dtd2mysql/MariaDB access (that heavy
- * conversion deliberately stays off the low-memory prod box — see
- * etl-apply.ts), so this runs inside the already-running etl-cron container
- * instead, via the same docker socket etl-apply.ts uses to restart motis.
- * etl-cron's `timetable` command already applies every SFTP file not yet
- * recorded in etl_run (monthly full + daily updates), oldest first — see
- * services/etl/src/index.ts.
+ * Runs `pnpm tsx src/index.ts timetable [arg]` inside the etl-cron container
+ * and streams its output back. The web container has no dtd2mysql/MariaDB
+ * access (that heavy conversion deliberately stays off the low-memory prod
+ * box — see etl-apply.ts), so this runs inside the already-running etl-cron
+ * container instead, via the same docker socket etl-apply.ts uses to restart
+ * motis.
  */
-export async function syncTimetableFromSftp(onProgress: ApplyProgress): Promise<void> {
+async function runEtlCronTimetable(onProgress: ApplyProgress, arg?: string): Promise<void> {
   const container = process.env.ETL_CRON_CONTAINER_NAME ?? "mainline-etl-cron-1";
+  const args = ["exec", container, "pnpm", "tsx", "src/index.ts", "timetable"];
+  if (arg) args.push(arg);
 
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("docker", ["exec", container, "pnpm", "tsx", "src/index.ts", "timetable"], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const child = spawn("docker", args, { stdio: ["ignore", "pipe", "pipe"] });
 
     const forwardLines = (chunk: Buffer) => {
       for (const line of chunk.toString("utf8").split("\n")) {
@@ -29,7 +27,7 @@ export async function syncTimetableFromSftp(onProgress: ApplyProgress): Promise<
     child.stderr.on("data", forwardLines);
 
     child.on("error", reject);
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`sftp sync exited ${code}`))));
+    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`import exited ${code}`))));
   });
 
   // Import AND restart. This used to only restart, which does nothing at all
@@ -38,4 +36,23 @@ export async function syncTimetableFromSftp(onProgress: ApplyProgress): Promise<
   await reloadMotis(onProgress);
 
   onProgress("Done.");
+}
+
+/**
+ * On-demand SFTP pull-and-import. etl-cron's `timetable` command (no arg)
+ * already applies every SFTP file not yet recorded in etl_run (monthly full
+ * + daily updates), oldest first — see services/etl/src/index.ts.
+ */
+export async function syncTimetableFromSftp(onProgress: ApplyProgress): Promise<void> {
+  await runEtlCronTimetable(onProgress);
+}
+
+/**
+ * Imports one raw DTD zip (e.g. RJTTF512.ZIP) already saved to the shared
+ * dtd-archive volume. Passing an explicit path makes etl-cron's `timetable`
+ * command import that file directly instead of polling SFTP — see
+ * services/etl/src/index.ts `timetable(source?)`.
+ */
+export async function importUploadedTimetableZip(zipPathInContainer: string, onProgress: ApplyProgress): Promise<void> {
+  await runEtlCronTimetable(onProgress, zipPathInContainer);
 }

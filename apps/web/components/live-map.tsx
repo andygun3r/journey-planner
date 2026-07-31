@@ -609,7 +609,11 @@ export function LiveMap() {
         source: TRAINS_SOURCE,
         layout: {
           "icon-image": TRAIN_ICON,
-          "icon-size": ["case", ["boolean", ["feature-state", "selected"], false], 0.42, 0.34],
+          // icon-size is a layout property, so it can't read feature-state —
+          // unlike the badge's circle-radius (paint), the icon can't grow when
+          // a train is selected. The badge growing underneath is enough of a
+          // selection cue on its own.
+          "icon-size": 0.34,
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
         },
@@ -622,15 +626,12 @@ export function LiveMap() {
         filter: ["==", ["get", "hasBearing"], true],
         layout: {
           "icon-image": ARROW_ICON,
-          "icon-size": ["case", ["boolean", ["feature-state", "selected"], false], 0.34, 0.3],
+          // Same feature-state-in-layout restriction as icon-size above — the
+          // arrow stays at the unselected badge radius's offset.
+          "icon-size": 0.3,
           "icon-rotate": ["get", "bearing"],
           "icon-rotation-alignment": "map",
-          "icon-offset": [
-            "case",
-            ["boolean", ["feature-state", "selected"], false],
-            ["literal", [0, arrowOffsetEms(14, 0.34)]],
-            ["literal", [0, arrowOffsetEms(11, 0.3)]],
-          ],
+          "icon-offset": [0, arrowOffsetEms(11, 0.3)],
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
         },
@@ -670,9 +671,10 @@ export function LiveMap() {
         setSelectedStop(null);
       });
       map.on("click", (e) => {
-        const hits = map.queryRenderedFeatures(e.point, {
-          layers: [`${TRAINS_SOURCE}-icon`, `${TFL_STOPS_SOURCE}-circle`, `${TFL_BUSES_SOURCE}-icon`],
-        });
+        const layers = [`${TRAINS_SOURCE}-icon`, `${TFL_STOPS_SOURCE}-circle`, `${TFL_BUSES_SOURCE}-icon`].filter(
+          (id) => map.getLayer(id),
+        );
+        const hits = layers.length > 0 ? map.queryRenderedFeatures(e.point, { layers }) : [];
         if (hits.length === 0) {
           setSelectedId(null);
           setSelectedStop(null);

@@ -6,6 +6,8 @@
  * Auth: consumer key in the x-apikey header.
  */
 
+import { tocRegion } from "@mainline/shared";
+
 /** An inline run of a disruption paragraph: plain text or a link. */
 export type Inline = { text: string } | { text: string; href: string };
 
@@ -189,6 +191,19 @@ export async function serviceIndicatorsByToc(): Promise<Map<string, ServiceIndic
   for (const ind of list) {
     map.set(ind.tocName, ind);
     if (ind.tocCode) map.set(ind.tocCode, ind);
+  }
+  return map;
+}
+
+/** Indicators grouped by Network Rail operating region, for a regional dashboard panel. */
+export async function serviceIndicatorsByRegion(): Promise<Map<string, ServiceIndicator[]>> {
+  const list = await fetchServiceIndicators();
+  const map = new Map<string, ServiceIndicator[]>();
+  for (const ind of list) {
+    const region = tocRegion(ind.tocCode) ?? "Other";
+    const group = map.get(region);
+    if (group) group.push(ind);
+    else map.set(region, [ind]);
   }
   return map;
 }
