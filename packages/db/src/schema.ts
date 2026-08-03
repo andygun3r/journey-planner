@@ -43,6 +43,56 @@ export const station = pgTable("station", {
 });
 
 /**
+ * Physical signal positions from the self-hosted OpenRailwayMap import.
+ *
+ * This is the "where is the post on the ground?" layer, independent of whether
+ * Network Rail TD/SOP can report a live aspect for it. Many older/semaphore or
+ * mechanically-worked signals will never have a live digital aspect; they still
+ * belong on the map as grey physical signals when ORM has them.
+ */
+export const ormSignal = pgTable(
+  "orm_signal",
+  {
+    osmId: text("osm_id").primaryKey(),
+    ref: text("ref"),
+    normalizedRef: text("normalized_ref"),
+    caption: text("caption"),
+    signalDirection: text("signal_direction"),
+    signalPosition: text("signal_position"),
+    trackBearing: real("track_bearing"),
+    main: text("main"),
+    mainDesign: text("main_design"),
+    mainFunction: text("main_function"),
+    mainForm: text("main_form"),
+    mainStates: text("main_states"),
+    distant: text("distant"),
+    distantForm: text("distant_form"),
+    distantStates: text("distant_states"),
+    combined: text("combined"),
+    combinedForm: text("combined_form"),
+    combinedStates: text("combined_states"),
+    minor: text("minor"),
+    minorForm: text("minor_form"),
+    shunting: text("shunting"),
+    shuntingForm: text("shunting_form"),
+    mainRepeated: text("main_repeated"),
+    mainRepeatedForm: text("main_repeated_form"),
+    route: text("route"),
+    routeDesign: text("route_design"),
+    routeForm: text("route_form"),
+    routeStates: text("route_states"),
+    tags: jsonb("tags"),
+    lat: real("lat").notNull(),
+    lon: real("lon").notNull(),
+    importedAt: timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("orm_signal_ref_idx").on(t.normalizedRef),
+    index("orm_signal_lon_lat_idx").on(t.lon, t.lat),
+  ],
+);
+
+/**
  * The Rosetta stone: joins GTFS trips (routing engine) to Darwin trains
  * (train_uid + scheduled start date). Emitted by the ETL post-processor.
  */

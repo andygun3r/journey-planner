@@ -28,8 +28,8 @@ export interface LiveTrain {
   path?: PathStop[];
   /**
    * Track-following geometry per leg of `path`: entry i covers path[i] ->
-   * path[i+1] as [lon, lat] pairs, or null where no corridor was precomputed
-   * and the leg should be drawn as a straight chord. See rail_corridor.
+   * path[i+1] as [lon, lat] pairs, or null where no corridor was precomputed.
+   * The map omits null legs so the selected route never draws off-rail chords.
    */
   pathGeometry?: ([number, number][] | null)[];
 }

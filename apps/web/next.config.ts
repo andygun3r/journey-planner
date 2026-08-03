@@ -3,14 +3,16 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
+const appDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(appDir, "../..");
+
 // Load the repo-root .env (single source of truth for the whole monorepo).
 // Next only auto-loads .env files under apps/web, so we apply the root one
 // here. Values already set in the real environment (e.g. docker compose
 // injects DATABASE_URL) win and are not overwritten.
 function loadRootEnv(): void {
   try {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const envPath = resolve(here, "../../.env");
+    const envPath = resolve(repoRoot, ".env");
     const contents = readFileSync(envPath, "utf8");
     for (const line of contents.split("\n")) {
       const trimmed = line.trim();
@@ -41,6 +43,9 @@ const nextConfig: NextConfig = {
     // Default is 10MB — too small for a raw DTD timetable zip (RJTTF*.ZIP
     // runs well past that) uploaded via /api/etl/upload-raw or /api/etl/upload.
     proxyClientMaxBodySize: "500mb",
+  },
+  turbopack: {
+    root: repoRoot,
   },
   // NEXT_PUBLIC_* vars are inlined into the client bundle by the bundler, which
   // snapshots process.env *before* this config module is evaluated — so the

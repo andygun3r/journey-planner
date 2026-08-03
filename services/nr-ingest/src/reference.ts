@@ -1,6 +1,8 @@
 import { createDb, nrCorpus, nrHeadcode, nrSmart } from "@mainline/db";
 import { sql } from "drizzle-orm";
 import { createInterface } from "node:readline";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { Readable } from "node:stream";
 import { gunzipSync } from "node:zlib";
 import { createGunzip } from "node:zlib";
@@ -52,6 +54,15 @@ async function fetchGzJson(path: string): Promise<unknown> {
   return JSON.parse(text);
 }
 
+async function readMaybeGzText(file: string): Promise<string> {
+  const buf = await readFile(file);
+  try {
+    return file.toLowerCase().endsWith(".gz") ? gunzipSync(buf).toString("utf8") : buf.toString("utf8");
+  } catch {
+    return buf.toString("utf8");
+  }
+}
+
 interface CorpusRow {
   STANOX?: string;
   TIPLOC?: string;
@@ -83,6 +94,7 @@ export async function loadCorpus(): Promise<number> {
 }
 
 interface SmartRow {
+  STEPTYPE?: string;
   TD?: string;
   FROMBERTH?: string;
   TOBERTH?: string;
@@ -92,11 +104,83 @@ interface SmartRow {
   BERTHOFFSET?: string;
 }
 
-export async function loadSmart(): Promise<number> {
+const SMART_CSV_COLUMNS = [
+  "TD",
+  "STEPTYPE",
+  "FROMBERTH",
+  "TOBERTH",
+  "STANOX",
+  "STANME",
+  "EVENT",
+  "PLATFORM",
+  "TOLINE",
+  "BERTHOFFSET",
+  "ROUTE",
+  "FROMLINE",
+  "COMMENT",
+];
+
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (quoted && line[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (ch === "," && !quoted) {
+      out.push(cell);
+      cell = "";
+    } else {
+      cell += ch;
+    }
+  }
+  out.push(cell);
+  return out.map((c) => c.trim());
+}
+
+export function parseSmartCsv(text: string): SmartRow[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return [];
+  const first = splitCsvLine(lines[0]!).map((h) => h.trim().toUpperCase());
+  const hasHeader = first.includes("TD") && first.includes("FROMBERTH") && first.includes("TOBERTH");
+  const headers = hasHeader ? first : SMART_CSV_COLUMNS;
+  const dataLines = hasHeader ? lines.slice(1) : lines;
+  return dataLines.map((line) => {
+    const cells = splitCsvLine(line);
+    const row: Record<string, string> = {};
+    headers.forEach((h, i) => {
+      if (cells[i] !== undefined) row[h] = cells[i]!;
+    });
+    return row as SmartRow;
+  });
+}
+
+async function readSmartRowsFromFile(file: string): Promise<SmartRow[]> {
+  const lower = file.toLowerCase();
+  const ungzipped = lower.endsWith(".gz") ? lower.slice(0, -3) : lower;
+  const ext = path.extname(ungzipped);
+  const text = await readMaybeGzText(file);
+  if (ext === ".json") {
+    const parsed = JSON.parse(text) as SmartRow[] | { BERTHDATA?: SmartRow[] };
+    return Array.isArray(parsed) ? parsed : parsed.BERTHDATA ?? [];
+  }
+  if (ext === ".csv") return parseSmartCsv(text);
+  throw new Error(`Unsupported SMART extract format ${ext || "(none)"} (${path.basename(file)})`);
+}
+
+async function writeSmartRows(rowsIn: SmartRow[]): Promise<number> {
   const db = createDb();
-  const json = (await fetchGzJson(SMART_PATH)) as { BERTHDATA?: SmartRow[] };
   const seen = new Set<string>();
-  const rows = (json.BERTHDATA ?? [])
+  const rows = rowsIn
     .map((r) => ({
       tdArea: blankToNull(r.TD),
       fromBerth: blankToNull(r.FROMBERTH) ?? "",
@@ -120,6 +204,16 @@ export async function loadSmart(): Promise<number> {
   }
   console.log(`[nr] loaded ${rows.length} SMART rows`);
   return rows.length;
+}
+
+export async function loadSmart(): Promise<number> {
+  const json = (await fetchGzJson(SMART_PATH)) as { BERTHDATA?: SmartRow[] };
+  return writeSmartRows(json.BERTHDATA ?? []);
+}
+
+export async function loadSmartFromFile(file: string): Promise<number> {
+  const rows = await readSmartRowsFromFile(file);
+  return writeSmartRows(rows);
 }
 
 interface ScheduleLine {

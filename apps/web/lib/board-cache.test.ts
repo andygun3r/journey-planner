@@ -18,6 +18,7 @@ function ok(crs: string): BoardOutcome {
       messages: [],
       disruptions: [],
       departures: [],
+      arrivals: [],
     },
   };
 }

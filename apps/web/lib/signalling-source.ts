@@ -35,6 +35,7 @@ export interface DiagramQuery {
   rid?: string;
   area?: string;
   crs?: string;
+  corridor?: string;
 }
 
 export interface DiagramEmission {
@@ -57,7 +58,7 @@ const EMPTY_LAYOUT: DiagramLayout = {
 };
 
 function keyFor(query: DiagramQuery): string {
-  return `signalling:${query.area ?? ""}|${query.trainId ?? ""}|${query.rid ?? ""}|${query.crs ?? ""}`;
+  return `signalling:${query.area ?? ""}|${query.trainId ?? ""}|${query.rid ?? ""}|${query.crs ?? ""}|${query.corridor ?? ""}`;
 }
 
 /**

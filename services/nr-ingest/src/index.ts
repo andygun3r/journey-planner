@@ -3,6 +3,7 @@ import { parseRtppm, parseTsr, parseVstp } from "./parse-feeds.js";
 import { parseMovements, parseSClass, parseTd } from "./parse.js";
 import { loadSop } from "./load-sop.js";
 import { loadCorpus, loadHeadcodes, loadSmart } from "./reference.js";
+import { syncReferenceFromSftp } from "./reference-sftp.js";
 import { applyRtppm, applyTsr, applyVstp } from "./store-feeds.js";
 import {
   applyActivation,
@@ -14,9 +15,11 @@ import {
 import { beat } from "./heartbeat.js";
 import { closePublisher, publishCrs } from "./publish.js";
 import { connect, nrConfig, TOPICS } from "./stomp.js";
+import { createTdKafka, tdKafkaConfigured, tdKafkaGroupId, tdKafkaTopic, type TdKafkaConsumer } from "./kafka.js";
 
 /**
- * Network Rail ingester: consumes TRUST movements + Train Describer over STOMP,
+ * Network Rail ingester: consumes TRUST movements over Network Rail STOMP and
+ * Train Describer over either Network Rail STOMP or RailData Kafka,
  * translates STANOX/berths to CRS via CORPUS/SMART, and maintains live train
  * positions in Postgres (nr_train_position). Publishes CRS-keyed deltas to
  * Redis. This adds between-station positioning on top of Darwin.
@@ -29,6 +32,9 @@ import { connect, nrConfig, TOPICS } from "./stomp.js";
  * Sub-commands:
  *   (default)   run the live ingester
  *   reference   download + load CORPUS + SMART, then exit
+ *   reference-sftp
+ *               pull SMARTExtract.*.gz and TPS_Data.tar.gz from RDG SFTP,
+ *               process them, delete successfully processed remote files
  *   headcodes   download + load the SCHEDULE feed's uid->headcode map, then
  *               exit — a much larger, slower download (~127MB gzipped) than
  *               `reference`, so it's kept as its own opt-in command rather
@@ -135,9 +141,67 @@ async function runExtraFeeds(): Promise<void> {
 
 let reconnecting = false;
 let extraFeedsStarted = false;
+let tdKafkaStarted = false;
 let activeClient: StompClient | null = null;
+let activeTdKafkaConsumer: TdKafkaConsumer | null = null;
 /** Bumped whenever a client is retired, so its late events can be ignored. */
 let clientGeneration = 0;
+
+async function handleMovementFrame(body: string): Promise<void> {
+  for (const ev of parseMovements(body)) {
+    if (ev.kind === "movement") {
+      const crs = await applyMovement(ev);
+      // Position updates are published from inside the store, so they cover
+      // reports that never resolve to a station. This CRS-keyed one stays for
+      // consumers that watch a station rather than a train.
+      if (crs) publishCrs(crs, ev.trainId);
+      processed++;
+    } else if (ev.kind === "activation") {
+      await applyActivation(ev.trainId, ev.trainUid, ev.scheduleStartDate, ev.originStanox);
+    }
+  }
+}
+
+async function handleTdFrame(body: string): Promise<void> {
+  // The TD stream carries both C-class (berth steps) and S-class (signalling
+  // state) messages; each parser ignores the other's message types.
+  for (const step of parseTd(body)) {
+    const crs = await applyBerthStep(step);
+    if (crs) publishCrs(crs, step.headcode);
+    processed++;
+  }
+  await applySClass(parseSClass(body));
+}
+
+async function runTdKafka(): Promise<void> {
+  const topic = tdKafkaTopic();
+  const groupId = tdKafkaGroupId();
+  const consumer = createTdKafka().consumer({ groupId });
+  activeTdKafkaConsumer = consumer;
+
+  consumer.on(consumer.events.CRASH, ({ payload }) => {
+    console.error("[nr] TD Kafka consumer crashed:", payload.error);
+    process.exit(1);
+  });
+
+  await consumer.connect();
+  await consumer.subscribe({ topic, fromBeginning: false });
+  console.log(`[nr] consuming TD Kafka topic ${topic} as group ${groupId}`);
+
+  await consumer.run({
+    eachMessage: async ({ message }) => {
+      const value = message.value?.toString("utf8");
+      if (!value) return;
+      try {
+        await handleTdFrame(value);
+      } catch (err) {
+        console.error("[nr] td-kafka handler:", (err as Error).message);
+      } finally {
+        maybeLog();
+      }
+    },
+  });
+}
 
 function installShutdown(): void {
   let shuttingDown = false;
@@ -148,6 +212,7 @@ function installShutdown(): void {
     console.log("[nr] shutting down…");
     try {
       activeClient?.disconnect();
+      await activeTdKafkaConsumer?.disconnect();
     } catch {
       /* ignore */
     }
@@ -215,31 +280,20 @@ async function runIngest(): Promise<void> {
   const subscribe = (name: string, topic: string, handler: (body: string) => Promise<void>) =>
     subscribeOn(client, cfg.clientId, name, topic, handler);
 
-  subscribe("movements", TOPICS.trainMovements, async (body) => {
-    for (const ev of parseMovements(body)) {
-      if (ev.kind === "movement") {
-        const crs = await applyMovement(ev);
-        // Position updates are published from inside the store, so they cover
-        // reports that never resolve to a station. This CRS-keyed one stays for
-        // consumers that watch a station rather than a train.
-        if (crs) publishCrs(crs, ev.trainId);
-        processed++;
-      } else if (ev.kind === "activation") {
-        await applyActivation(ev.trainId, ev.trainUid, ev.scheduleStartDate, ev.originStanox);
-      }
-    }
-  });
+  subscribe("movements", TOPICS.trainMovements, handleMovementFrame);
 
-  subscribe("td", TOPICS.trainDescriber, async (body) => {
-    // The TD stream carries both C-class (berth steps) and S-class (signalling
-    // state) messages; each parser ignores the other's message types.
-    for (const step of parseTd(body)) {
-      const crs = await applyBerthStep(step);
-      if (crs) publishCrs(crs, step.headcode);
-      processed++;
+  if (tdKafkaConfigured()) {
+    if (!tdKafkaStarted) {
+      tdKafkaStarted = true;
+      console.log("[nr] TD Kafka env detected; consuming Train Describer from RailData Kafka.");
+      void runTdKafka().catch((err) => {
+        console.error("[nr] td-kafka fatal:", err);
+        process.exit(1);
+      });
     }
-    await applySClass(parseSClass(body));
-  });
+  } else {
+    subscribe("td", TOPICS.trainDescriber, handleTdFrame);
+  }
 
   // Start the non-positioning feeds on their own connection, once (a
   // positioning reconnect must not spawn a second extra-feeds connection).
@@ -281,6 +335,10 @@ if (command === "reference") {
 } else if (command === "headcodes") {
   console.log("[nr] loading uid->headcode map from SCHEDULE (this can take a few minutes)…");
   await loadHeadcodes();
+  process.exit(0);
+} else if (command === "reference-sftp") {
+  console.log("[nr] syncing reference files from SFTP…");
+  await syncReferenceFromSftp();
   process.exit(0);
 } else if (command === "sop") {
   console.log("[nr] loading SOP signalling bit-maps…");

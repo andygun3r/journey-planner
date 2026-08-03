@@ -198,8 +198,8 @@ function findNearestSegment(
   return best;
 }
 
-export async function trackModel(): Promise<void> {
-  const dir = process.env.TRACK_MODEL_DIR ?? join(process.cwd(), "../../data/NWR_TrackModel");
+export async function trackModel(dirOverride?: string): Promise<void> {
+  const dir = dirOverride ?? process.env.TRACK_MODEL_DIR ?? join(process.cwd(), "../../data/NWR_TrackModel");
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
 

@@ -165,34 +165,32 @@ function busRouteToGeoJSON(route: BusRoute | null): FeatureCollection<LineString
 
 /**
  * Build the selected train's route line. Each leg prefers the precomputed
- * track-following corridor (rail_corridor, via pathGeometry) and falls back to
- * a straight chord between the two calling points where none exists — so a
- * route with partial coverage still draws end to end, just less faithfully on
- * the uncovered legs.
+ * track-following corridor (rail_corridor, via pathGeometry). Missing legs are
+ * omitted rather than drawn as straight chords, because the red route must stay
+ * on the same rail geometry the user can see on the OpenRailwayMap base.
  */
 function routeToGeoJSON(train: LiveTrain | null): FeatureCollection<LineString> {
   if (!train?.path || train.path.length < 2) {
     return { type: "FeatureCollection", features: [] };
   }
-  const coordinates: [number, number][] = [];
+  const features: Feature<LineString>[] = [];
+  let coordinates: [number, number][] = [];
   for (let i = 1; i < train.path.length; i += 1) {
-    const from = train.path[i - 1]!;
-    const to = train.path[i]!;
     const leg = train.pathGeometry?.[i - 1];
-    const segment: [number, number][] = leg ?? [
-      [from.lon, from.lat],
-      [to.lon, to.lat],
-    ];
+    if (!leg || leg.length < 2) {
+      if (coordinates.length >= 2) {
+        features.push({ type: "Feature", geometry: { type: "LineString", coordinates }, properties: {} });
+      }
+      coordinates = [];
+      continue;
+    }
     // Drop the duplicated joint where this leg starts on the previous one's end.
-    for (const c of coordinates.length === 0 ? segment : segment.slice(1)) coordinates.push(c);
+    for (const c of coordinates.length === 0 ? leg : leg.slice(1)) coordinates.push(c);
   }
-  if (coordinates.length < 2) return { type: "FeatureCollection", features: [] };
-  const feature: Feature<LineString> = {
-    type: "Feature",
-    geometry: { type: "LineString", coordinates },
-    properties: {},
-  };
-  return { type: "FeatureCollection", features: [feature] };
+  if (coordinates.length >= 2) {
+    features.push({ type: "Feature", geometry: { type: "LineString", coordinates }, properties: {} });
+  }
+  return { type: "FeatureCollection", features };
 }
 
 export function LiveMap() {
@@ -654,6 +652,26 @@ export function LiveMap() {
         },
         paint: { "icon-color": lateBucketColor, "icon-halo-color": "#f4f4f6", "icon-halo-width": 1 },
       });
+      map.addLayer({
+        id: `${TRAINS_SOURCE}-headcode-label`,
+        type: "symbol",
+        source: TRAINS_SOURCE,
+        minzoom: 11,
+        filter: ["!=", ["get", "headcode"], ""],
+        layout: {
+          "text-field": ["get", "headcode"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 11, 9.25, 16, 11],
+          "text-offset": [0, -2.35],
+          "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        },
+        paint: {
+          "text-color": "#12141c",
+          "text-halo-color": "#ffffff",
+          "text-halo-width": 1.6,
+        },
+      });
 
       map.on("click", `${TRAINS_SOURCE}-icon`, (e) => {
         const id = e.features?.[0]?.properties?.id as string | undefined;
@@ -935,17 +953,15 @@ export function LiveMap() {
           <>
             <span className="map-key map-key-sig-off">Signal clear</span>
             <span className="map-key map-key-sig-red">Signal at danger</span>
-            <span className="map-key map-key-sig-unknown">Signal, no data</span>
-            <span className="map-key map-key-berth-occupied">Berth occupied</span>
-            <span className="map-key map-key-berth-blocked">Section ahead blocked</span>
-            <span className="map-key map-key-train-path">Recent path</span>
+            <span className="map-key map-key-sig-unknown">Signal unknown</span>
+            <span className="map-key map-key-headcode-label">Headcode</span>
           </>
         )}
         <span className="map-legend-note">
           Rail positions from Network Rail TRUST &amp; Train Describer — timing-point derived, not
           GPS. Bus positions are approximated from TfL arrival countdowns, not tracked GPS.
           {showSignalling &&
-            " Signal markers only appear where a signal can be tied to a real station location — coverage is partial and uneven across the network, and even a marker with real decoded data may be paired to the wrong physical signal (no reliable id links published SOP maps to specific signals). Berth occupancy, block state and recent paths need no published signal data, don't have that pairing problem, and cover more of the network, but still only where a berth resolves to a real station location."}
+            " Signals use OpenRailwayMap positions where matched, with grey for physical signals that have no live aspect. TD-only fallbacks remain where no physical ORM match is known."}
         </span>
       </p>
     </div>

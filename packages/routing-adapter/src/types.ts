@@ -56,6 +56,9 @@ export interface RawDeparture {
   tripId?: string;
   routeName?: string;
   headsign?: string;
+  /** Origin of this service, used by arrival boards. */
+  originName?: string;
+  originStopId?: string;
   /** Final destination of this service (from the trip's last call). */
   destinationName?: string;
   destinationStopId?: string;
@@ -69,6 +72,7 @@ export interface RawDeparture {
 export interface RoutingEngine {
   plan(query: PlanQuery): Promise<RawItinerary[]>;
   departures(query: DepartureBoardQuery): Promise<RawDeparture[]>;
+  arrivals(query: DepartureBoardQuery): Promise<RawDeparture[]>;
   /** Liveness/readiness probe — false while the engine is importing data. */
   healthy(): Promise<boolean>;
 }

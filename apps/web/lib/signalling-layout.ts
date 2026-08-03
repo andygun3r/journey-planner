@@ -5,12 +5,10 @@
  *
  *   - x = the berth's rank along the running line (longest-path depth), so the
  *     main line reads left→right.
- *   - y is fixed — one lane for the whole corridor. A station's real signalling
- *     diagram reads as a single through line the eye follows left-to-right, not
- *     a branching graph; forcing everything onto one row also guarantees the
- *     board only ever needs a horizontal scrollbar, never a vertical one.
- *     Where several berths land on the same rank (a real branch/junction),
- *     they're nudged apart along x instead of stacking into a second row.
+ *   - y is a compact lane within each rank. A station throat can have several
+ *     berths at the same graph depth; drawing those as a single lane made the
+ *     diagram look like one impossible line. Lanes preserve the left-to-right
+ *     flow while letting branches, bays and platform throats separate visibly.
  *   - a signal sits on each berth boundary (each from→to edge is a section).
  *
  * Pure and deterministic: same graph → same layout, so live overlays register
@@ -56,11 +54,8 @@ export interface DiagramLayout {
 
 const X_STEP = 90;
 const MARGIN = 30;
-// One fixed lane for every berth — see the module docstring.
-const Y = MARGIN;
-// Berths sharing a rank (a branch/junction) spread out along x instead of
-// stacking into extra rows, so the single lane never overlaps itself.
-const SUBCOL_X = 30;
+const Y_STEP = 34;
+const AREA_GAP = 72;
 
 function berthId(tdArea: string, berth: string): string {
   return `${tdArea}:${berth}`;
@@ -176,12 +171,12 @@ export function layoutBerthsFlat(edgesIn: BerthEdge[]): DiagramLayout {
   };
 }
 
-export function layoutBerths(edgesIn: BerthEdge[]): DiagramLayout {
+export function layoutBerths(edgesIn: BerthEdge[], yStep = Y_STEP): DiagramLayout {
   const { nodeList, areaOf, outAdj, edges } = buildBerthGraph(edgesIn);
   const depth = columnDepths(nodeList, outAdj);
 
-  // Group by rank, then spread same-rank berths along x rather than stacking
-  // them into extra rows — the whole corridor stays on one lane.
+  // Group by rank. Same-rank berths are real branches/junctions/bays, so give
+  // them their own vertical lanes rather than compressing them onto one line.
   const byRank = new Map<number, string[]>();
   for (const n of nodeList) {
     const r = depth.get(n) ?? 0;
@@ -189,13 +184,24 @@ export function layoutBerths(edgesIn: BerthEdge[]): DiagramLayout {
   }
   const pos = new Map<string, { x: number; y: number }>();
   let maxX = 0;
+  let minY = MARGIN;
+  let maxY = MARGIN;
   for (const [r, list] of [...byRank.entries()].sort((a, b) => a[0] - b[0])) {
     list.sort((a, b) => a.localeCompare(b));
+    const rankHeight = (list.length - 1) * yStep;
     list.forEach((n, i) => {
-      const x = MARGIN + r * X_STEP + i * SUBCOL_X;
-      pos.set(n, { x, y: Y });
+      const x = MARGIN + r * X_STEP;
+      const y = MARGIN + i * yStep - rankHeight / 2;
+      pos.set(n, { x, y });
       if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
     });
+  }
+  if (minY < MARGIN) {
+    const dy = MARGIN - minY;
+    for (const [id, p] of pos) pos.set(id, { ...p, y: p.y + dy });
+    maxY += dy;
   }
 
   const berths: LaidBerth[] = nodeList.map((n) => {
@@ -223,7 +229,47 @@ export function layoutBerths(edgesIn: BerthEdge[]): DiagramLayout {
     signals,
     edges: edges.map((e) => ({ from: e.from, to: e.to })),
     width: maxX + MARGIN,
-    height: MARGIN * 2,
+    height: Math.max(MARGIN * 2, maxY + MARGIN),
+  };
+}
+
+export function layoutBerthsByArea(edgesIn: BerthEdge[], areaOrder: string[]): DiagramLayout {
+  const order = new Map(areaOrder.map((area, i) => [area, i]));
+  const edgesByArea = new Map<string, BerthEdge[]>();
+  for (const edge of edgesIn) {
+    const list = edgesByArea.get(edge.tdArea);
+    if (list) list.push(edge);
+    else edgesByArea.set(edge.tdArea, [edge]);
+  }
+
+  const areaLayouts = [...edgesByArea.entries()]
+    .sort((a, b) => {
+      const ai = order.get(a[0]) ?? Number.MAX_SAFE_INTEGER;
+      const bi = order.get(b[0]) ?? Number.MAX_SAFE_INTEGER;
+      return ai - bi || a[0].localeCompare(b[0]);
+    })
+    .map(([tdArea, edges]) => ({ tdArea, layout: layoutBerths(edges, 18) }));
+
+  const berths: LaidBerth[] = [];
+  const signals: LaidSignal[] = [];
+  const edges: DiagramLayout["edges"] = [];
+  let yOffset = 0;
+  let width = 0;
+
+  for (const { layout } of areaLayouts) {
+    berths.push(...layout.berths.map((b) => ({ ...b, y: b.y + yOffset })));
+    signals.push(...layout.signals.map((s) => ({ ...s, y: s.y + yOffset })));
+    edges.push(...layout.edges);
+    width = Math.max(width, layout.width);
+    yOffset += layout.height + AREA_GAP;
+  }
+
+  return {
+    berths,
+    signals,
+    edges,
+    width,
+    height: Math.max(MARGIN * 2, yOffset > 0 ? yOffset - AREA_GAP : 0),
   };
 }
 

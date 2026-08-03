@@ -31,7 +31,22 @@ export async function GET(request: Request) {
     const markers = await getSignalMarkersInBbox({ minLon, minLat, maxLon, maxLat });
     const features: Feature<Point>[] = markers.map((m) => ({
       type: "Feature",
-      properties: { id: m.id, itemId: m.itemId, aspect: m.aspect, routeSet: m.routeSet, mapped: m.mapped },
+      properties: {
+        id: m.id,
+        itemId: m.itemId,
+        berthAhead: m.berthAhead,
+        source: m.source,
+        osmId: m.osmId,
+        signalDirection: m.signalDirection,
+        signalPosition: m.signalPosition,
+        trackBearing: m.trackBearing,
+        mainForm: m.mainForm,
+        signalKind: m.signalKind,
+        signalTags: m.signalTags,
+        aspect: m.aspect,
+        routeSet: m.routeSet,
+        mapped: m.mapped,
+      },
       geometry: { type: "Point", coordinates: [m.lon, m.lat] },
     }));
     const collection: FeatureCollection<Point> = { type: "FeatureCollection", features };

@@ -1,5 +1,6 @@
 import {
   nrCorpus,
+  ormSignal,
   nrSignallingState,
   nrSmart,
   nrTrainPosition,
@@ -9,8 +10,10 @@ import {
 } from "@mainline/db";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db";
+import { namedSignallingCorridor } from "./signalling-corridors";
 import {
   layoutBerths,
+  layoutBerthsByArea,
   layoutBerthsFlat,
   reorderByMileage,
   type BerthEdge,
@@ -92,9 +95,11 @@ export async function resolveAreas(opts: {
   rid?: string;
   area?: string;
   crs?: string;
+  corridor?: string;
 }): Promise<{ areas: string[]; focusHeadcode?: string }> {
   const db = getDb();
   if (opts.area) return { areas: [opts.area] };
+  if (opts.corridor) return { areas: await resolveAreasForCorridor(opts.corridor) };
   if (opts.crs) return { areas: await resolveAreasForStation(opts.crs) };
 
   const where = opts.trainId
@@ -138,6 +143,45 @@ async function resolveAreasForStation(crs: string): Promise<string[]> {
   return [...new Set(smartRows.map((r) => r.tdArea))];
 }
 
+async function resolveAreasForCorridor(corridorId: string): Promise<string[]> {
+  const corridor = namedSignallingCorridor(corridorId);
+  if (!corridor) return [];
+
+  const db = getDb();
+  const corpusRows = await db
+    .select({ crs: nrCorpus.crs, stanox: nrCorpus.stanox })
+    .from(nrCorpus)
+    .where(inArray(nrCorpus.crs, corridor.stationCrs));
+  const orderByStanox = new Map<string, number>();
+  const orderByCrs = new Map(corridor.stationCrs.map((crs, i) => [crs, i]));
+  const stanoxes = corpusRows
+    .map((r) => {
+      if (r.stanox) {
+        orderByStanox.set(r.stanox, orderByCrs.get(r.crs ?? "") ?? Number.MAX_SAFE_INTEGER);
+      }
+      return r.stanox;
+    })
+    .filter((s): s is string => Boolean(s));
+  if (stanoxes.length === 0) return [];
+
+  const smartRows = await db
+    .select({ tdArea: nrSmart.tdArea, stanox: nrSmart.stanox })
+    .from(nrSmart)
+    .where(inArray(nrSmart.stanox, stanoxes));
+  const firstStationByArea = new Map<string, number>();
+  for (const row of smartRows) {
+    const order = row.stanox ? orderByStanox.get(row.stanox) : undefined;
+    if (order === undefined) continue;
+    const current = firstStationByArea.get(row.tdArea);
+    if (current === undefined || order < current) firstStationByArea.set(row.tdArea, order);
+  }
+  return [...new Set(smartRows.map((r) => r.tdArea))].sort((a, b) => {
+    const ai = firstStationByArea.get(a) ?? Number.MAX_SAFE_INTEGER;
+    const bi = firstStationByArea.get(b) ?? Number.MAX_SAFE_INTEGER;
+    return ai - bi || a.localeCompare(b);
+  });
+}
+
 /**
  * The corridor's shape, cached.
  *
@@ -176,7 +220,7 @@ export async function getLayout(areas: string[]): Promise<DiagramLayout> {
   const edges: BerthEdge[] = smart
     .filter((s) => s.from && s.to)
     .map((s) => ({ tdArea: s.tdArea, from: s.from as string, to: s.to as string }));
-  const layout = layoutBerths(edges);
+  const layout = areas.length > 1 ? layoutBerthsByArea(edges, areas) : layoutBerths(edges);
   const withPlaces = await attachPlaceNames(layout, smart);
   const withMileage = await applyMileageAnchors(withPlaces);
 
@@ -438,6 +482,7 @@ export async function getDiagramForTrain(opts: {
   rid?: string;
   area?: string;
   crs?: string;
+  corridor?: string;
 }): Promise<CorridorDiagram> {
   const { areas, focusHeadcode } = await resolveAreas(opts);
   if (areas.length === 0) return EMPTY();
@@ -453,6 +498,15 @@ export async function getDiagramForTrain(opts: {
 export interface GeoSignalMarker {
   id: string;
   itemId?: string;
+  berthAhead?: string;
+  source: "td" | "orm";
+  osmId?: string;
+  signalDirection?: string;
+  signalPosition?: string;
+  trackBearing?: number;
+  mainForm?: string;
+  signalKind?: string;
+  signalTags?: Record<string, string>;
   aspect: Aspect;
   routeSet?: boolean;
   mapped: boolean;
@@ -488,6 +542,74 @@ interface NationalSnapshot {
   layout: DiagramLayout;
   state: DiagramState;
   matchedByCrs: Map<string, { lat: number; lon: number }>;
+  ormSignals: OrmPhysicalSignal[];
+}
+
+interface OrmPhysicalSignal {
+  osmId: string;
+  ref?: string;
+  normalizedRef?: string;
+  caption?: string;
+  signalDirection?: string;
+  signalPosition?: string;
+  trackBearing?: number;
+  main?: string;
+  mainDesign?: string;
+  mainFunction?: string;
+  mainForm?: string;
+  mainStates?: string;
+  distant?: string;
+  distantForm?: string;
+  distantStates?: string;
+  combined?: string;
+  combinedForm?: string;
+  combinedStates?: string;
+  minor?: string;
+  minorForm?: string;
+  shunting?: string;
+  shuntingForm?: string;
+  mainRepeated?: string;
+  mainRepeatedForm?: string;
+  route?: string;
+  routeDesign?: string;
+  routeForm?: string;
+  routeStates?: string;
+  tags?: Record<string, string>;
+  lat: number;
+  lon: number;
+}
+
+function normalizeSignalRef(value: string | undefined): string | undefined {
+  const normalized = value?.replace(/[^A-Za-z0-9]/g, "").toUpperCase() ?? "";
+  return normalized || undefined;
+}
+
+function offsetSignalPosition(signal: OrmPhysicalSignal): { lat: number; lon: number } {
+  const position = signal.signalPosition?.toLowerCase();
+  if (position !== "left" && position !== "right") return { lat: signal.lat, lon: signal.lon };
+  if (typeof signal.trackBearing !== "number" || Number.isNaN(signal.trackBearing)) {
+    return { lat: signal.lat, lon: signal.lon };
+  }
+
+  const sideBearing = signal.trackBearing + (position === "right" ? 90 : -90);
+  const radians = (sideBearing * Math.PI) / 180;
+  const metres = 4.5;
+  const north = Math.cos(radians) * metres;
+  const east = Math.sin(radians) * metres;
+  const lat = signal.lat + north / 111_320;
+  const lon = signal.lon + east / (111_320 * Math.cos((signal.lat * Math.PI) / 180));
+  return { lat, lon };
+}
+
+function signalKind(signal: OrmPhysicalSignal): string | undefined {
+  if (signal.combined) return "combined";
+  if (signal.main) return "main";
+  if (signal.distant) return "distant";
+  if (signal.mainRepeated) return "main_repeated";
+  if (signal.shunting) return "shunting";
+  if (signal.minor) return "minor";
+  if (signal.route) return "route";
+  return undefined;
 }
 
 /**
@@ -574,7 +696,76 @@ async function getNationalSnapshot(): Promise<NationalSnapshot> {
       for (const p of positions) matchedByCrs.set(p.crs, { lat: p.matchedLat, lon: p.matchedLon });
     }
 
-    const snapshot: NationalSnapshot = { layout, state, matchedByCrs };
+    const ormRows = await db
+      .select({
+        osmId: ormSignal.osmId,
+        ref: ormSignal.ref,
+        normalizedRef: ormSignal.normalizedRef,
+        caption: ormSignal.caption,
+        signalDirection: ormSignal.signalDirection,
+        signalPosition: ormSignal.signalPosition,
+        trackBearing: ormSignal.trackBearing,
+        main: ormSignal.main,
+        mainDesign: ormSignal.mainDesign,
+        mainFunction: ormSignal.mainFunction,
+        mainForm: ormSignal.mainForm,
+        mainStates: ormSignal.mainStates,
+        distant: ormSignal.distant,
+        distantForm: ormSignal.distantForm,
+        distantStates: ormSignal.distantStates,
+        combined: ormSignal.combined,
+        combinedForm: ormSignal.combinedForm,
+        combinedStates: ormSignal.combinedStates,
+        minor: ormSignal.minor,
+        minorForm: ormSignal.minorForm,
+        shunting: ormSignal.shunting,
+        shuntingForm: ormSignal.shuntingForm,
+        mainRepeated: ormSignal.mainRepeated,
+        mainRepeatedForm: ormSignal.mainRepeatedForm,
+        route: ormSignal.route,
+        routeDesign: ormSignal.routeDesign,
+        routeForm: ormSignal.routeForm,
+        routeStates: ormSignal.routeStates,
+        tags: ormSignal.tags,
+        lat: ormSignal.lat,
+        lon: ormSignal.lon,
+      })
+      .from(ormSignal);
+    const ormSignals = ormRows.map((r) => ({
+      osmId: r.osmId,
+      ref: r.ref ?? undefined,
+      normalizedRef: r.normalizedRef ?? undefined,
+      caption: r.caption ?? undefined,
+      signalDirection: r.signalDirection ?? undefined,
+      signalPosition: r.signalPosition ?? undefined,
+      trackBearing: r.trackBearing ?? undefined,
+      main: r.main ?? undefined,
+      mainDesign: r.mainDesign ?? undefined,
+      mainFunction: r.mainFunction ?? undefined,
+      mainForm: r.mainForm ?? undefined,
+      mainStates: r.mainStates ?? undefined,
+      distant: r.distant ?? undefined,
+      distantForm: r.distantForm ?? undefined,
+      distantStates: r.distantStates ?? undefined,
+      combined: r.combined ?? undefined,
+      combinedForm: r.combinedForm ?? undefined,
+      combinedStates: r.combinedStates ?? undefined,
+      minor: r.minor ?? undefined,
+      minorForm: r.minorForm ?? undefined,
+      shunting: r.shunting ?? undefined,
+      shuntingForm: r.shuntingForm ?? undefined,
+      mainRepeated: r.mainRepeated ?? undefined,
+      mainRepeatedForm: r.mainRepeatedForm ?? undefined,
+      route: r.route ?? undefined,
+      routeDesign: r.routeDesign ?? undefined,
+      routeForm: r.routeForm ?? undefined,
+      routeStates: r.routeStates ?? undefined,
+      tags: (r.tags as Record<string, string> | null) ?? undefined,
+      lat: r.lat,
+      lon: r.lon,
+    }));
+
+    const snapshot: NationalSnapshot = { layout, state, matchedByCrs, ormSignals };
     nationalSnapshotCache = { at: Date.now(), snapshot };
     return snapshot;
   })();
@@ -599,20 +790,78 @@ async function getNationalSnapshot(): Promise<NationalSnapshot> {
  * further.
  */
 async function getAllAreasSignalMarkers(): Promise<GeoSignalMarker[]> {
-  const { layout, state, matchedByCrs } = await getNationalSnapshot();
+  const { layout, state, matchedByCrs, ormSignals } = await getNationalSnapshot();
   const berthById = new Map(layout.berths.map((b) => [b.id, b]));
+  const ormByRef = new Map<string, OrmPhysicalSignal[]>();
+  for (const signal of ormSignals) {
+    if (!signal.normalizedRef) continue;
+    const list = ormByRef.get(signal.normalizedRef);
+    if (list) list.push(signal);
+    else ormByRef.set(signal.normalizedRef, [signal]);
+  }
+  const matchedOsmIds = new Set<string>();
 
   const markers: GeoSignalMarker[] = [];
   for (const sig of state.signals) {
+    const ormMatches = normalizeSignalRef(sig.itemId) ? (ormByRef.get(normalizeSignalRef(sig.itemId)!) ?? []) : [];
+    if (ormMatches.length > 0) {
+      for (const ormMatch of ormMatches) {
+        const point = offsetSignalPosition(ormMatch);
+        matchedOsmIds.add(ormMatch.osmId);
+        markers.push({
+          id: `orm:${ormMatch.osmId}`,
+          itemId: sig.itemId ?? ormMatch.ref,
+          berthAhead: sig.berthAhead,
+          source: "orm",
+          osmId: ormMatch.osmId,
+          signalDirection: ormMatch.signalDirection,
+          signalPosition: ormMatch.signalPosition,
+          trackBearing: ormMatch.trackBearing,
+          mainForm: ormMatch.mainForm ?? ormMatch.combinedForm ?? ormMatch.distantForm ?? ormMatch.shuntingForm ?? ormMatch.minorForm,
+          signalKind: signalKind(ormMatch),
+          signalTags: ormMatch.tags,
+          aspect: sig.aspect,
+          routeSet: sig.routeSet,
+          mapped: sig.mapped,
+          lat: point.lat,
+          lon: point.lon,
+        });
+      }
+      continue;
+    }
+
     const berth = berthById.get(sig.berthAhead ?? "");
     const point = berth?.crs ? matchedByCrs.get(berth.crs) : undefined;
     if (!point) continue; // no real coordinate for this signal — omit, don't fabricate
     markers.push({
       id: sig.id,
       itemId: sig.itemId,
+      berthAhead: sig.berthAhead,
+      source: "td",
       aspect: sig.aspect,
       routeSet: sig.routeSet,
       mapped: sig.mapped,
+      lat: point.lat,
+      lon: point.lon,
+    });
+  }
+
+  for (const signal of ormSignals) {
+    if (matchedOsmIds.has(signal.osmId)) continue;
+    const point = offsetSignalPosition(signal);
+    markers.push({
+      id: `orm:${signal.osmId}`,
+      itemId: signal.ref ?? signal.caption,
+      source: "orm",
+      osmId: signal.osmId,
+      signalDirection: signal.signalDirection,
+      signalPosition: signal.signalPosition,
+      trackBearing: signal.trackBearing,
+      mainForm: signal.mainForm ?? signal.combinedForm ?? signal.distantForm ?? signal.shuntingForm ?? signal.minorForm,
+      signalKind: signalKind(signal),
+      signalTags: signal.tags,
+      aspect: "unknown",
+      mapped: false,
       lat: point.lat,
       lon: point.lon,
     });

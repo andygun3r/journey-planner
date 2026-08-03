@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 
 /**
  * Loads SOP / ECS bit-map reference data into sop_mapping. Each TD area's file
@@ -14,14 +15,11 @@ import { fileURLToPath } from "node:url";
  * specs / FOI releases) — Network Rail publishes no single download, and not
  * every area is documented. Drop files into data/sop/ (or $SOP_DIR) and re-run.
  *
- * Format is pluggable; JSON is the default. A file is either an array of rows,
- * or `{ tdArea, rows: [...] }` where per-row tdArea may be omitted. Each row:
- *   { tdArea?, address, bit, itemType, itemId?, aspect?, description? }
- * `address` is hex (case-insensitive); `bit` is 0-7. Extend parseFile() to add
- * CSV or other formats without touching the rest of the pipeline.
+ * Supported formats are JSON, CSV, TSV, TXT, and gzipped versions of those.
+ * JSON is either an array of rows or `{ tdArea, rows: [...] }`; delimited files
+ * use a header row with the same normalized column names.
  */
 
-const db = createDb();
 const BATCH = 1000;
 
 export interface SopRow {
@@ -58,21 +56,74 @@ function normAddr(a: string | number): string {
   return n.toString(16).toLowerCase().padStart(2, "0");
 }
 
-/** Parse one SOP file into normalized rows. Default format: JSON. */
-async function parseFile(file: string): Promise<SopRow[]> {
-  const ext = path.extname(file).toLowerCase();
-  const raw = await readFile(file, "utf-8");
-  if (ext !== ".json") {
-    throw new Error(`unsupported SOP format ${ext} (${path.basename(file)}) — only .json for now`);
-  }
-  const parsed = JSON.parse(raw) as
-    | Array<Record<string, unknown>>
-    | { tdArea?: string; rows: Array<Record<string, unknown>> };
-  const fileArea =
-    Array.isArray(parsed) ? undefined : (parsed.tdArea as string | undefined);
-  const list = Array.isArray(parsed) ? parsed : parsed.rows;
-  if (!Array.isArray(list)) throw new Error(`${path.basename(file)}: no rows`);
+function formatOf(file: string): string {
+  const lower = file.toLowerCase();
+  const ungzipped = lower.endsWith(".gz") ? lower.slice(0, -3) : lower;
+  return path.extname(ungzipped);
+}
 
+async function readText(file: string): Promise<string> {
+  const buf = await readFile(file);
+  return file.toLowerCase().endsWith(".gz") ? gunzipSync(buf).toString("utf-8") : buf.toString("utf-8");
+}
+
+function normalizeColumn(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function canonicalColumn(name: string): string | undefined {
+  const n = normalizeColumn(name);
+  if (["tdarea", "area", "describer", "td"].includes(n)) return "tdArea";
+  if (["address", "addr", "byte", "sclassaddress"].includes(n)) return "address";
+  if (["bit", "bitindex", "bitno", "bitnumber"].includes(n)) return "bit";
+  if (["itemtype", "type", "function"].includes(n)) return "itemType";
+  if (["itemid", "id", "item", "signal", "signalid", "signalnumber"].includes(n)) return "itemId";
+  if (["aspect", "state", "indication"].includes(n)) return "aspect";
+  if (["description", "desc", "name"].includes(n)) return "description";
+  return undefined;
+}
+
+function splitDelimitedLine(line: string, delimiter: string): string[] {
+  const out: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (quoted && line[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (ch === delimiter && !quoted) {
+      out.push(cell);
+      cell = "";
+    } else {
+      cell += ch;
+    }
+  }
+  out.push(cell);
+  return out.map((c) => c.trim());
+}
+
+function inferDelimiter(raw: string, ext: string): string {
+  if (ext === ".tsv") return "\t";
+  const firstDataLine = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith("#"));
+  if (firstDataLine?.includes("\t")) return "\t";
+  return ",";
+}
+
+function normalizeRows(
+  list: Array<Record<string, unknown>>,
+  fileArea?: string,
+): SopRow[] {
   const rows: SopRow[] = [];
   for (const r of list) {
     const tdArea = ((r.tdArea as string) ?? fileArea)?.trim();
@@ -94,11 +145,67 @@ async function parseFile(file: string): Promise<SopRow[]> {
   return rows;
 }
 
+function parseJsonRows(file: string, raw: string): SopRow[] {
+  const parsed = JSON.parse(raw) as
+    | Array<Record<string, unknown>>
+    | { tdArea?: string; rows: Array<Record<string, unknown>> };
+  const fileArea =
+    Array.isArray(parsed) ? undefined : (parsed.tdArea as string | undefined);
+  const list = Array.isArray(parsed) ? parsed : parsed.rows;
+  if (!Array.isArray(list)) throw new Error(`${path.basename(file)}: no rows`);
+  return normalizeRows(list, fileArea);
+}
+
+function parseDelimitedRows(file: string, raw: string, ext: string): SopRow[] {
+  const delimiter = inferDelimiter(raw, ext);
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+  if (lines.length === 0) return [];
+
+  const headers = splitDelimitedLine(lines[0]!, delimiter).map(canonicalColumn);
+  const list = lines.slice(1).map((line) => {
+    const cells = splitDelimitedLine(line, delimiter);
+    const row: Record<string, unknown> = {};
+    headers.forEach((h, i) => {
+      if (h && cells[i] !== undefined) row[h] = cells[i];
+    });
+    return row;
+  });
+  return normalizeRows(list);
+}
+
+/** Parse one SOP file into normalized rows. */
+export async function parseSopFile(file: string): Promise<SopRow[]> {
+  const ext = formatOf(file);
+  const raw = await readText(file);
+  if (ext === ".json") return parseJsonRows(file, raw);
+  if (ext === ".csv" || ext === ".tsv" || ext === ".txt") return parseDelimitedRows(file, raw, ext);
+  throw new Error(
+    `unsupported SOP format ${ext || "(none)"} (${path.basename(file)}) — use .json, .csv, .tsv, .txt or .gz`,
+  );
+}
+
+function isSopFile(file: string): boolean {
+  const ext = formatOf(file);
+  return ext === ".json" || ext === ".csv" || ext === ".tsv" || ext === ".txt";
+}
+
+async function parseFile(file: string): Promise<SopRow[]> {
+  try {
+    return await parseSopFile(file);
+  } catch (err) {
+    throw new Error(`${path.basename(file)}: ${(err as Error).message}`);
+  }
+}
+
 export async function loadSop(): Promise<void> {
+  const db = createDb();
   const dir = sopDir();
   let files: string[];
   try {
-    files = (await readdir(dir)).filter((f) => f.toLowerCase().endsWith(".json"));
+    files = (await readdir(dir)).filter(isSopFile);
   } catch {
     console.warn(`[nr] SOP dir not found (${dir}) — no signalling maps loaded.`);
     return;

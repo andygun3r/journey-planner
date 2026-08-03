@@ -221,6 +221,12 @@ importers:
       ioredis:
         specifier: ^5.6.0
         version: 5.11.1
+      kafkajs:
+        specifier: ^2.2.4
+        version: 2.2.4
+      ssh2-sftp-client:
+        specifier: ^12.1.1
+        version: 12.1.1
       stompit:
         specifier: ^1.0.0
         version: 1.0.0
@@ -228,6 +234,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.13.3
+      '@types/ssh2-sftp-client':
+        specifier: ^9.0.6
+        version: 9.0.6
       '@types/stompit':
         specifier: ^0.26.6
         version: 0.26.6

@@ -1,5 +1,6 @@
-import { darwinFormation } from "@mainline/db";
-import { eq } from "drizzle-orm";
+import { darwinFormation, darwinStopForecast, darwinTrain, station } from "@mainline/db";
+import { tocName } from "@mainline/shared";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { CallProgress } from "./call-status";
 import { getDb } from "./db";
 import { enrichWithDarwinProgress, enrichWithNrProgress, frontIndex } from "./service-progress";
@@ -198,6 +199,19 @@ export function serviceDetailsConfigured(): boolean {
   return Boolean(process.env.LDBWS_SERVICE_API_KEY && process.env.LDBWS_SERVICE_BASE_URL);
 }
 
+export function ridServiceId(rid: string): string {
+  return `rid:${rid}`;
+}
+
+export function isRidServiceId(id: string): boolean {
+  return id.startsWith("rid:");
+}
+
+function ridFromServiceId(id: string): string | null {
+  const rid = id.slice("rid:".length).trim();
+  return rid.length > 0 ? rid : null;
+}
+
 /** The `callingPointList` groups, normalised and with their points normalised too. */
 function callingPointLists(
   groups: RawCallingPointList | RawCallingPointList[] | undefined,
@@ -247,6 +261,52 @@ function datePattern(calls: ServiceCall[], anchor: Date): ServiceCall[] {
       actualIso: hhmmNear(c.actual, base),
     };
   });
+}
+
+async function enrichLiveProgress(
+  calls: ServiceCall[],
+  knownRid?: string,
+): Promise<{ calls: ServiceCall[]; progress: ServiceProgress; rid?: string }> {
+  const darwin = await enrichWithDarwinProgress(calls);
+  let finalCalls = darwin.calls;
+  let finalProgress = darwin.progress;
+  let finalRid = darwin.rid ?? knownRid;
+
+  if (!darwin.rid && knownRid) {
+    finalProgress = {
+      ...finalProgress,
+      tracking: true,
+      positionState: "awaiting-report",
+    };
+  }
+
+  const nr = await enrichWithNrProgress(finalCalls, finalRid).catch(() => null);
+  if (nr) {
+    const currentFront = frontIndex(finalCalls);
+    const nrFront = frontIndex(nr.calls);
+    if (nrFront > currentFront) {
+      finalCalls = finalCalls.map((c, i) => ({
+        ...c,
+        progress: nr.calls[i]?.progress ?? c.progress,
+      }));
+      finalProgress = {
+        ...finalProgress,
+        tracking: true,
+        positionState: "tracked",
+        arrived: finalProgress.tracking ? finalProgress.arrived : nr.progress.arrived,
+        lastStopName: nr.progress.lastStopName,
+        nextStopName: nr.progress.nextStopName,
+        networkRail: true,
+        nrLastLocation: nr.progress.nrLastLocation,
+        nrLastEvent: nr.progress.nrLastEvent,
+      };
+    } else if (!finalProgress.tracking) {
+      finalCalls = nr.calls;
+      finalProgress = { ...nr.progress, delayMinutes: finalProgress.delayMinutes };
+    }
+  }
+
+  return { calls: finalCalls, progress: finalProgress, rid: finalRid };
 }
 
 /** An "HH:MM" resolved against a nearby instant; undefined for status strings. */
@@ -406,52 +466,8 @@ export async function fetchServiceDetails(serviceId: string): Promise<ServiceDet
   let calls = parsed.calls;
   const { portions } = parsed;
 
-  // Resolve the run against Darwin first — it's still the only source for the
-  // schedule, platforms, cancellation reasons, and (necessarily) any estimate
-  // for a stop the train hasn't reached yet, since neither TRUST nor TD can
-  // predict ahead of where the train has actually been. But WITHIN that
-  // resolve, position/progress/actual-time/delay are already TRUST+TD
-  // primary — see trustProgressForRid in service-progress.ts — because
-  // Darwin's own actArr/actDep have shown up stale/out-of-order after a Kafka
-  // replay (see CLAUDE.md), a class of bug TRUST/TD's append-only event log
-  // doesn't have.
-  const { calls: darwinCalls, progress: darwinProgress, rid } = await enrichWithDarwinProgress(calls);
-  calls = darwinCalls;
-  let finalProgress = darwinProgress;
-
-  // A second, independent TD correlation as a forward-only safety net: when
-  // the live nr_train_position snapshot is even fresher than the history rows
-  // enrichWithDarwinProgress already saw, or when Darwin never resolved a rid
-  // at all (missed activation after an outage), this can still find the train
-  // by anonymous headcode/timing correlation.
-  const nr = await enrichWithNrProgress(calls, rid).catch(() => null);
-  if (nr) {
-    // Crucially this only ever refines FORWARD. TD berth reports here are
-    // anonymous (no rid), so letting them drag the front backwards would let
-    // a mis-correlated report un-happen a stop the train demonstrably passed.
-    // A fresher report can move the train on; it can never move it back.
-    const darwinFront = frontIndex(calls);
-    const nrFront = frontIndex(nr.calls);
-    if (nrFront > darwinFront) {
-      calls = calls.map((c, i) => ({ ...c, progress: nr.calls[i]?.progress ?? c.progress }));
-      finalProgress = {
-        ...finalProgress,
-        tracking: true,
-        positionState: "tracked",
-        arrived: darwinProgress.tracking ? finalProgress.arrived : nr.progress.arrived,
-        lastStopName: nr.progress.lastStopName,
-        nextStopName: nr.progress.nextStopName,
-        networkRail: true,
-        nrLastLocation: nr.progress.nrLastLocation,
-        nrLastEvent: nr.progress.nrLastEvent,
-      };
-    } else if (!darwinProgress.tracking) {
-      // Darwin never resolved at all, so there is no front to move forward
-      // from — TD is all we have, and it cleared the strict correlation.
-      calls = nr.calls;
-      finalProgress = { ...nr.progress, delayMinutes: finalProgress.delayMinutes };
-    }
-  }
+  const live = await enrichLiveProgress(calls);
+  calls = live.calls;
   let coaches: ServiceCoach[] = normaliseList(d.formation?.coaches).map((c) => ({
     number: c.number ?? "",
     first: /first/i.test(c.coachClass ?? ""),
@@ -460,8 +476,8 @@ export async function fetchServiceDetails(serviceId: string): Promise<ServiceDet
     toilet:
       typeof c.toilet === "string" ? c.toilet : (c.toilet?.value ?? c.toilet?.status),
   }));
-  if (coaches.length === 0 && rid) {
-    coaches = (await fallbackFormation(rid)) ?? coaches;
+  if (coaches.length === 0 && live.rid) {
+    coaches = (await fallbackFormation(live.rid)) ?? coaches;
   }
 
   return {
@@ -479,7 +495,142 @@ export async function fetchServiceDetails(serviceId: string): Promise<ServiceDet
     length: d.length && d.length > 0 ? d.length : undefined,
     calls,
     portions,
-    progress: finalProgress,
+    progress: live.progress,
+    rid: live.rid,
+  };
+}
+
+function trimHhmm(value: string | null | undefined): string | undefined {
+  return value ? value.slice(0, 5) : undefined;
+}
+
+function serviceDateAnchor(ssd: Date | string): Date {
+  const date = typeof ssd === "string" ? ssd : ssd.toISOString().slice(0, 10);
+  // Midday avoids UTC/BST edges while still giving resolvePatternTimes the
+  // correct service date for overnight trains.
+  return new Date(`${date}T12:00:00Z`);
+}
+
+function scheduledTime(s: {
+  schedArr: string | null;
+  schedDep: string | null;
+  schedPass: string | null;
+}): string | undefined {
+  return trimHhmm(s.schedDep ?? s.schedArr ?? s.schedPass);
+}
+
+function liveTime(s: {
+  actArr: string | null;
+  actDep: string | null;
+  estArr: string | null;
+  estDep: string | null;
+}): { actual?: string; expected?: string } {
+  return {
+    actual: trimHhmm(s.actDep ?? s.actArr),
+    expected: trimHhmm(s.estDep ?? s.estArr),
+  };
+}
+
+export async function fetchServiceDetailsByRid(rid: string): Promise<ServiceDetails | null> {
+  const db = getDb();
+
+  const trainRows = await db
+    .select({
+      rid: darwinTrain.rid,
+      uid: darwinTrain.uid,
+      ssd: darwinTrain.ssd,
+      toc: darwinTrain.toc,
+      cancelled: darwinTrain.cancelled,
+      cancelReason: darwinTrain.cancelReason,
+      lateReason: darwinTrain.lateReason,
+    })
+    .from(darwinTrain)
+    .where(eq(darwinTrain.rid, rid))
+    .limit(1);
+  const train = trainRows[0];
+  if (!train) return null;
+
+  const rows = await db
+    .select({
+      seq: darwinStopForecast.seq,
+      crs: darwinStopForecast.crs,
+      schedArr: darwinStopForecast.schedArr,
+      schedDep: darwinStopForecast.schedDep,
+      schedPass: darwinStopForecast.schedPass,
+      estArr: darwinStopForecast.estArr,
+      estDep: darwinStopForecast.estDep,
+      actArr: darwinStopForecast.actArr,
+      actDep: darwinStopForecast.actDep,
+      platform: darwinStopForecast.platform,
+      suppressed: darwinStopForecast.suppressed,
+    })
+    .from(darwinStopForecast)
+    .where(eq(darwinStopForecast.rid, rid))
+    .orderBy(sql`${darwinStopForecast.seq} asc`);
+
+  const withCrs = rows.filter((r) => r.crs);
+  if (withCrs.length === 0) return null;
+
+  const publicStops = withCrs.filter(
+    (r) => r.schedArr || r.schedDep || r.estArr || r.estDep || r.actArr || r.actDep,
+  );
+  const stops = publicStops.length >= 2 ? publicStops : withCrs;
+  const crsValues = [...new Set(stops.map((s) => s.crs).filter(Boolean) as string[])];
+  const stationRows =
+    crsValues.length > 0
+      ? await db
+          .select({ crs: station.crs, name: station.name })
+          .from(station)
+          .where(inArray(station.crs, crsValues))
+      : [];
+  const stationNameByCrs = new Map(stationRows.map((s) => [s.crs, s.name]));
+
+  const calls = datePattern(
+    stops.map((s, i): ServiceCall => {
+      const live = liveTime(s);
+      return {
+        crs: s.crs ?? undefined,
+        name: s.crs ? (stationNameByCrs.get(s.crs) ?? s.crs) : "",
+        scheduled: scheduledTime(s),
+        actual: live.actual,
+        expected: live.expected,
+        platform: s.platform ?? undefined,
+        cancelled: train.cancelled || s.suppressed,
+        isThisStop: i === 0,
+      };
+    }),
+    serviceDateAnchor(train.ssd),
+  );
+
+  const live = await enrichLiveProgress(calls, rid);
+  const coaches = (await fallbackFormation(rid)) ?? [];
+  const first = live.calls[0];
+  const origin = first?.name ?? "";
+
+  return {
+    stationName: origin,
+    crs: first?.crs ?? "",
+    operator: train.toc ? (tocName(train.toc) ?? train.toc) : undefined,
+    operatorCode: train.toc ?? undefined,
+    platform: first?.platform,
+    scheduledDeparture: first?.scheduled,
+    expectedDeparture: first?.actual ?? first?.expected,
+    cancelled: train.cancelled,
+    cancelReason: train.cancelReason ?? undefined,
+    delayReason: train.lateReason ?? undefined,
+    coaches,
+    length: coaches.length || undefined,
+    calls: live.calls,
+    portions: [],
+    progress: live.progress,
     rid,
   };
+}
+
+export async function fetchServiceDetailsById(id: string): Promise<ServiceDetails | null> {
+  if (isRidServiceId(id)) {
+    const rid = ridFromServiceId(id);
+    return rid ? fetchServiceDetailsByRid(rid) : null;
+  }
+  return fetchServiceDetails(id);
 }

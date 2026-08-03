@@ -8,7 +8,8 @@ import { ServicePositionMap } from "@/components/service-position-map";
 import { callLiveStatus, deltaChip, type CallLiveStatus } from "@/lib/call-status";
 import { serviceIndicatorsByToc, type ServiceIndicator } from "@/lib/disruptions";
 import {
-  fetchServiceDetails,
+  fetchServiceDetailsById,
+  isRidServiceId,
   serviceDetailsConfigured,
   type ServiceCall,
   type ServiceCoach,
@@ -274,7 +275,7 @@ export default async function ServicePage({
   const { id } = await params;
   const { from } = await searchParams;
 
-  if (!serviceDetailsConfigured()) {
+  if (!isRidServiceId(id) && !serviceDetailsConfigured()) {
     return (
       <main>
         <div className="results-head">
@@ -288,10 +289,10 @@ export default async function ServicePage({
     );
   }
 
-  const service = await fetchServiceDetails(id);
+  const service = await fetchServiceDetailsById(id);
   if (!service) notFound();
 
-  const backHref = from ? `/boards/${from}` : "/boards";
+  const backHref = from === "map" ? "/map" : from ? `/boards/${from}` : "/boards";
 
   const statusText =
     service.progress.tracking && !service.progress.arrived && !service.cancelled

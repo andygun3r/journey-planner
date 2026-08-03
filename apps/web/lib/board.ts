@@ -12,6 +12,8 @@ import { fetchLdbwsBoard, ldbwsConfigured } from "./ldbws";
 import { getRtppmByOperatorName } from "./rtppm";
 import { stationName } from "./stations";
 import { getDb } from "./db";
+import { vstpDeparturesForBoard } from "./vstp-board";
+import { ukHhmm } from "./uk-time";
 
 /** Where a board's data came from — drives the UI provenance badge. */
 export type BoardSource = "ldbws" | "darwin" | "timetable";
@@ -31,6 +33,8 @@ export interface BoardDeparture {
   tripId?: string;
   /** Darwin run id, once the live overlay has matched this trip. */
   rid?: string;
+  originName?: string;
+  originCrs?: string;
   destinationName: string;
   destinationCrs?: string;
   operator?: string;
@@ -95,6 +99,7 @@ export interface BoardResult {
   /** Structured active disruptions from the Disruptions API. */
   disruptions: Disruption[];
   departures: BoardDeparture[];
+  arrivals: BoardDeparture[];
 }
 
 export type BoardOutcome =
@@ -150,6 +155,23 @@ function scheduledRow(raw: RawDeparture): BoardDeparture {
   };
 }
 
+function scheduledArrivalRow(raw: RawDeparture): BoardDeparture {
+  return {
+    tripId: raw.tripId,
+    originName: raw.originName ?? raw.headsign ?? "",
+    originCrs: raw.originStopId,
+    destinationName: raw.destinationName ?? "",
+    destinationCrs: raw.destinationStopId,
+    operator: operatorFromRouteName(raw.routeName),
+    scheduled: raw.scheduled,
+    live: raw.live,
+    platform: undefined,
+    platformChanged: false,
+    status: raw.cancelled ? "cancelled" : "scheduled",
+    hasLive: false,
+  };
+}
+
 /**
  * Order rows by when they will actually leave, tagging any the live picture
  * has displaced. Applied to both source paths so the two boards behave alike.
@@ -158,6 +180,31 @@ function inExpectedOrder(departures: BoardDeparture[]): BoardDeparture[] {
   return orderByExpectedDeparture(departures).map(({ departure, movedFromSchedule }) =>
     movedFromSchedule ? { ...departure, movedFromSchedule } : departure,
   );
+}
+
+function inExpectedArrivalOrder(arrivals: BoardDeparture[]): BoardDeparture[] {
+  return orderByExpectedDeparture(arrivals).map(({ departure }) => departure);
+}
+
+function departureKey(d: BoardDeparture): string {
+  const minute = ukHhmm(d.scheduled) ?? d.scheduled;
+  return `${minute}|${d.destinationCrs ?? ""}|${d.destinationName.toLowerCase()}`;
+}
+
+function mergeVstpDepartures(
+  scheduled: BoardDeparture[],
+  vstp: BoardDeparture[],
+): BoardDeparture[] {
+  if (vstp.length === 0) return scheduled;
+  const seen = new Set(scheduled.map(departureKey));
+  const merged = [...scheduled];
+  for (const row of vstp) {
+    const key = departureKey(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(row);
+  }
+  return merged;
 }
 
 export async function getBoard(
@@ -204,8 +251,20 @@ export async function getBoard(
     // With a filter, an empty result is authoritative ("nothing calls there") —
     // don't fall through to the unfiltered MOTIS board. Without a filter, an
     // empty LDBWS result means fall back.
-    if (ldbws && (ldbws.departures.length > 0 || filterCrs)) {
+    if (ldbws && (ldbws.departures.length > 0 || ldbws.arrivals.length > 0 || filterCrs)) {
       for (const d of ldbws.departures) {
+        if (!d.destinationName && d.destinationCrs) {
+          d.destinationName = await stationName(d.destinationCrs);
+        }
+      }
+      const ldbwsArrivals = filterCrs
+        ? ((await track(timer, "ldbws-arrivals", fetchLdbwsBoard(crs, limit, filterCrs, "from")))
+            ?.arrivals ?? [])
+        : ldbws.arrivals;
+      for (const d of ldbwsArrivals) {
+        if (!d.originName && d.originCrs) {
+          d.originName = await stationName(d.originCrs);
+        }
         if (!d.destinationName && d.destinationCrs) {
           d.destinationName = await stationName(d.destinationCrs);
         }
@@ -225,6 +284,7 @@ export async function getBoard(
       const departures = inExpectedOrder(
         await track(timer, "punctuality", withPunctuality(withPosition)),
       );
+      const arrivals = inExpectedArrivalOrder(await withPunctuality(ldbwsArrivals));
       return {
         ok: true,
         board: {
@@ -237,6 +297,7 @@ export async function getBoard(
           messages: ldbws.messages,
           disruptions: await disruptionsPromise,
           departures,
+          arrivals,
         },
       };
     }
@@ -249,23 +310,43 @@ export async function getBoard(
   // the same situation for a caller as an unreachable one, so both report
   // engine-offline and the board degrades instead of erroring.
   let raw: RawDeparture[];
+  let rawArrivals: RawDeparture[];
   try {
     const engine = createEngine();
-    raw = await track(timer, "motis", engine.departures({ stopId: crs, when, limit }));
+    [raw, rawArrivals] = await track(
+      timer,
+      "motis",
+      Promise.all([
+        engine.departures({ stopId: crs, when, limit }),
+        engine.arrivals({ stopId: crs, when, limit }),
+      ]),
+    );
   } catch {
     return { ok: false, reason: "engine-offline" };
   }
 
   const scheduled = raw.map(scheduledRow);
+  const scheduledArrivals = rawArrivals
+    .map(scheduledArrivalRow)
+    .filter((row) => !filterCrs || row.originCrs === filterCrs);
+  const vstp = when
+    ? []
+    : await track(timer, "vstp", vstpDeparturesForBoard(crs, new Date(), limit).catch(() => []));
+  const scheduledWithVstp = mergeVstpDepartures(scheduled, vstp);
   const { departures: darwinDepartures, live } = await track(
     timer,
     "darwin",
-    enrichBoardWithDarwin(crs, scheduled),
+    enrichBoardWithDarwin(crs, scheduledWithVstp),
   );
 
   for (const d of darwinDepartures) {
     if (!d.destinationName && d.destinationCrs) {
       d.destinationName = await stationName(d.destinationCrs);
+    }
+  }
+  for (const d of scheduledArrivals) {
+    if (!d.originName && d.originCrs) {
+      d.originName = await stationName(d.originCrs);
     }
   }
 
@@ -280,6 +361,9 @@ export async function getBoard(
   const departures = inExpectedOrder(
     await track(timer, "punctuality", withPunctuality(withPosition)),
   );
+  const arrivals = inExpectedArrivalOrder(
+    await track(timer, "arrival-punctuality", withPunctuality(scheduledArrivals)),
+  );
 
   return {
     ok: true,
@@ -292,6 +376,7 @@ export async function getBoard(
       messages: await fetchStationMessages(crs),
       disruptions: await disruptionsPromise,
       departures,
+      arrivals,
     },
   };
 }

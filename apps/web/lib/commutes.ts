@@ -1,5 +1,5 @@
 import { commute, commuteLeg } from "@mainline/db";
-import { type CommuteInput, type CommuteLegRecord, type CommuteRecord } from "@mainline/shared";
+import { type CommuteInput, type CommuteLegInput, type CommuteLegRecord, type CommuteRecord } from "@mainline/shared";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "./db";
 
@@ -70,7 +70,7 @@ export async function getCommute(
 
 /** Rows to insert into commute_leg for a validated input. */
 function legValues(commuteId: string, input: CommuteInput) {
-  return input.legs.map((l) => ({
+  return input.legs.map((l: CommuteLegInput) => ({
     commuteId,
     dayOfWeek: l.dayOfWeek,
     workCrs: l.workCrs,
@@ -92,7 +92,7 @@ export async function createCommute(userId: string, input: CommuteInput): Promis
   const first = input.legs[0]!;
   const seedWindow = first.am.start ?? first.pm.start ?? "07:00";
   const seedWindowEnd = first.am.end ?? first.pm.end ?? "09:00";
-  const daysMask = input.legs.reduce((m, l) => m | (1 << l.dayOfWeek), 0);
+  const daysMask = input.legs.reduce((m: number, l: CommuteLegInput) => m | (1 << l.dayOfWeek), 0);
 
   const inserted = await db
     .insert(commute)

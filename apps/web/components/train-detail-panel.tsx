@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { lateLabel, type LiveTrain } from "./map-types";
 
 /**
@@ -28,6 +29,7 @@ export function TrainDetailPanel({
   const dest = path[path.length - 1]?.name ?? train.destName;
   // The train sits at the first not-yet-departed stop.
   const currentIndex = path.findIndex((s) => s.status === "current");
+  const serviceId = train.rid ? `rid:${train.rid}` : undefined;
 
   return (
     <aside className="map-panel" aria-label="Train details">
@@ -95,14 +97,14 @@ export function TrainDetailPanel({
         </p>
       )}
 
-      {/*
-        There was a "Full service page →" link here passing `train.rid` into
-        /services/[id]. That route hands its id straight to LDBWS
-        GetServiceDetails, which only accepts an LDBWS serviceID — a Darwin rid
-        is not one, so the link 404'd every time. LiveTrain carries no
-        serviceID to use instead, and there is no rid -> serviceID mapping
-        available, so the link is gone rather than left broken.
-      */}
+      {serviceId && (
+        <Link
+          className="map-panel-full"
+          href={`/services/${encodeURIComponent(serviceId)}?from=map`}
+        >
+          Full service page →
+        </Link>
+      )}
     </aside>
   );
 }

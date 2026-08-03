@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { fetchServiceDetails, serviceDetailsConfigured } from "@/lib/service-details";
+import {
+  fetchServiceDetailsById,
+  isRidServiceId,
+  serviceDetailsConfigured,
+} from "@/lib/service-details";
 import { getPositionHistory } from "@/lib/train-history";
 
 export const dynamic = "force-dynamic";
@@ -9,10 +13,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  if (!serviceDetailsConfigured()) {
+  if (!isRidServiceId(id) && !serviceDetailsConfigured()) {
     return NextResponse.json({ ok: false, reason: "not-configured" }, { status: 503 });
   }
-  const details = await fetchServiceDetails(id);
+  const details = await fetchServiceDetailsById(id);
   if (!details) {
     return NextResponse.json({ ok: false, reason: "unavailable" }, { status: 404 });
   }

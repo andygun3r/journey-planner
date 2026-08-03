@@ -10,6 +10,7 @@ import type maplibregl from "maplibre-gl";
 export const TRAIN_ICON = "mainline-train-icon";
 export const BUS_ICON = "mainline-bus-icon";
 export const ARROW_ICON = "mainline-direction-arrow";
+export const BERTH_PLATE_ICON = "mainline-berth-plate";
 
 /**
  * Renders an SVG path string to an SDF (signed-distance-field) image MapLibre
@@ -47,6 +48,7 @@ const BUS_ICON_PATH =
 // *-arrow layers' icon-offset) and gets `icon-rotate`d per-feature — the
 // "arrow poking out of the circle" pointing along direction of travel.
 const ARROW_ICON_PATH = "M9 0 L15.5 11 L9 8.5 L2.5 11 Z";
+const BERTH_PLATE_PATH = "M3 5 Q3 3 5 3 H27 Q29 3 29 5 V15 Q29 17 27 17 H5 Q3 17 3 15 Z";
 const ARROW_RASTER_SIZE = 64;
 
 /**
@@ -74,6 +76,9 @@ export function addMapIcons(map: maplibregl.Map): void {
   }
   if (!map.hasImage(ARROW_ICON)) {
     map.addImage(ARROW_ICON, rasterizeIcon(ARROW_ICON_PATH, 18, size), { sdf: true });
+  }
+  if (!map.hasImage(BERTH_PLATE_ICON)) {
+    map.addImage(BERTH_PLATE_ICON, rasterizeIcon(BERTH_PLATE_PATH, 32, size), { sdf: true });
   }
 }
 

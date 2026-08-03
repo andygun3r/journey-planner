@@ -91,6 +91,16 @@ delta layer, and commute alerting.
 - **Consumer**: `services/darwin-ingest` (kafkajs). Parser in `pushport.ts`; writes `darwin_*` tables.
 - **Env**: `RDM_KAFKA_BOOTSTRAP_SERVERS`, `RDM_KAFKA_TOPIC`, `RDM_KAFKA_GROUP_ID` (optional), `RDM_CONSUMER_KEY`, `RDM_CONSUMER_SECRET`.
 
+### 1a. NWR Train Describer (TD) *(via RailData, Kafka)*
+Live TD stream for berth movements and S-Class signalling state. This is a separate
+RailData product and uses separate consumer credentials from Darwin.
+
+- **Transport**: Kafka on **Confluent Cloud**, `SASL_SSL` + `PLAIN`.
+- **Topic**: `TD_ALL_SIG_AREA`.
+- **Auth**: TD subscription **consumer key = SASL username**, **secret = SASL password**.
+- **Consumer**: `services/nr-ingest` (kafkajs) when `NR_TD_KAFKA_*` is set. TRUST movements remain on Network Rail STOMP.
+- **Env**: `NR_TD_KAFKA_BOOTSTRAP_SERVERS`, `NR_TD_KAFKA_TOPIC`, `NR_TD_KAFKA_GROUP_ID`, `NR_TD_KAFKA_USERNAME`, `NR_TD_KAFKA_PASSWORD`.
+
 ### 2. LDBWS — Live Departure Board *(RDM REST)*
 **Primary** board source: one call per station gives real platforms, live estimates,
 cancellations, operator and NRCC messages. Staff-style `GetDepBoardWithDetails`.
@@ -140,6 +150,10 @@ Batch bulk data driving the routing engine and fares, **not** RDM APIs. Download
   `services/etl/src/sftp-download.ts`. The `etl-cron` compose service runs this nightly at
   2am via a baked-in crontab (`services/etl/cron/timetable-daily`); `etl` stays the
   profile-gated one-off runner for manual invocations.
+- **Track Model SFTP**: `pnpm --filter @mainline/etl exec tsx src/index.ts track-model-sftp`
+  pulls `NWR_TrackModel*`, imports it into `track_model_line` /
+  `station_track_model_position`, then deletes the remote files after a successful
+  load. It uses `NR_SFTP_*` credentials, falling back to `DTD_SFTP_*`.
 
 ## B. Network Rail Open Data (NROD) feeds
 
@@ -151,7 +165,7 @@ authenticates but returns "not authorized to read from topic".
 - **Broker**: `publicdatafeeds.networkrail.co.uk:61618` (STOMP). Overridable via `NR_STOMP_HOST` / `NR_STOMP_PORT`.
 - **Consumer**: `services/nr-ingest` (`stompit`). Durable subscriptions keyed by a stable client id (`NR_CLIENT_ID`), so a reconnect resumes rather than restarts.
 - **Env**: `NETWORKRAIL_USERNAME`, `NETWORKRAIL_PASSWORD`.
-- **Connection design**: positioning (movements + TD) runs on one STOMP connection; VSTP/TSR/RTPPM run on a **second** connection — an unsubscribed feed errors the *whole* connection, and that must never take down positioning.
+- **Connection design**: TRUST positioning stays on STOMP. TD uses RailData Kafka when `NR_TD_KAFKA_*` is configured, otherwise it falls back to the STOMP TD topic. VSTP/TSR/RTPPM run on a **second** STOMP connection — an unsubscribed feed errors the *whole* connection, and that must never take down positioning.
 
 ### Live STOMP topics (`services/nr-ingest/src/stomp.ts` → `TOPICS`)
 
@@ -170,11 +184,17 @@ Load once before the live feed means anything: `nr-ingest reference`.
 - **CORPUS** — STANOX ↔ TIPLOC ↔ CRS ↔ NLC map. Movements report STANOX; this translates to CRS/TIPLOC to line up with Darwin. → `nr_corpus`.
 - **SMART** — TD berth steps → STANOX + event, so "berth A→B" becomes "train passed <location>". Also provides berth topology (`from_berth→to_berth`) for signalling-diagram auto-layout. → `nr_smart`.
 - **SOP / ECS** — per-TD-area bit→signal/aspect maps for decoding S-class. Load via `nr-ingest sop` from `data/sop/`. **Not** a live feed; sourced manually per area (Open Rail Data Wiki blocks automated fetch). Coverage is partial; unmapped areas degrade to track-occupancy only.
+- **SFTP reference drops** — `nr-ingest reference-sftp` pulls `SMARTExtract.csv.gz` /
+  `SMARTExtract.json.gz` and `TPS_Data.tar.gz` from RDG SFTP, processes them, then
+  deletes the remote files after successful processing. `SMARTExtract.*` refreshes
+  `nr_smart`; `TPS_Data.tar.gz` is staged under `NR_TPS_DIR` for the Train Planning
+  Model importer work.
 
 ### Signalling data note
 **Real signal aspects come only from TD S-class `SF_MSG` decoded against per-area SOP maps.**
-RDG/RDM feeds carry **no** signalling data at all. The nr-ingest feed already receives SF_MSG;
-see `parse.ts` `parseSClass`.
+The live TD feed already receives SF_MSG; see `parse.ts` `parseSClass`. SMART and
+CORPUS locate berth movements, while SOP/ECS maps decode raw S-class bits into
+named signals/aspects.
 
 ## Feed → capability map
 

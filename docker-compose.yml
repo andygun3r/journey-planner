@@ -302,6 +302,15 @@ services:
       DTD_SFTP_PASSWORD: ${DTD_SFTP_PASSWORD:-}
       DTD_SFTP_TIMETABLE_DIR: ${DTD_SFTP_TIMETABLE_DIR:-}
       DTD_SFTP_FARES_DIR: ${DTD_SFTP_FARES_DIR:-}
+      # Network Rail reference/Track Model SFTP drops can share the same SFTP
+      # account as DTD_SFTP_*; set NR_SFTP_* only when RDG provides separate
+      # credentials or folders.
+      NR_SFTP_HOST: ${NR_SFTP_HOST:-}
+      NR_SFTP_PORT: ${NR_SFTP_PORT:-}
+      NR_SFTP_USERNAME: ${NR_SFTP_USERNAME:-}
+      NR_SFTP_PASSWORD: ${NR_SFTP_PASSWORD:-}
+      NR_SFTP_TRACK_MODEL_DIR: ${NR_SFTP_TRACK_MODEL_DIR:-}
+      NR_SFTP_DELETE_PROCESSED: ${NR_SFTP_DELETE_PROCESSED:-}
     volumes:
       - dtd-archive:/data/dtd
       - gtfs-data:/data/gtfs
@@ -425,10 +434,11 @@ services:
     restart: unless-stopped
     mem_limit: 768m
 
-  # Network Rail ingester (TRUST movements + Train Describer over STOMP ->
-  # Postgres). Adds between-station live positioning on top of Darwin.
-  # Needs NETWORKRAIL_* in .env. Load reference data first:
-  #   docker compose run --rm nr-ingest pnpm tsx src/index.ts reference
+  # Network Rail ingester (TRUST movements over Network Rail STOMP + Train
+  # Describer over RailData Kafka when NR_TD_KAFKA_* is configured, otherwise
+  # TD falls back to STOMP). Adds between-station live positioning on top of
+  # Darwin. Needs NETWORKRAIL_* in .env for TRUST. Load reference data first:
+  #   docker compose run --rm nr-ingest node dist/index.js reference
   # Then the uid->headcode map (SCHEDULE feed, ~127MB, several minutes;
   # re-run periodically — daily is reasonable — since NR reissues SCHEDULE
   # daily and this table is a point-in-time snapshot):
@@ -446,11 +456,31 @@ services:
       NETWORKRAIL_USERNAME: ${NETWORKRAIL_USERNAME:-}
       NETWORKRAIL_PASSWORD: ${NETWORKRAIL_PASSWORD:-}
       NR_TRAJECTORY_MATCH: ${NR_TRAJECTORY_MATCH:-}
+      NR_TD_KAFKA_BOOTSTRAP_SERVERS: ${NR_TD_KAFKA_BOOTSTRAP_SERVERS:-}
+      NR_TD_KAFKA_TOPIC: ${NR_TD_KAFKA_TOPIC:-}
+      NR_TD_KAFKA_GROUP_ID: ${NR_TD_KAFKA_GROUP_ID:-}
+      NR_TD_KAFKA_USERNAME: ${NR_TD_KAFKA_USERNAME:-}
+      NR_TD_KAFKA_PASSWORD: ${NR_TD_KAFKA_PASSWORD:-}
+      # RDG SFTP delivery for SMARTExtract.*.gz and TPS_Data.tar.gz. Falls back
+      # to DTD_SFTP_* credentials if NR_SFTP_* is unset.
+      DTD_SFTP_HOST: ${DTD_SFTP_HOST:-}
+      DTD_SFTP_PORT: ${DTD_SFTP_PORT:-}
+      DTD_SFTP_USERNAME: ${DTD_SFTP_USERNAME:-}
+      DTD_SFTP_PASSWORD: ${DTD_SFTP_PASSWORD:-}
+      NR_SFTP_HOST: ${NR_SFTP_HOST:-}
+      NR_SFTP_PORT: ${NR_SFTP_PORT:-}
+      NR_SFTP_USERNAME: ${NR_SFTP_USERNAME:-}
+      NR_SFTP_PASSWORD: ${NR_SFTP_PASSWORD:-}
+      NR_SFTP_REFERENCE_DIR: ${NR_SFTP_REFERENCE_DIR:-}
+      NR_SFTP_DELETE_PROCESSED: ${NR_SFTP_DELETE_PROCESSED:-}
+      NR_TPS_DIR: ${NR_TPS_DIR:-}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - nr-reference-data:/data
     healthcheck:
       # Progress, not liveness. The old check was `pgrep -f 'tsx src/index.ts'`,
       # which only proves a process exists — a consumer can sit there connected
@@ -474,10 +504,54 @@ services:
     restart: unless-stopped
     mem_limit: 768m
 
+  # Periodic RDG SFTP sweep for Network Rail reference files delivered outside
+  # the live STOMP feeds: SMARTExtract.*.gz and TPS_Data.tar.gz. The command
+  # no-ops when no SFTP host is configured or no matching files are present;
+  # successfully processed remote files are deleted by nr-ingest itself.
+  nr-reference-sync:
+    build:
+      context: .
+      dockerfile: services/nr-ingest/Dockerfile
+    environment:
+      DATABASE_URL: postgres://mainline:mainline@postgres:5432/mainline
+      SERVICE_NAME: nr-reference-sync
+      DTD_SFTP_HOST: ${DTD_SFTP_HOST:-}
+      DTD_SFTP_PORT: ${DTD_SFTP_PORT:-}
+      DTD_SFTP_USERNAME: ${DTD_SFTP_USERNAME:-}
+      DTD_SFTP_PASSWORD: ${DTD_SFTP_PASSWORD:-}
+      NR_SFTP_HOST: ${NR_SFTP_HOST:-}
+      NR_SFTP_PORT: ${NR_SFTP_PORT:-}
+      NR_SFTP_USERNAME: ${NR_SFTP_USERNAME:-}
+      NR_SFTP_PASSWORD: ${NR_SFTP_PASSWORD:-}
+      NR_SFTP_REFERENCE_DIR: ${NR_SFTP_REFERENCE_DIR:-}
+      NR_SFTP_DELETE_PROCESSED: ${NR_SFTP_DELETE_PROCESSED:-}
+      NR_TPS_DIR: ${NR_TPS_DIR:-}
+      NR_REFERENCE_SYNC_INTERVAL_SECONDS: ${NR_REFERENCE_SYNC_INTERVAL_SECONDS:-21600}
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          if [ -n "$${NR_SFTP_HOST:-$${DTD_SFTP_HOST:-}}" ]; then
+            node dist/index.js reference-sftp || true
+          else
+            echo "[nr-reference-sync] no SFTP host configured"
+          fi
+          sleep "$${NR_REFERENCE_SYNC_INTERVAL_SECONDS:-21600}"
+        done
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - nr-reference-data:/data
+    restart: unless-stopped
+    mem_limit: 384m
+
 volumes:
   pgdata:
   motis-data:
   gtfs-data:
   dtd-archive:
+  nr-reference-data:
   mariadb-data:
   orm-db-data:

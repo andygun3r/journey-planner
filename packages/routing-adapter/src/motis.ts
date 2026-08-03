@@ -61,6 +61,8 @@ const MotisStopTime = z
     routeShortName: z.string().optional(),
     headsign: z.string().optional(),
     place: MotisPlace,
+    /** Originating stop of this trip — the arrival board's "origin". */
+    tripFrom: MotisPlace.optional(),
     /** Terminating stop of this trip — the board's "destination". */
     tripTo: MotisPlace.optional(),
     cancelled: z.boolean().default(false),
@@ -177,6 +179,34 @@ export class MotisEngine implements RoutingEngine {
         cancelled: st.cancelled,
       };
     });
+  }
+
+  async arrivals(query: DepartureBoardQuery): Promise<RawDeparture[]> {
+    const json = await this.get("/api/v1/stoptimes", {
+      stopId: toEngineStopId(query.stopId),
+      time: query.when ?? new Date().toISOString(),
+      n: String(query.limit ?? 12),
+    });
+    const parsed = MotisStopTimesResponse.parse(json);
+    const arrivals: RawDeparture[] = [];
+    for (const st of parsed.stopTimes) {
+      const call = toCall(st.place, "arrival");
+      if (!call.scheduled) continue;
+      arrivals.push({
+        tripId: st.tripId,
+        routeName: st.routeShortName,
+        headsign: st.headsign,
+        originName: st.tripFrom?.name,
+        originStopId: st.tripFrom?.stopId ? fromEngineStopId(st.tripFrom.stopId) : undefined,
+        destinationName: st.tripTo?.name,
+        destinationStopId: st.tripTo?.stopId ? fromEngineStopId(st.tripTo.stopId) : undefined,
+        platform: st.place.description,
+        scheduled: call.scheduled,
+        live: call.live,
+        cancelled: st.cancelled,
+      });
+    }
+    return arrivals;
   }
 
   async healthy(): Promise<boolean> {

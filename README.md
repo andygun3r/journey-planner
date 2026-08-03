@@ -7,9 +7,9 @@ UK rail journey & commute planner — live Darwin/Network Rail data, self-hosted
 - **Journey planning & fares** — self-hosted MOTIS routing over the full GB rail
   timetable, with indicative fares computed from DTD fares data (no National
   Rail journey-planner licence required — see "What this is" in CLAUDE.md).
-- **Live departure boards** (`/boards/[crs]`) — LDBWS-backed, real platforms and
-  live estimates; one board build is shared across everyone watching a
-  station rather than one per viewer.
+- **Live departure and arrival boards** (`/boards/[crs]`) — LDBWS-backed, real
+  platforms and live estimates; one board build is shared across everyone
+  watching a station rather than one per viewer.
 - **Per-service detail** (`/services/[id]`) — full calling pattern, coach/loading
   formation, live position, and history for a single train, pushed over a
   live stream rather than polled.
@@ -100,8 +100,10 @@ healthchecks + `restart: unless-stopped`.
 2. Set env vars in Coolify's UI (these become the values `${VAR:-}` in the
    compose file resolve to) — see `.env.example` for the full list:
    `RDM_KAFKA_*`, `NRDP_USERNAME`/`PASSWORD` (or `DTD_SFTP_*` — see below),
-   `LDBWS_*`, `DISRUPTIONS_API_KEY`, `NETWORKRAIL_USERNAME`/`PASSWORD`,
-   `TFL_APP_KEY`, `VAPID_*`, and (for `/map`) `NEXT_PUBLIC_TILES_URL`/`ORM_PUBLIC_HOST`.
+   `LDBWS_*` from the RDM Live Arrival and Departure Boards product,
+   `DISRUPTIONS_API_KEY`, `NETWORKRAIL_USERNAME`/`PASSWORD`,
+   `NR_TD_KAFKA_*` for the RailData TD product, `TFL_APP_KEY`, `VAPID_*`,
+   and (for `/map`) `NEXT_PUBLIC_TILES_URL`/`ORM_PUBLIC_HOST`.
 3. Expose only `web`'s port 3000 (and, if using `/map`, `orm-proxy`'s port
    8000) through Coolify's proxy/domain. `motis` (8080) only needs to be
    reachable from `web`/`darwin-ingest` on the compose network — don't route
@@ -125,11 +127,16 @@ healthchecks + `restart: unless-stopped`.
      preprocessed under `/data/data`.
    - For NR positioning, load reference data once:
      `docker compose run --rm nr-ingest pnpm tsx src/index.ts reference`
+     or, if RDG SFTP is delivering `SMARTExtract.csv.gz` /
+     `SMARTExtract.json.gz`, use:
+     `docker compose run --rm nr-ingest node dist/index.js reference-sftp`
      and the headcode map (re-run roughly daily):
      `docker compose run --rm nr-ingest pnpm tsx src/index.ts headcodes`
 5. The board (LDBWS) and journey planning work without Darwin/NR live feeds —
-   deploy incrementally and add `RDM_*`/`NETWORKRAIL_*` credentials as each
-   feed subscription comes online.
+   deploy incrementally and add `RDM_*`, `NETWORKRAIL_*` and `NR_TD_KAFKA_*`
+   credentials as each feed subscription comes online. `NR_TD_KAFKA_*` uses the
+   separate RailData **NWR Train Describer (TD)** Kafka consumer key/secret, not
+   the Darwin Kafka credentials.
 6. **Keeping the timetable current**: `etl-cron` runs in the default (non-profile)
    service set and re-runs the timetable pipeline nightly at 2am using the
    crontab in `services/etl/cron/timetable-daily`. Set `DTD_SFTP_HOST` (+
@@ -139,6 +146,12 @@ healthchecks + `restart: unless-stopped`.
    `motis` (or add an equivalent Coolify post-hook) so it serves the
    refreshed GTFS zip; it doesn't watch the volume for changes, and a bare
    restart without the import step is a no-op against stale preprocessed data.
+   Network Rail reference/geometry SFTP drops are handled separately:
+   `pnpm --filter @mainline/nr-ingest start reference-sftp` processes
+   `SMARTExtract.*.gz` and `TPS_Data.tar.gz`;
+   `pnpm --filter @mainline/etl exec tsx src/index.ts track-model-sftp`
+   processes the newest `NWR_TrackModel*` snapshot. Both delete remote files
+   only after successful processing unless `NR_SFTP_DELETE_PROCESSED=false`.
 7. **Container-name env vars**: `MOTIS_CONTAINER_NAME` and
    `ETL_CRON_CONTAINER_NAME` (both in `.env.example`) default to plain Docker
    Compose's `<project>-<service>-1` naming, which Coolify's compose deploys

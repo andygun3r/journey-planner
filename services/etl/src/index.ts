@@ -11,8 +11,10 @@ import { loadIntoPostgres } from "./load-postgres.js";
 import { packageBundle } from "./package-bundle.js";
 import { railCorridors } from "./rail-corridors.js";
 import { guarded } from "./run-guard.js";
+import { importOrmSignals } from "./orm-signals.js";
 import { snapStations } from "./snap-stations.js";
 import { trackModel } from "./track-model.js";
+import { syncTrackModelFromSftp } from "./track-model-sftp.js";
 
 const ARCHIVE_DIR = process.env.ETL_ARCHIVE_DIR ?? "/data/dtd/archive";
 const GTFS_OUT_DIR = process.env.ETL_GTFS_OUT_DIR ?? "/data/gtfs";
@@ -156,6 +158,11 @@ switch (command) {
     // Run after each `orm-import`; independent of the timetable pipeline.
     await snapStations();
     break;
+  case "orm-signals":
+    // Recompute physical signal positions from the orm-db OpenRailwayMap import.
+    // Run after each `orm-import`; independent of live TD/SOP aspect decoding.
+    await importOrmSignals();
+    break;
   case "rail-corridors":
     // Recompute track-following geometry between adjacent calling points.
     // Depends on snap-stations having run (it uses track_lat/lon as the
@@ -171,13 +178,18 @@ switch (command) {
     // coordinates, though falls back to station.lat/lon if not.
     await trackModel();
     break;
+  case "track-model-sftp":
+    // Pull NWR_TrackModel* files from SFTP, import them, then delete the remote
+    // files after a successful load.
+    await syncTrackModelFromSftp();
+    break;
   case "load-fares":
     // Re-load fares from the MariaDB scratch DB into Postgres (skips download/import).
     await guarded("etl-fares", "fares", () => loadFares());
     break;
   default:
     console.error(
-      "Usage: etl <timetable|package|fares|load-fares|postprocess|snap-stations|rail-corridors>",
+      "Usage: etl <timetable|package|fares|load-fares|postprocess|snap-stations|orm-signals|rail-corridors|track-model|track-model-sftp>",
     );
     process.exit(1);
 }
