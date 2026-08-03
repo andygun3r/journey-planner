@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { checkEtlAuth } from "@/lib/etl-auth";
 import { startApplyJob } from "@/lib/etl-jobs";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,9 @@ export const runtime = "nodejs";
  * machine instead.
  */
 export async function POST(req: Request) {
+  const authError = await checkEtlAuth(req);
+  if (authError) return authError;
+
   const form = await req.formData();
   const file = form.get("bundle");
   if (!(file instanceof File)) {

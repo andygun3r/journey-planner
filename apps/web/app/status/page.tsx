@@ -1,4 +1,11 @@
 import { BoardRefresher } from "@/components/board-refresher";
+import {
+  disruptionsConfigured,
+  fetchNetworkDisruptions,
+  serviceIndicatorsByToc,
+  type Disruption,
+  type ServiceIndicator,
+} from "@/lib/disruptions";
 import { getNetworkPunctuality, type OperatorPunctuality, type PpmStatus } from "@/lib/punctuality";
 import { lineStatus, tflConfigured, type TflLineStatus } from "@/lib/tfl";
 
@@ -12,6 +19,30 @@ function tflChipClass(severity: number): string {
   if (severity >= 10) return "chip-ok";
   if (severity >= 8) return "chip-warn";
   return "chip-danger";
+}
+
+/**
+ * RTPPM (Network Rail) and the Disruptions API (RDG) don't share an operator
+ * code space — RTPPM's operator_code is a Network Rail numeric id, not the
+ * ATOC 2-letter code — so operators are joined by name. Most names match
+ * exactly, but a handful diverge between the two feeds; this maps RTPPM's
+ * operator name to the Disruptions API's tocName for those.
+ */
+const RTPPM_TO_DISRUPTIONS_NAME: Record<string, string> = {
+  Chiltern: "Chiltern Railways",
+  "Caledonian Sleeper Limited": "Caledonian Sleeper",
+  "Greater Thameslink Railway": "Thameslink",
+  "London North Eastern Railway": "LNER",
+  "Lumo East Coast": "Lumo",
+  "Lumo West Coast": "Lumo",
+  "Northern Trains": "Northern",
+  "TransPennine Trains": "TransPennine Express",
+  "West Midlands Trains": "West Midlands Railway",
+};
+
+function disruptionsFor(op: OperatorPunctuality, networkDisruptions: Disruption[]): Disruption[] {
+  const name = RTPPM_TO_DISRUPTIONS_NAME[op.name] ?? op.name;
+  return networkDisruptions.filter((d) => d.operators.includes(name));
 }
 
 const STATUS_LABEL: Record<PpmStatus, string> = {
@@ -52,12 +83,75 @@ function TflLineRow({ line }: { line: TflLineStatus }) {
   );
 }
 
-function OperatorRow({ op }: { op: OperatorPunctuality }) {
+function OperatorRow({
+  op,
+  indicator,
+  disruptions,
+}: {
+  op: OperatorPunctuality;
+  indicator?: ServiceIndicator;
+  disruptions: Disruption[];
+}) {
+  const disrupted = Boolean(indicator && !indicator.good);
   return (
-    <div className="ppm-row" role="row">
-      <span className="ppm-op" role="cell">
-        {op.name}
-      </span>
+    <div className={`ppm-row ${disrupted ? "ppm-row-disrupted" : ""}`} role="row">
+      {disrupted ? (
+        <details className="ppm-op-disruption" role="cell">
+          <summary>
+            <span className="ppm-op">{op.name}</span>
+            <span className="ppm-op-disruption-icon" aria-hidden="true">
+              ⚠
+            </span>
+          </summary>
+          {disruptions.length > 0 ? (
+            disruptions.map((d) => (
+              <div key={d.id} className="ppm-op-disruption-item">
+                <p className="ppm-op-disruption-summary">
+                  {d.planned ? "Planned: " : ""}
+                  {d.summary}
+                </p>
+                {d.blocks.map((block, bi) =>
+                  block.heading ? (
+                    <p key={bi} className="disruption-block-heading">
+                      {block.content.map((c) => c.text).join("")}
+                    </p>
+                  ) : (
+                    <p key={bi} className="disruption-block">
+                      {block.content.map((c, ci) =>
+                        "href" in c ? (
+                          <a key={ci} href={c.href} target="_blank" rel="noopener noreferrer">
+                            {c.text}
+                          </a>
+                        ) : (
+                          <span key={ci}>{c.text}</span>
+                        ),
+                      )}
+                    </p>
+                  ),
+                )}
+                {d.link && (
+                  <a
+                    className="disruption-more"
+                    href={d.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    More on National Rail →
+                  </a>
+                )}
+              </div>
+            ))
+          ) : (
+            <p className="ppm-op-disruption-body">
+              {indicator?.statusDescription || indicator?.status || "Disruption"}
+            </p>
+          )}
+        </details>
+      ) : (
+        <span className="ppm-op" role="cell">
+          {op.name}
+        </span>
+      )}
       <span className="ppm-figure" role="cell">
         {pct(op.ppm)}
       </span>
@@ -77,6 +171,15 @@ function OperatorRow({ op }: { op: OperatorPunctuality }) {
 export default async function StatusPage() {
   const data = await getNetworkPunctuality();
   const tflLines = tflConfigured() ? await lineStatus(TFL_RAIL_MODES) : [];
+  const indicatorsByName = disruptionsConfigured()
+    ? await serviceIndicatorsByToc().catch(() => new Map<string, ServiceIndicator>())
+    : new Map<string, ServiceIndicator>();
+  const networkDisruptions = disruptionsConfigured()
+    ? await fetchNetworkDisruptions().catch(() => [] as Disruption[])
+    : [];
+
+  const hasPunctuality = Boolean(data.national) || data.operators.length > 0;
+  const hasAnything = hasPunctuality || tflLines.length > 0;
 
   return (
     <main>
@@ -87,72 +190,83 @@ export default async function StatusPage() {
         </span>
       </div>
 
-      {!data.national && data.operators.length === 0 ? (
+      {!hasAnything ? (
         <div className="notice">
-          <h2>No punctuality data yet</h2>
+          <h2>No status data yet</h2>
           <p>
             The Network Rail RTPPM feed hasn&rsquo;t reported yet. Make sure{" "}
             <code>services/nr-ingest</code> is running, then refresh.
           </p>
         </div>
       ) : (
-        <>
-          {data.national && (
-            <section className="ppm-hero" aria-label="National punctuality">
-              <div className="ppm-hero-fig">
-                <span className="ppm-hero-num">{pct(data.national.ppm)}</span>
-                <span className="ppm-hero-label">of trains on time nationally</span>
+        <div className="status-panel">
+          {hasPunctuality && (
+            <section className="status-section" aria-label="National punctuality">
+              <div className="status-section-head">
+                <span className="status-section-title">National punctuality</span>
+                <span className="status-section-note">
+                  Network Rail RTPPM
+                  {disruptionsConfigured() && " · National Rail Disruptions"}
+                </span>
               </div>
-              <div className="ppm-hero-meta">
-                <StatusChip status={data.national.status} />
-                <p className="ppm-hero-sub">
-                  {data.national.onTime.toLocaleString()} of{" "}
-                  {data.national.total.toLocaleString()} on time ·{" "}
-                  {data.national.cancelVeryLate.toLocaleString()} cancelled/very late · last hour{" "}
-                  {pct(data.national.rollingPpm)}
+
+              {data.national && (
+                <div className="ppm-hero">
+                  <div className="ppm-hero-fig">
+                    <span className="ppm-hero-num">{pct(data.national.ppm)}</span>
+                    <span className="ppm-hero-label">of trains on time nationally</span>
+                  </div>
+                  <div className="ppm-hero-meta">
+                    <StatusChip status={data.national.status} />
+                    <p className="ppm-hero-sub">
+                      {data.national.onTime.toLocaleString()} of{" "}
+                      {data.national.total.toLocaleString()} on time ·{" "}
+                      {data.national.cancelVeryLate.toLocaleString()} cancelled/very late · last
+                      hour {pct(data.national.rollingPpm)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {data.operators.length > 0 && (
+                <div role="table" aria-label="Operator punctuality">
+                  {data.operators.map((op) => {
+                    const name = RTPPM_TO_DISRUPTIONS_NAME[op.name] ?? op.name;
+                    return (
+                      <OperatorRow
+                        key={op.code}
+                        op={op}
+                        indicator={indicatorsByName.get(name)}
+                        disruptions={disruptionsFor(op, networkDisruptions)}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+
+              {data.vstpToday > 0 && (
+                <p className="ppm-vstp">
+                  {data.vstpToday} short-notice service{data.vstpToday === 1 ? "" : "s"} added
+                  today.
                 </p>
-              </div>
+              )}
             </section>
           )}
 
-          {data.vstpToday > 0 && (
-            <p className="ppm-vstp">
-              {data.vstpToday} short-notice service{data.vstpToday === 1 ? "" : "s"} added today.
-            </p>
-          )}
-
-          {data.operators.length > 0 && (
-            <section className="ppm-table" role="table" aria-label="Operator punctuality">
-              <div className="ppm-row ppm-head" role="row">
-                <span role="columnheader">Operator</span>
-                <span role="columnheader">Today</span>
-                <span role="columnheader">Last hr</span>
-                <span role="columnheader">Detail</span>
-                <span role="columnheader">Status</span>
+          {tflLines.length > 0 && (
+            <section className="status-section" aria-label="London status">
+              <div className="status-section-head">
+                <span className="status-section-title">London status</span>
+                <span className="status-section-note">Tube, Overground, Elizabeth line, DLR</span>
               </div>
-              {data.operators.map((op) => (
-                <OperatorRow key={op.code} op={op} />
-              ))}
+              <div role="table">
+                {tflLines.map((line) => (
+                  <TflLineRow key={line.lineId} line={line} />
+                ))}
+              </div>
             </section>
           )}
-
-          <p className="ppm-note">
-            PPM (Public Performance Measure): the share of trains arriving on time. Source: Network
-            Rail Real Time PPM.
-          </p>
-        </>
-      )}
-
-      {tflLines.length > 0 && (
-        <>
-          <h2 className="tfl-heading">London status</h2>
-          <section className="ppm-table tfl-table" role="table" aria-label="TfL line status">
-            {tflLines.map((line) => (
-              <TflLineRow key={line.lineId} line={line} />
-            ))}
-          </section>
-          <p className="ppm-note">Tube, Overground, Elizabeth line and DLR. Source: TfL.</p>
-        </>
+        </div>
       )}
     </main>
   );

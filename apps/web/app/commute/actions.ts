@@ -8,7 +8,7 @@ import {
   deleteCommute,
   updateCommute,
 } from "@/lib/commutes";
-import { requireDevice } from "@/lib/device";
+import { requireUser } from "@/lib/current-user";
 import { createHoliday, deleteHoliday } from "@/lib/holidays";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -22,21 +22,21 @@ export async function saveCommuteAction(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid commute" };
   }
-  const deviceId = await requireDevice();
+  const userId = await requireUser();
 
   if (commuteId) {
-    const updated = await updateCommute(deviceId, commuteId, parsed.data);
+    const updated = await updateCommute(userId, commuteId, parsed.data);
     if (!updated) return { ok: false, error: "Commute not found" };
   } else {
-    await createCommute(deviceId, parsed.data);
+    await createCommute(userId, parsed.data);
   }
   revalidatePath("/commute");
   redirect("/commute");
 }
 
 export async function deleteCommuteAction(commuteId: string): Promise<void> {
-  const deviceId = await requireDevice();
-  await deleteCommute(deviceId, commuteId);
+  const userId = await requireUser();
+  await deleteCommute(userId, commuteId);
   revalidatePath("/commute");
   redirect("/commute");
 }
@@ -46,16 +46,16 @@ export async function addHolidayAction(raw: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid dates" };
   }
-  const deviceId = await requireDevice();
-  await createHoliday(deviceId, parsed.data);
+  const userId = await requireUser();
+  await createHoliday(userId, parsed.data);
   revalidatePath("/commute/holidays");
   revalidatePath("/commute");
   return { ok: true };
 }
 
 export async function deleteHolidayAction(id: string): Promise<void> {
-  const deviceId = await requireDevice();
-  await deleteHoliday(deviceId, id);
+  const userId = await requireUser();
+  await deleteHoliday(userId, id);
   revalidatePath("/commute/holidays");
   revalidatePath("/commute");
 }

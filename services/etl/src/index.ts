@@ -12,6 +12,7 @@ import { packageBundle } from "./package-bundle.js";
 import { railCorridors } from "./rail-corridors.js";
 import { guarded } from "./run-guard.js";
 import { snapStations } from "./snap-stations.js";
+import { trackModel } from "./track-model.js";
 
 const ARCHIVE_DIR = process.env.ETL_ARCHIVE_DIR ?? "/data/dtd/archive";
 const GTFS_OUT_DIR = process.env.ETL_GTFS_OUT_DIR ?? "/data/gtfs";
@@ -161,6 +162,14 @@ switch (command) {
     // corridor endpoints) and on Darwin schedules being loaded, since the
     // pair list comes from real calling patterns.
     await railCorridors();
+    break;
+  case "track-model":
+    // Recompute station ELR/mileage positions and the national track network
+    // from data/NWR_TrackModel (override via TRACK_MODEL_DIR). A manual,
+    // occasional re-run — like snap-stations/rail-corridors, not a scheduled
+    // feed. Depends on snap-stations having run for the best station
+    // coordinates, though falls back to station.lat/lon if not.
+    await trackModel();
     break;
   case "load-fares":
     // Re-load fares from the MariaDB scratch DB into Postgres (skips download/import).

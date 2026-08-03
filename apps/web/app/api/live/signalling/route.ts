@@ -22,9 +22,10 @@ export async function GET(req: Request) {
   const trainId = url.searchParams.get("trainId") ?? undefined;
   const rid = url.searchParams.get("rid") ?? undefined;
   const area = url.searchParams.get("area") ?? undefined;
+  const crs = url.searchParams.get("crs") ?? undefined;
 
-  if (!trainId && !rid && !area) {
-    return new Response("trainId, rid or area required", { status: 400 });
+  if (!trainId && !rid && !area && !crs) {
+    return new Response("trainId, rid, area or crs required", { status: 400 });
   }
 
   if (!process.env.REDIS_URL) {
@@ -54,7 +55,7 @@ export async function GET(req: Request) {
       send("ready", {});
 
       const unsubscribe = subscribeToDiagram(
-        { trainId, rid, area },
+        { trainId, rid, area, crs },
         (layout, areas) => send("layout", { layout, areas }),
         (state) => send("state", state),
       );

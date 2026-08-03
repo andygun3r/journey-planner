@@ -1,4 +1,4 @@
-import { device } from "@mainline/db";
+import { user } from "@mainline/db";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 
@@ -7,28 +7,25 @@ export function vapidPublicKey(): string | null {
   return process.env.VAPID_PUBLIC_KEY ?? null;
 }
 
-/** Store (or replace) a device's Web Push subscription. */
+/** Store (or replace) a user's Web Push subscription. */
 export async function savePushSubscription(
-  deviceId: string,
+  userId: string,
   subscription: unknown,
 ): Promise<void> {
-  await getDb()
-    .update(device)
-    .set({ pushSubscription: subscription })
-    .where(eq(device.id, deviceId));
+  await getDb().update(user).set({ pushSubscription: subscription }).where(eq(user.id, userId));
 }
 
-/** Remove a device's Web Push subscription. */
-export async function clearPushSubscription(deviceId: string): Promise<void> {
-  await getDb().update(device).set({ pushSubscription: null }).where(eq(device.id, deviceId));
+/** Remove a user's Web Push subscription. */
+export async function clearPushSubscription(userId: string): Promise<void> {
+  await getDb().update(user).set({ pushSubscription: null }).where(eq(user.id, userId));
 }
 
-/** Whether a device currently has a push subscription stored. */
-export async function hasPushSubscription(deviceId: string): Promise<boolean> {
+/** Whether a user currently has a push subscription stored. */
+export async function hasPushSubscription(userId: string): Promise<boolean> {
   const rows = await getDb()
-    .select({ sub: device.pushSubscription })
-    .from(device)
-    .where(eq(device.id, deviceId))
+    .select({ sub: user.pushSubscription })
+    .from(user)
+    .where(eq(user.id, userId))
     .limit(1);
   return rows[0]?.sub != null;
 }

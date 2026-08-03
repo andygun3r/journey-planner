@@ -6,18 +6,38 @@ import { QuickJourneys } from "@/components/quick-journeys";
 import { SearchForm } from "@/components/search-form";
 import { listAlerts } from "@/lib/alerts";
 import { getDashboardData } from "@/lib/commute-dashboard";
-import { requireDevice } from "@/lib/device";
+import { getUserId } from "@/lib/current-user";
 import { serviceIndicatorsByRegion } from "@/lib/disruptions";
 import { listFavourites } from "@/lib/favourites";
 import { getStations } from "@/lib/stations";
+import { activeTsrs } from "@/lib/tsr";
 
 export const dynamic = "force-dynamic";
 
 /** The commute status panel: next trains, alerts, and route disruptions. */
-async function CommuteStatus({ deviceId }: { deviceId: string }) {
+async function CommuteStatus({ userId }: { userId: string | null }) {
+  if (!userId) {
+    return (
+      <section className="commute-focus">
+        <div className="notice">
+          <h2>Sign in to set up a commute</h2>
+          <p>
+            Tell Mainline your weekly schedule and we&rsquo;ll watch your usual trains and warn
+            you when they&rsquo;re disrupted.
+          </p>
+          <p>
+            <Link className="btn btn-primary" href="/login">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </section>
+    );
+  }
+
   const [state, alerts] = await Promise.all([
-    getDashboardData(deviceId),
-    listAlerts(deviceId, { limit: 20 }),
+    getDashboardData(userId),
+    listAlerts(userId, { limit: 20 }),
   ]);
 
   if (state.kind === "no-commute") {
@@ -135,6 +155,34 @@ async function RegionalDisruptions() {
   );
 }
 
+/** Active Temporary Speed Restrictions from the NR feed, by route. */
+async function SpeedRestrictions() {
+  const tsrs = await activeTsrs();
+  if (tsrs.length === 0) return null;
+
+  return (
+    <section className="dashboard-regions">
+      <h2 className="editor-subhead">Speed restrictions</h2>
+      <ul className="dashboard-region-list">
+        {tsrs.map((tsr) => (
+          <li key={tsr.tsrId} className="dashboard-region">
+            <span className="chip chip-warn">
+              {tsr.passengerSpeedMph !== null ? `${tsr.passengerSpeedMph}mph` : "Restricted"}
+            </span>
+            <span className="dashboard-region-name">
+              {tsr.lineName ?? tsr.routeGroup ?? "Unnamed route"}
+            </span>
+            <span className="dashboard-region-tocs">
+              {tsr.fromStanox ?? "?"} → {tsr.toStanox ?? "?"}
+              {tsr.reason ? ` · ${tsr.reason}` : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export default async function Home() {
   // Stations power the empty-state check only; the typeahead fetches from
   // /api/stations on demand, so we don't embed the full list in the client.
@@ -146,8 +194,8 @@ export default async function Home() {
     stationsUnavailable = true;
   }
 
-  const deviceId = await requireDevice();
-  const favourites = await listFavourites(deviceId).catch(() => []);
+  const userId = await getUserId();
+  const favourites = userId ? await listFavourites(userId).catch(() => []) : [];
 
   return (
     <main className="commute-page">
@@ -158,7 +206,7 @@ export default async function Home() {
         </span>
       </div>
 
-      <CommuteStatus deviceId={deviceId} />
+      <CommuteStatus userId={userId} />
 
       <section>
         <h2 className="editor-subhead">Plan a journey</h2>
@@ -167,6 +215,8 @@ export default async function Home() {
       </section>
 
       <RegionalDisruptions />
+
+      <SpeedRestrictions />
 
       <p className="editor-hint">
         <Link href="/status">Full network status →</Link>

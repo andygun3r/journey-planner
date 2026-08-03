@@ -1,4 +1,12 @@
-import { fare, fareFlow, nrCorpus, station, stationCluster, ticketType } from "@mainline/db";
+import {
+  fare,
+  fareFlow,
+  ndfOverride,
+  nrCorpus,
+  station,
+  stationCluster,
+  ticketType,
+} from "@mainline/db";
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { getDb } from "./db";
 
@@ -61,7 +69,12 @@ export async function indicativeFare(
 
   // Flows in either direction (reversible flows are stored one way with direction=R).
   const flows = await db
-    .select({ flowId: fareFlow.flowId, direction: fareFlow.direction })
+    .select({
+      flowId: fareFlow.flowId,
+      originNlc: fareFlow.originNlc,
+      destNlc: fareFlow.destNlc,
+      routeCode: fareFlow.routeCode,
+    })
     .from(fareFlow)
     .where(
       or(
@@ -89,6 +102,32 @@ export async function indicativeFare(
   for (const p of priced) {
     if (p.type === "S") singlePence = Math.min(singlePence ?? Infinity, p.pricePence);
     else if (p.type === "R") returnPence = Math.min(returnPence ?? Infinity, p.pricePence);
+  }
+
+  // NDF overrides are authoritative corrections for flows the standard fare
+  // tables can't price correctly — where one matches, it replaces the
+  // computed price rather than just floors it.
+  const overrideConds = flows.flatMap((f) =>
+    ["S", "R"].map((ticketCode) =>
+      and(
+        eq(ndfOverride.originNlc, f.originNlc),
+        eq(ndfOverride.destNlc, f.destNlc),
+        eq(ndfOverride.routeCode, f.routeCode),
+        eq(ndfOverride.railcard, ""),
+        eq(ndfOverride.ticketCode, ticketCode),
+      ),
+    ),
+  );
+  const overrides =
+    overrideConds.length > 0
+      ? await db
+          .select({ ticketCode: ndfOverride.ticketCode, pricePence: ndfOverride.pricePence })
+          .from(ndfOverride)
+          .where(or(...overrideConds))
+      : [];
+  for (const o of overrides) {
+    if (o.ticketCode === "S") singlePence = Math.min(singlePence ?? Infinity, o.pricePence);
+    else if (o.ticketCode === "R") returnPence = Math.min(returnPence ?? Infinity, o.pricePence);
   }
 
   if (singlePence === undefined && returnPence === undefined) return null;

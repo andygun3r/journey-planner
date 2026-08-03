@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { isCrs, normaliseCrs } from "@mainline/shared";
 import { FavouriteToggle } from "@/components/favourite-toggle";
-import { requireDevice } from "@/lib/device";
+import { getUserId } from "@/lib/current-user";
 import { indicativeFare, formatFare } from "@/lib/fares";
 import { isFavourite, touchFavourite } from "@/lib/favourites";
 import { planJourneys, type JourneyView } from "@/lib/journeys";
@@ -128,12 +128,15 @@ export default async function JourneysPage({
   let saved = false;
   let fare: Awaited<ReturnType<typeof indicativeFare>> = null;
   if (validPair) {
-    const deviceId = await requireDevice();
     const fromC = normaliseCrs(from);
     const toC = normaliseCrs(to);
-    saved = await isFavourite(deviceId, fromC, toC);
-    // Bump ordering if this journey is already saved (they're re-running it).
-    if (saved) await touchFavourite(deviceId, fromC, toC);
+    // Favouriting needs a signed-in user; search itself stays open to anyone.
+    const userId = await getUserId();
+    if (userId) {
+      saved = await isFavourite(userId, fromC, toC);
+      // Bump ordering if this journey is already saved (they're re-running it).
+      if (saved) await touchFavourite(userId, fromC, toC);
+    }
     // Indicative fare (null when fares aren't loaded — UI just omits it).
     fare = await indicativeFare(fromC, toC).catch(() => null);
   }

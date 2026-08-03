@@ -1,13 +1,15 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { HolidayManager } from "@/components/holiday-manager";
-import { requireDevice } from "@/lib/device";
+import { getUserId } from "@/lib/current-user";
 import { listHolidays } from "@/lib/holidays";
 
 export const dynamic = "force-dynamic";
 
 export default async function HolidaysPage() {
-  const deviceId = await requireDevice();
-  const holidays = await listHolidays(deviceId);
+  const userId = await getUserId();
+  if (!userId) redirect("/login");
+  const holidays = await listHolidays(userId);
 
   return (
     <main className="commute-page">

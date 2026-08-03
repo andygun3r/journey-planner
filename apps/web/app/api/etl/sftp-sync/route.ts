@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkEtlAuth } from "@/lib/etl-auth";
 import { startSftpSyncJob } from "@/lib/etl-jobs";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,10 @@ export const runtime = "nodejs";
  * (monthly full + daily updates, whatever's new since the last run — see
  * lib/etl-sftp-sync.ts) instead of waiting for the nightly cron.
  */
-export async function POST() {
+export async function POST(req: Request) {
+  const authError = await checkEtlAuth(req);
+  if (authError) return authError;
+
   const jobId = startSftpSyncJob();
   return NextResponse.json({ jobId });
 }

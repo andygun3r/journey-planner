@@ -542,24 +542,22 @@ export const routeName = pgTable("route_name", {
 });
 
 // ---------------------------------------------------------------------------
-// Devices, commutes, alerts (no auth — device-id keyed)
+// Commutes, alerts — owned by a signed-in user (see `user` table below).
+//
+// This used to be keyed by an anonymous `device` id (a cookie, no login).
+// That's gone: everything that saves personal data now requires a Better
+// Auth account. Rows created under the old device system are orphaned — a
+// future cleanup could delete `commute`/`commute_holiday`/`favourite_journey`
+// rows whose user_id no longer resolves, but nothing does that automatically.
 // ---------------------------------------------------------------------------
-
-export const device = pgTable("device", {
-  id: uuid("id").primaryKey(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
-  /** Web Push subscription (v1.5); schema ready from day one. */
-  pushSubscription: jsonb("push_subscription"),
-});
 
 export const commute = pgTable(
   "commute",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    deviceId: uuid("device_id")
+    userId: text("user_id")
       .notNull()
-      .references(() => device.id, { onDelete: "cascade" }),
+      .references(() => user.id, { onDelete: "cascade" }),
     label: text("label").notNull(),
     /** Home location: the shared origin/destination across every day of this commute. */
     homeCrs: text("home_crs"),
@@ -576,7 +574,7 @@ export const commute = pgTable(
     directionPairedCommuteId: uuid("direction_paired_commute_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("commute_device_idx").on(t.deviceId)],
+  (t) => [index("commute_user_idx").on(t.userId)],
 );
 
 /**
@@ -609,36 +607,37 @@ export const commuteLeg = pgTable(
 );
 
 /**
- * Holiday / leave ranges, device-keyed so a single entry suppresses alerts for
- * every commute. Inclusive date range; a single day sets start = end.
+ * Holiday / leave ranges, owned by a user so a single entry suppresses alerts
+ * for every commute of theirs. Inclusive date range; a single day sets
+ * start = end.
  */
 export const commuteHoliday = pgTable(
   "commute_holiday",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    deviceId: uuid("device_id")
+    userId: text("user_id")
       .notNull()
-      .references(() => device.id, { onDelete: "cascade" }),
+      .references(() => user.id, { onDelete: "cascade" }),
     startDate: date("start_date").notNull(),
     endDate: date("end_date").notNull(),
     label: text("label"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("holiday_device_idx").on(t.deviceId, t.startDate)],
+  (t) => [index("holiday_user_idx").on(t.userId, t.startDate)],
 );
 
 export const favouriteJourney = pgTable(
   "favourite_journey",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    deviceId: uuid("device_id")
+    userId: text("user_id")
       .notNull()
-      .references(() => device.id, { onDelete: "cascade" }),
+      .references(() => user.id, { onDelete: "cascade" }),
     fromCrs: text("from_crs").notNull(),
     toCrs: text("to_crs").notNull(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("favourite_device_idx").on(t.deviceId)],
+  (t) => [index("favourite_user_idx").on(t.userId)],
 );
 
 /**
@@ -760,3 +759,194 @@ export const railCorridor = pgTable(
   },
   (t) => [primaryKey({ columns: [t.fromCrs, t.toCrs] })],
 );
+
+/**
+ * Where a station sits on Network Rail's Track Model: which ELR (Engineer's
+ * Line Reference) and approximate mileage its snapped coordinate falls at,
+ * plus the WGS84 point on the matched centreline itself.
+ *
+ * Why this exists: no STANOX/TIPLOC/CRS feed — official or community — joins
+ * to ELR+mileage. Track Model itself has no STANOX either, only ELR+mileage+
+ * shape. The only way to connect the two is geometric: snap each station's
+ * already-known coordinate (station.track_lat/lon, falling back to lat/lon)
+ * onto the nearest Track Model centreline, then read off that point's ELR +
+ * interpolated mileage. Computed by services/etl's `track-model` command.
+ *
+ * This gives a station a real position "along the railway" for the first
+ * time — used to re-rank the signalling diagram's berths by real mileage
+ * instead of pure hop-count (see apps/web/lib/signalling-layout.ts), and to
+ * place stations within the national signalling map's track network.
+ *
+ * A missing row means no Track Model centreline was found within tolerance —
+ * a normal outcome for a bus-only interchange or a station whose track isn't
+ * in this extract. Callers fall back to hop-order / no ELR anchor, the same
+ * "honest to the data" pattern rail_corridor and snap-stations already use.
+ */
+export const stationTrackModelPosition = pgTable("station_track_model_position", {
+  crs: text("crs")
+    .primaryKey()
+    .references(() => station.crs),
+  elr: text("elr").notNull(),
+  /** Interpolated mileage along the ELR at the snap point (miles, e.g. 29.14). */
+  mileage: real("mileage").notNull(),
+  /** Track Model's own ASSET_ID for the matched centreline record. */
+  assetId: text("asset_id").notNull(),
+  /** The point actually used for matching, reprojected to WGS84 — may differ
+   *  slightly from station.track_lat/lon since it's on the Track Model line,
+   *  not the OSM line snap-stations used. */
+  matchedLat: real("matched_lat").notNull(),
+  matchedLon: real("matched_lon").notNull(),
+  /** True ground distance (metres) from the station's input coordinate to
+   *  the matched centreline — the QA/fallback signal, same role as
+   *  MAX_SNAP_METERS in snap-stations.ts. */
+  snapDistanceM: real("snap_distance_m").notNull(),
+  computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Track Model centrelines, reprojected once from British National Grid to
+ * WGS84 at precompute time (services/etl's `track-model` command) so the web
+ * app never carries BNG math at request time — the same "materialise once,
+ * read back as plain coordinates" pattern as rail_corridor.
+ *
+ * This is the raw national track network geometry, independent of any
+ * station/TD-area join — the base layer the /map signalling view draws
+ * everywhere, before any live signal/berth detail is overlaid.
+ */
+export const trackModelLine = pgTable(
+  "track_model_line",
+  {
+    assetId: text("asset_id").primaryKey(),
+    elr: text("elr").notNull(),
+    trackId: text("track_id"),
+    startMileage: real("start_mileage"),
+    endMileage: real("end_mileage"),
+    /** Flattened [lon0, lat0, lon1, lat1, ...] WGS84 pairs, matching
+     *  rail_corridor.geometry's convention. */
+    geometry: real("geometry").array().notNull(),
+  },
+  (t) => [index("track_model_line_elr_idx").on(t.elr)],
+);
+
+// ---------------------------------------------------------------------------
+// Auth (Better Auth) — signed-in users. Table shapes follow Better Auth's
+// Drizzle adapter conventions exactly (see apps/web/lib/auth.ts) — column
+// names/types here are what its core + magicLink + passkey + apiKey plugins
+// expect, not a house style. `role` and `pushSubscription` are the two fields
+// Mainline adds on top of that core shape.
+// ---------------------------------------------------------------------------
+
+/**
+ * `role` is "user" (default, from public sign-up) or "admin" (gates the ETL
+ * routes and /settings/timetable). Promote yourself after your first sign-up
+ * with:
+ *
+ *   update "user" set role = 'admin' where email = 'you@example.com';
+ *
+ * `pushSubscription` is the signed-in user's Web Push subscription (v1.5).
+ * This used to live on a separate anonymous `device` table; now that saving
+ * data requires an account, it can just sit on the user directly.
+ */
+export const user = pgTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  image: text("image"),
+  role: text("role").notNull().default("user"),
+  pushSubscription: jsonb("push_subscription"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const session = pgTable("session", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One row per sign-in method linked to a user. Magic link needs no row here (it's an email-only flow); this is ready for the account-linking Better Auth does internally. */
+export const account = pgTable("account", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
+  scope: text("scope"),
+  idToken: text("id_token"),
+  password: text("password"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Short-lived tokens: magic link sign-in links live here (identifier = email). */
+export const verification = pgTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** WebAuthn credentials, one row per passkey a user has registered. */
+export const passkey = pgTable("passkey", {
+  id: text("id").primaryKey(),
+  name: text("name"),
+  publicKey: text("public_key").notNull(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  credentialID: text("credential_i_d").notNull(),
+  counter: integer("counter").notNull(),
+  deviceType: text("device_type").notNull(),
+  backedUp: boolean("backed_up").notNull(),
+  transports: text("transports"),
+  createdAt: timestamp("created_at", { withTimezone: true }),
+  aaguid: text("aaguid"),
+});
+
+/**
+ * API keys for unattended callers — currently just the etl-cron nightly job
+ * hitting the ETL routes with no human session (see checkEtlAuth). `referenceId`
+ * is Better Auth's generic owner column; here it's always a user id.
+ */
+export const apikey = pgTable("apikey", {
+  id: text("id").primaryKey(),
+  configId: text("config_id").notNull().default("default"),
+  name: text("name"),
+  start: text("start"),
+  prefix: text("prefix"),
+  key: text("key").notNull(),
+  /** Better Auth's generic owner column — always a user id here (no orgs). */
+  referenceId: text("reference_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  refillInterval: integer("refill_interval"),
+  refillAmount: integer("refill_amount"),
+  lastRefillAt: timestamp("last_refill_at", { withTimezone: true }),
+  enabled: boolean("enabled").notNull().default(true),
+  rateLimitEnabled: boolean("rate_limit_enabled").notNull().default(true),
+  rateLimitTimeWindow: integer("rate_limit_time_window"),
+  rateLimitMax: integer("rate_limit_max"),
+  requestCount: integer("request_count"),
+  remaining: integer("remaining"),
+  lastRequest: timestamp("last_request", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  permissions: text("permissions"),
+  metadata: text("metadata"),
+});

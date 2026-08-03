@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireDevice } from "@/lib/device";
+import { getUserId } from "@/lib/current-user";
 import { clearPushSubscription, savePushSubscription } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
-/** Register (or replace) this device's Web Push subscription. */
+/** Register (or replace) the signed-in user's Web Push subscription. */
 export async function POST(req: NextRequest) {
-  const deviceId = await requireDevice();
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   let body: unknown;
   try {
     body = await req.json();
@@ -17,13 +18,14 @@ export async function POST(req: NextRequest) {
   if (!sub || typeof sub !== "object") {
     return NextResponse.json({ ok: false, error: "Missing subscription" }, { status: 400 });
   }
-  await savePushSubscription(deviceId, sub);
+  await savePushSubscription(userId, sub);
   return NextResponse.json({ ok: true });
 }
 
-/** Unsubscribe this device. */
+/** Unsubscribe the signed-in user. */
 export async function DELETE() {
-  const deviceId = await requireDevice();
-  await clearPushSubscription(deviceId);
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  await clearPushSubscription(userId);
   return NextResponse.json({ ok: true });
 }

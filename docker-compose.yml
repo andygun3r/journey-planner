@@ -83,10 +83,15 @@ services:
       REDIS_URL: redis://redis:6379
       MOTIS_URL: http://motis:8080
       ETL_GTFS_OUT_DIR: /data/gtfs
-      # Gates POST /api/etl/upload (see /settings/timetable) — required to
-      # accept a bundle produced locally by `etl package`. Unset disables the
-      # endpoint entirely (returns 503).
-      ETL_UPLOAD_TOKEN: ${ETL_UPLOAD_TOKEN:-}
+      # Sign-in (Better Auth: passkey + magic link) — see .env.example.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # Lets an unattended caller (etl-cron, see below) hit the ETL routes
+      # without a human session — sent as the x-api-key header. An admin's own
+      # session cookie also works for these routes; this is only for the
+      # no-human-logged-in case.
+      ETL_API_KEY: ${ETL_API_KEY:-}
       # Must match the actual motis container name/id on this host — Coolify
       # prefixes/suffixes compose project names, so verify with
       # `docker compose ps motis` and override here if it doesn't match.
@@ -440,6 +445,7 @@ services:
       SERVICE_NAME: nr-ingest
       NETWORKRAIL_USERNAME: ${NETWORKRAIL_USERNAME:-}
       NETWORKRAIL_PASSWORD: ${NETWORKRAIL_PASSWORD:-}
+      NR_TRAJECTORY_MATCH: ${NR_TRAJECTORY_MATCH:-}
     depends_on:
       postgres:
         condition: service_healthy

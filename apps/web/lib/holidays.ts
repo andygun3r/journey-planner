@@ -8,11 +8,11 @@ export interface HolidayRecord extends HolidayRange {
   label: string | null;
 }
 
-export async function listHolidays(deviceId: string): Promise<HolidayRecord[]> {
+export async function listHolidays(userId: string): Promise<HolidayRecord[]> {
   const rows = await getDb()
     .select()
     .from(commuteHoliday)
-    .where(eq(commuteHoliday.deviceId, deviceId))
+    .where(eq(commuteHoliday.userId, userId))
     .orderBy(asc(commuteHoliday.startDate));
   return rows.map((r) => ({
     id: r.id,
@@ -23,19 +23,19 @@ export async function listHolidays(deviceId: string): Promise<HolidayRecord[]> {
 }
 
 /** Just the ranges — used by the resolver and the ingest alert matcher. */
-export async function holidayRangesFor(deviceId: string): Promise<HolidayRange[]> {
+export async function holidayRangesFor(userId: string): Promise<HolidayRange[]> {
   const rows = await getDb()
     .select({ startDate: commuteHoliday.startDate, endDate: commuteHoliday.endDate })
     .from(commuteHoliday)
-    .where(eq(commuteHoliday.deviceId, deviceId));
+    .where(eq(commuteHoliday.userId, userId));
   return rows;
 }
 
-export async function createHoliday(deviceId: string, input: HolidayInput): Promise<string> {
+export async function createHoliday(userId: string, input: HolidayInput): Promise<string> {
   const res = await getDb()
     .insert(commuteHoliday)
     .values({
-      deviceId,
+      userId,
       startDate: input.startDate,
       endDate: input.endDate,
       label: input.label ?? null,
@@ -44,10 +44,10 @@ export async function createHoliday(deviceId: string, input: HolidayInput): Prom
   return res[0]!.id;
 }
 
-export async function deleteHoliday(deviceId: string, id: string): Promise<boolean> {
+export async function deleteHoliday(userId: string, id: string): Promise<boolean> {
   const res = await getDb()
     .delete(commuteHoliday)
-    .where(and(eq(commuteHoliday.id, id), eq(commuteHoliday.deviceId, deviceId)))
+    .where(and(eq(commuteHoliday.id, id), eq(commuteHoliday.userId, userId)))
     .returning({ id: commuteHoliday.id });
   return res.length > 0;
 }

@@ -1,4 +1,5 @@
 import { darwinStopForecast, railCorridor, station } from "@mainline/db";
+import { haversineMeters } from "@mainline/shared";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -112,18 +113,6 @@ interface Graph {
 
 function key(lon: number, lat: number): string {
   return `${lon.toFixed(COORD_PRECISION)},${lat.toFixed(COORD_PRECISION)}`;
-}
-
-function haversineMeters(a: [number, number], b: [number, number]): number {
-  const R = 6_371_000;
-  const toRad = Math.PI / 180;
-  const dLat = (b[1] - a[1]) * toRad;
-  const dLon = (b[0] - a[0]) * toRad;
-  const lat1 = a[1] * toRad;
-  const lat2 = b[1] * toRad;
-  const h =
-    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 /**

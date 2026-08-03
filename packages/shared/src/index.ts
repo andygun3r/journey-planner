@@ -6,3 +6,5 @@ export * from "./darwin.js";
 export * from "./commute.js";
 export * from "./uk-time.js";
 export * from "./service-match.js";
+export * from "./shapefile.js";
+export * from "./bng.js";

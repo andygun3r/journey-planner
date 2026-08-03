@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const rid = req.nextUrl.searchParams.get("rid") ?? undefined;
   try {
-    const result = await getLiveTrains(rid ? 10 : 800, rid);
+    const result = await getLiveTrains(rid ? 10 : undefined, rid);
     return NextResponse.json(result, {
       headers: { "Cache-Control": "no-store" },
     });

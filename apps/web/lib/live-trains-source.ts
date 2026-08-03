@@ -84,7 +84,7 @@ interface Emission {
 let previous: Map<string, MapTrain> | undefined;
 
 async function compute(): Promise<Emission> {
-  const result = await getLiveTrains(800);
+  const result = await getLiveTrains();
   const trains = result.trains.map(toMapTrain);
   const current = new Map(trains.map((t) => [t.id, t]));
 

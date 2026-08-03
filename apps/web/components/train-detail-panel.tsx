@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import { lateLabel, type LiveTrain } from "./map-types";
-import { SignallingDiagram } from "./signalling-diagram";
 
 /**
  * Inline detail panel for a selected train: headcode, live status, origin →
@@ -11,8 +9,10 @@ import { SignallingDiagram } from "./signalling-diagram";
  * so the two views feel like one product. A link to the full service page keeps
  * formation/coach detail one click away without duplicating it here.
  *
- * "View signalling diagram" opens the Traksy-style corridor board for this
- * train, derived from its TD area(s).
+ * The signalling diagram lives at station level (see the station board page),
+ * not here — a train's corridor view didn't tell you anything a station-level
+ * one couldn't, and station level is where "which platform/line is this"
+ * questions actually get asked.
  */
 
 export function TrainDetailPanel({
@@ -28,15 +28,6 @@ export function TrainDetailPanel({
   const dest = path[path.length - 1]?.name ?? train.destName;
   // The train sits at the first not-yet-departed stop.
   const currentIndex = path.findIndex((s) => s.status === "current");
-  const [showSignalling, setShowSignalling] = useState(false);
-
-  // The diagram resolves the corridor from the train: prefer the NR train id,
-  // fall back to the Darwin rid.
-  const sigQuery = train.id.startsWith("TD:")
-    ? `trainId=${encodeURIComponent(train.id)}`
-    : train.rid
-      ? `rid=${encodeURIComponent(train.rid)}`
-      : `trainId=${encodeURIComponent(train.id)}`;
 
   return (
     <aside className="map-panel" aria-label="Train details">
@@ -104,14 +95,6 @@ export function TrainDetailPanel({
         </p>
       )}
 
-      <button
-        type="button"
-        className="map-panel-signal"
-        onClick={() => setShowSignalling(true)}
-      >
-        View signalling diagram →
-      </button>
-
       {/*
         There was a "Full service page →" link here passing `train.rid` into
         /services/[id]. That route hands its id straight to LDBWS
@@ -120,14 +103,6 @@ export function TrainDetailPanel({
         serviceID to use instead, and there is no rid -> serviceID mapping
         available, so the link is gone rather than left broken.
       */}
-
-      {showSignalling && (
-        <SignallingDiagram
-          query={sigQuery}
-          title={train.headcode ?? "Train"}
-          onClose={() => setShowSignalling(false)}
-        />
-      )}
     </aside>
   );
 }

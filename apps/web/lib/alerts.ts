@@ -15,11 +15,11 @@ export interface AlertRecord {
 
 /** A device's alerts, newest first, joined through commute ownership. */
 export async function listAlerts(
-  deviceId: string,
+  userId: string,
   opts: { unseenOnly?: boolean; limit?: number } = {},
 ): Promise<AlertRecord[]> {
   const db = getDb();
-  const conds = [eq(commute.deviceId, deviceId)];
+  const conds = [eq(commute.userId, userId)];
   if (opts.unseenOnly) conds.push(isNull(alert.seenAt));
 
   const rows = await db
@@ -47,7 +47,7 @@ export async function listAlerts(
 }
 
 /** Mark one alert (or all of a device's alerts) seen. Ownership-checked. */
-export async function markSeen(deviceId: string, alertId?: string): Promise<void> {
+export async function markSeen(userId: string, alertId?: string): Promise<void> {
   const db = getDb();
   // Restrict to the device's own commutes' alerts.
   const owned = await db
@@ -55,7 +55,7 @@ export async function markSeen(deviceId: string, alertId?: string): Promise<void
     .from(alert)
     .innerJoin(commute, eq(commute.id, alert.commuteId))
     .where(
-      and(eq(commute.deviceId, deviceId), alertId ? eq(alert.id, alertId) : isNull(alert.seenAt)),
+      and(eq(commute.userId, userId), alertId ? eq(alert.id, alertId) : isNull(alert.seenAt)),
     );
   const ids = owned.map((o) => o.id);
   if (ids.length === 0) return;

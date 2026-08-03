@@ -1,12 +1,12 @@
-import { getDeviceId } from "@/lib/device";
+import { getUserId } from "@/lib/current-user";
 import { subscribe } from "@/lib/live-bus";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Server-Sent Events stream of commute alerts for the current device. The
- * darwin-ingest worker publishes to `commute:alert:{deviceId}` on Redis when a
+ * Server-Sent Events stream of commute alerts for the signed-in user. The
+ * darwin-ingest worker publishes to `commute:alert:{userId}` on Redis when a
  * matched train is cancelled/delayed; this relays each as an `alert` event so
  * the dashboard's alert feed updates live (falling back to polling if the
  * connection can't be established). A comment heartbeat keeps the connection
@@ -16,10 +16,10 @@ export const runtime = "nodejs";
  * connection: this used to be one connection per browser tab.
  */
 export async function GET(req: Request) {
-  const deviceId = await getDeviceId();
+  const userId = await getUserId();
   const redisUrl = process.env.REDIS_URL;
 
-  if (!deviceId || !redisUrl) {
+  if (!userId || !redisUrl) {
     // No identity or no Redis — signal the client to stick with polling.
     return new Response("event: unavailable\ndata: {}\n\n", {
       status: 200,
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     });
   }
 
-  const channel = `commute:alert:${deviceId}`;
+  const channel = `commute:alert:${userId}`;
   const encoder = new TextEncoder();
 
   // Set in start(), used by cancel() — the two are separate callbacks, and

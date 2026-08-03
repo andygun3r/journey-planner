@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AlertFeed } from "@/components/alert-feed";
 import { BackupRoutes } from "@/components/backup-routes";
 import { BoardRefresher } from "@/components/board-refresher";
@@ -6,17 +7,18 @@ import { Departures } from "@/components/commute-departures";
 import { PushToggle } from "@/components/push-toggle";
 import { listAlerts } from "@/lib/alerts";
 import { getDashboardData } from "@/lib/commute-dashboard";
-import { requireDevice } from "@/lib/device";
+import { getUserId } from "@/lib/current-user";
 import { hasPushSubscription, vapidPublicKey } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
 export default async function CommuteDashboardPage() {
-  const deviceId = await requireDevice();
+  const userId = await getUserId();
+  if (!userId) redirect("/login");
   const [state, alerts, pushOn] = await Promise.all([
-    getDashboardData(deviceId),
-    listAlerts(deviceId, { limit: 20 }),
-    hasPushSubscription(deviceId),
+    getDashboardData(userId),
+    listAlerts(userId, { limit: 20 }),
+    hasPushSubscription(userId),
   ]);
   const vapid = vapidPublicKey();
 

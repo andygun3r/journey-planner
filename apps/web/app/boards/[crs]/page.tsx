@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { BoardFilter } from "@/components/board-filter";
 import { BoardRefresher } from "@/components/board-refresher";
 import { LiveCountdown } from "@/components/live-countdown";
+import { StationSignallingButton } from "@/components/station-signalling-button";
 import { type BoardDeparture } from "@/lib/board";
 import { cachedBoard } from "@/lib/board-cache";
 import { getStations, stationName } from "@/lib/stations";
@@ -149,6 +150,8 @@ export default async function BoardPage({
             </span>
           </div>
 
+          <StationSignallingButton crs={outcome.board.crs} name={outcome.board.stationName} />
+
           <BoardFilter crs={outcome.board.crs} stations={stations} active={activeFilter} />
           {activeFilter && (
             <p className="board-filter-note">
@@ -292,7 +295,13 @@ export default async function BoardPage({
                           </span>
                         )}
                         {d.position && d.status !== "cancelled" && (
-                          <span className="board-position">
+                          <span
+                            className={`board-position ${
+                              d.position.latenessMinutes && d.position.latenessMinutes > 1
+                                ? "board-position-late"
+                                : ""
+                            }`}
+                          >
                             <span className="board-position-dot" aria-hidden="true" />
                             {d.position.label}
                             {d.position.latenessMinutes && d.position.latenessMinutes > 1

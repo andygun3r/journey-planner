@@ -207,3 +207,32 @@ export async function serviceIndicatorsByRegion(): Promise<Map<string, ServiceIn
   }
   return map;
 }
+
+/**
+ * There is no network-wide "list all active incidents" endpoint on this API —
+ * only per-station lookup. One well-connected interchange station per Network
+ * Rail region reliably surfaces that region's active incidents (an incident
+ * affecting a TOC shows up at every station on its affected routes), so this
+ * sweeps a fixed set of 8 hub stations — one call per region, not one per
+ * operator or per station — and dedupes by incident id.
+ */
+const REGION_HUB_CRS: Record<string, string> = {
+  Anglia: "LST",
+  "East Midlands": "STP",
+  "London North Eastern": "KGX",
+  "London North Western": "EUS",
+  "Scotland's Railway": "GLC",
+  Southern: "CLJ",
+  "Wales & Western": "PAD",
+  Wessex: "WAT",
+};
+
+/** All currently active disruptions network-wide, deduped, via a fixed sweep of regional hub stations. */
+export async function fetchNetworkDisruptions(): Promise<Disruption[]> {
+  const groups = await Promise.all(Object.values(REGION_HUB_CRS).map((crs) => fetchStationDisruptions(crs)));
+  const byId = new Map<string, Disruption>();
+  for (const group of groups) {
+    for (const d of group) byId.set(d.id, d);
+  }
+  return Array.from(byId.values());
+}

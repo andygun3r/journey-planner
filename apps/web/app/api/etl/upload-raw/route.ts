@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { checkEtlAuth } from "@/lib/etl-auth";
 import { startRawZipImportJob } from "@/lib/etl-jobs";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,9 @@ const CONTAINER_INCOMING_DIR = "/data/dtd/incoming";
  * path — no local `etl package` run required first.
  */
 export async function POST(req: Request) {
+  const authError = await checkEtlAuth(req);
+  if (authError) return authError;
+
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) {

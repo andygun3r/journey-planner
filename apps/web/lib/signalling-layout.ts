@@ -5,8 +5,12 @@
  *
  *   - x = the berth's rank along the running line (longest-path depth), so the
  *     main line reads left→right.
- *   - y = a lane, so where the graph branches, branches sit on separate rows
- *     instead of overlapping.
+ *   - y is fixed — one lane for the whole corridor. A station's real signalling
+ *     diagram reads as a single through line the eye follows left-to-right, not
+ *     a branching graph; forcing everything onto one row also guarantees the
+ *     board only ever needs a horizontal scrollbar, never a vertical one.
+ *     Where several berths land on the same rank (a real branch/junction),
+ *     they're nudged apart along x instead of stacking into a second row.
  *   - a signal sits on each berth boundary (each from→to edge is a section).
  *
  * Pure and deterministic: same graph → same layout, so live overlays register
@@ -26,6 +30,11 @@ export interface LaidBerth {
   berth: string;
   x: number;
   y: number;
+  /** CORPUS place name for this berth's STANOX, e.g. "LONDON WATERLOO". Undefined if unresolved. */
+  place?: string;
+  crs?: string;
+  /** SMART platform, where recorded. */
+  platform?: string;
 }
 
 export interface LaidSignal {
@@ -46,11 +55,11 @@ export interface DiagramLayout {
 }
 
 const X_STEP = 90;
-const Y_STEP = 26;
 const MARGIN = 30;
-// Cap lanes per column: an overloaded rank wraps into extra sub-columns instead
-// of growing into an unreadable vertical strip (some TD areas are wide + flat).
-const MAX_LANES = 18;
+// One fixed lane for every berth — see the module docstring.
+const Y = MARGIN;
+// Berths sharing a rank (a branch/junction) spread out along x instead of
+// stacking into extra rows, so the single lane never overlaps itself.
 const SUBCOL_X = 30;
 
 function berthId(tdArea: string, berth: string): string {
@@ -59,31 +68,51 @@ function berthId(tdArea: string, berth: string): string {
 
 /**
  * Depth of each node = longest chain of edges reaching it (its column). Computed
- * by relaxing every edge up to |V| times (Bellman-Ford-style longest path); this
- * terminates even with cycles, which simply stop deepening once relaxation
- * settles — so loops/reversals don't hang, they just flatten.
+ * by relaxing every edge up to |V| times (Bellman-Ford-style longest path).
+ *
+ * A cycle (trains reversing, crossovers, loops through sidings — common in a
+ * busy area's SMART data) does NOT make this settle: every node on the cycle
+ * keeps incrementing by one on every pass, all the way to the |V|-pass cap, so
+ * a cycle inflates depth roughly linearly with node count rather than
+ * "flattening" as previously assumed. Left unchecked, this stretched a single
+ * area's layout width past 29,000px. Nodes still changing on the final pass
+ * are on such a cycle; clamp them to one past the max depth seen among nodes
+ * that did settle, so they sit just after the real linear chain instead of
+ * running away.
  */
 function columnDepths(nodes: string[], outAdj: Map<string, string[]>): Map<string, number> {
   const depth = new Map<string, number>();
   for (const n of nodes) depth.set(n, 0);
+  const unresolved = new Set<string>();
   for (let pass = 0; pass < nodes.length; pass++) {
     let changed = false;
+    unresolved.clear();
     for (const [from, tos] of outAdj) {
       const df = depth.get(from) ?? 0;
       for (const to of tos) {
         if ((depth.get(to) ?? 0) < df + 1) {
           depth.set(to, df + 1);
           changed = true;
+          unresolved.add(to);
         }
       }
     }
     if (!changed) break;
   }
+  if (unresolved.size > 0) {
+    const settledMax = Math.max(0, ...nodes.filter((n) => !unresolved.has(n)).map((n) => depth.get(n) ?? 0));
+    for (const n of unresolved) depth.set(n, settledMax + 1);
+  }
   return depth;
 }
 
-export function layoutBerths(edgesIn: BerthEdge[]): DiagramLayout {
-  // Build the berth graph (full ids), de-duplicating edges.
+/** Shared graph-building step behind layoutBerths and layoutBerthsFlat. */
+function buildBerthGraph(edgesIn: BerthEdge[]): {
+  nodeList: string[];
+  areaOf: Map<string, { tdArea: string; berth: string }>;
+  outAdj: Map<string, string[]>;
+  edges: Array<{ from: string; to: string; tdArea: string }>;
+} {
   const nodes = new Set<string>();
   const outAdj = new Map<string, string[]>();
   const areaOf = new Map<string, { tdArea: string; berth: string }>();
@@ -106,28 +135,65 @@ export function layoutBerths(edgesIn: BerthEdge[]): DiagramLayout {
     edges.push({ from, to, tdArea: e.tdArea });
   }
 
-  const nodeList = [...nodes];
+  return { nodeList: [...nodes], areaOf, outAdj, edges };
+}
+
+/**
+ * Same berth/edge/signal graph as layoutBerths, but skipping columnDepths'
+ * longest-path ranking (and therefore x/y — every node gets {0, 0}).
+ *
+ * columnDepths is Bellman-Ford-style: O(nodes x edges) per pass, up to
+ * nodes.length passes to flush out cycles. Fine for one corridor's few-hundred
+ * node graph; measured at ~19s for the WHOLE NATIONAL graph (~30k nodes/edges
+ * across every TD area) when getNationalSnapshot in signalling.ts first tried
+ * reusing layoutBerths for the /map overlay. That overlay only ever reads
+ * berth ids/place/crs and edge from/to — never x/y — so there's no reason to
+ * pay for the ranking at all there. Use this for any caller that doesn't
+ * render a schematic diagram.
+ */
+export function layoutBerthsFlat(edgesIn: BerthEdge[]): DiagramLayout {
+  const { nodeList, areaOf, edges } = buildBerthGraph(edgesIn);
+
+  const berths: LaidBerth[] = nodeList.map((n) => {
+    const a = areaOf.get(n)!;
+    return { id: n, tdArea: a.tdArea, berth: a.berth, x: 0, y: 0 };
+  });
+
+  const signals: LaidSignal[] = edges.map((e) => ({
+    id: `${e.from}->${e.to}`,
+    tdArea: e.tdArea,
+    berthAhead: e.to,
+    x: 0,
+    y: 0,
+  }));
+
+  return {
+    berths,
+    signals,
+    edges: edges.map((e) => ({ from: e.from, to: e.to })),
+    width: 0,
+    height: MARGIN * 2,
+  };
+}
+
+export function layoutBerths(edgesIn: BerthEdge[]): DiagramLayout {
+  const { nodeList, areaOf, outAdj, edges } = buildBerthGraph(edgesIn);
   const depth = columnDepths(nodeList, outAdj);
 
-  // Assign a lane (y) per column so branches don't collide: within each rank,
-  // stack nodes in a stable order.
+  // Group by rank, then spread same-rank berths along x rather than stacking
+  // them into extra rows — the whole corridor stays on one lane.
   const byRank = new Map<number, string[]>();
   for (const n of nodeList) {
     const r = depth.get(n) ?? 0;
     (byRank.get(r) ?? byRank.set(r, []).get(r)!).push(n);
   }
   const pos = new Map<string, { x: number; y: number }>();
-  let maxLane = 0;
   let maxX = 0;
   for (const [r, list] of [...byRank.entries()].sort((a, b) => a[0] - b[0])) {
     list.sort((a, b) => a.localeCompare(b));
     list.forEach((n, i) => {
-      // Wrap an overloaded rank into sub-columns so it never towers vertically.
-      const lane = i % MAX_LANES;
-      const sub = Math.floor(i / MAX_LANES);
-      const x = MARGIN + r * X_STEP + sub * SUBCOL_X;
-      pos.set(n, { x, y: MARGIN + lane * Y_STEP });
-      if (lane > maxLane) maxLane = lane;
+      const x = MARGIN + r * X_STEP + i * SUBCOL_X;
+      pos.set(n, { x, y: Y });
       if (x > maxX) maxX = x;
     });
   }
@@ -157,6 +223,137 @@ export function layoutBerths(edgesIn: BerthEdge[]): DiagramLayout {
     signals,
     edges: edges.map((e) => ({ from: e.from, to: e.to })),
     width: maxX + MARGIN,
-    height: MARGIN * 2 + maxLane * Y_STEP,
+    height: MARGIN * 2,
   };
+}
+
+export interface MileageAnchor {
+  berthId: string;
+  tdArea: string;
+  elr: string;
+  mileage: number;
+}
+
+/**
+ * Best-effort re-rank of berths by real mileage, where enough anchors exist
+ * to make that meaningful. `layoutBerths`'s hop-rank x is a graph-distance
+ * guess with no real-world geography; where a TD area has >=2 berths whose
+ * station has a known ELR+mileage (see signalling.ts's applyMileageAnchors,
+ * sourced from station_track_model_position), those anchors are real ground
+ * truth and should win.
+ *
+ * A no-op (returns `layout` untouched) for any TD area with under 2 anchors —
+ * the large majority, expected — so most areas render pixel-identical to the
+ * pure hop-rank layout. Pure function: same input always gives the same
+ * output, matching layoutBerths's own determinism contract.
+ */
+export function reorderByMileage(layout: DiagramLayout, anchors: MileageAnchor[]): DiagramLayout {
+  if (anchors.length === 0) return layout;
+
+  // Anchors can span >1 ELR within one TD area (a junction). Inventing a
+  // cross-ELR mileage scale would be nonsense, so per TD area, use only the
+  // ELR with the most anchors and leave everything else on hop-order.
+  const anchorsByArea = new Map<string, MileageAnchor[]>();
+  for (const a of anchors) {
+    (anchorsByArea.get(a.tdArea) ?? anchorsByArea.set(a.tdArea, []).get(a.tdArea)!).push(a);
+  }
+
+  const anchorByBerthId = new Map<string, MileageAnchor>();
+  for (const [, areaAnchors] of anchorsByArea) {
+    const countByElr = new Map<string, number>();
+    for (const a of areaAnchors) countByElr.set(a.elr, (countByElr.get(a.elr) ?? 0) + 1);
+    let bestElr: string | undefined;
+    let bestCount = 0;
+    for (const [elr, count] of countByElr) {
+      if (count > bestCount) {
+        bestCount = count;
+        bestElr = elr;
+      }
+    }
+    if (bestElr === undefined || bestCount < 2) continue;
+    for (const a of areaAnchors) {
+      if (a.elr === bestElr) anchorByBerthId.set(a.berthId, a);
+    }
+  }
+  if (anchorByBerthId.size === 0) return layout;
+
+  // Existing hop-rank x, in ascending order, is the interpolation frame for
+  // berths with no anchor of their own.
+  const berthsByX = [...layout.berths].sort((a, b) => a.x - b.x);
+  const xIndex = new Map<string, number>();
+  berthsByX.forEach((b, i) => xIndex.set(b.id, i));
+
+  // Anchored berths only, sorted by their real mileage.
+  const anchoredSorted = berthsByX
+    .filter((b) => anchorByBerthId.has(b.id))
+    .map((b) => ({ berth: b, anchor: anchorByBerthId.get(b.id)! }))
+    .sort((a, b) => a.anchor.mileage - b.anchor.mileage);
+
+  if (anchoredSorted.length < 2) return layout;
+
+  // Keep the new x span roughly the same pixel budget the hop-order ranks
+  // already occupy for these berths, so total diagram width doesn't lurch.
+  const anchoredXs = anchoredSorted.map((a) => xIndex.get(a.berth.id)!);
+  const spanWidth = Math.max(...anchoredXs) - Math.min(...anchoredXs) || X_STEP;
+  const minMileage = anchoredSorted[0]!.anchor.mileage;
+  const maxMileage = anchoredSorted[anchoredSorted.length - 1]!.anchor.mileage;
+  const mileageRange = maxMileage - minMileage || 1;
+  const originX = Math.min(...anchoredXs);
+
+  const mileageX = new Map<string, number>();
+  for (const { berth, anchor } of anchoredSorted) {
+    const t = (anchor.mileage - minMileage) / mileageRange;
+    mileageX.set(berth.id, originX + t * spanWidth);
+  }
+
+  // Unanchored berths between two anchors: interpolate using their existing
+  // hop-rank position as the parameter between the two bounding anchors' new
+  // mileage-based x. Berths with no bounding anchor on either side keep their
+  // original x untouched — no invented extrapolation.
+  const newX = new Map<string, number>(mileageX);
+  for (let i = 0; i < berthsByX.length; i++) {
+    const berth = berthsByX[i]!;
+    if (newX.has(berth.id)) continue;
+
+    let before: { berth: LaidBerth; x: number } | undefined;
+    for (let j = i - 1; j >= 0; j--) {
+      const candidate = berthsByX[j]!;
+      if (mileageX.has(candidate.id)) {
+        before = { berth: candidate, x: mileageX.get(candidate.id)! };
+        break;
+      }
+    }
+    let after: { berth: LaidBerth; x: number } | undefined;
+    for (let j = i + 1; j < berthsByX.length; j++) {
+      const candidate = berthsByX[j]!;
+      if (mileageX.has(candidate.id)) {
+        after = { berth: candidate, x: mileageX.get(candidate.id)! };
+        break;
+      }
+    }
+    if (!before || !after) continue; // no bounding anchor on one side — leave as-is
+
+    const beforeRank = xIndex.get(before.berth.id)!;
+    const afterRank = xIndex.get(after.berth.id)!;
+    const rank = xIndex.get(berth.id)!;
+    const t = afterRank === beforeRank ? 0 : (rank - beforeRank) / (afterRank - beforeRank);
+    newX.set(berth.id, before.x + t * (after.x - before.x));
+  }
+
+  const berthById = new Map(layout.berths.map((b) => [b.id, b]));
+  const berths = layout.berths.map((b) => (newX.has(b.id) ? { ...b, x: newX.get(b.id)! } : b));
+
+  // Each signal sits at a fixed fractional offset before the berth it
+  // protects (see layoutBerths: x = pt.x - (pt.x - pf.x) * 0.28). Preserve
+  // that same fractional offset — relative to the berth's OLD x — when the
+  // berth moves, rather than trying to reconstruct which edge fed into it.
+  const signals = layout.signals.map((s) => {
+    const oldAheadX = berthById.get(s.berthAhead)?.x;
+    const newAheadX = newX.get(s.berthAhead);
+    if (oldAheadX === undefined || newAheadX === undefined) return s;
+    const offset = oldAheadX - s.x; // how far before the berth this signal originally sat
+    return { ...s, x: newAheadX - offset };
+  });
+
+  return { ...layout, berths, signals };
 }

@@ -1,5 +1,8 @@
+import Link from "next/link";
 import { TimetableUploadForm } from "@/components/timetable-upload-form";
 import { timetableStatus } from "@/lib/timetable-status";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +63,31 @@ async function CurrentState() {
   );
 }
 
-export default function TimetableSettingsPage() {
+/**
+ * Admin-only: this page can trigger a full timetable reload, so it's gated on
+ * role "admin" the same way the ETL routes themselves are (see
+ * lib/etl-auth.ts) rather than trusting the UI alone to hide the buttons.
+ */
+export default async function TimetableSettingsPage() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  const role = (session?.user as { role?: string } | undefined)?.role;
+
+  if (role !== "admin") {
+    return (
+      <main>
+        <div className="results-head">
+          <h1>Timetable</h1>
+        </div>
+        <div className="notice">
+          <p>
+            This page is admin-only. <Link href="/login">Sign in</Link> with an admin account to
+            continue.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   const sftpAvailable = Boolean(process.env.DTD_SFTP_HOST);
 
   return (

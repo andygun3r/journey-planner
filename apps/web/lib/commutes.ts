@@ -21,9 +21,9 @@ function toLegRecord(row: typeof commuteLeg.$inferSelect): CommuteLegRecord {
 }
 
 /** All of a device's commutes with their per-day legs, ordered by day. */
-export async function listCommutes(deviceId: string): Promise<CommuteWithLegs[]> {
+export async function listCommutes(userId: string): Promise<CommuteWithLegs[]> {
   const db = getDb();
-  const commutes = await db.select().from(commute).where(eq(commute.deviceId, deviceId));
+  const commutes = await db.select().from(commute).where(eq(commute.userId, userId));
   if (commutes.length === 0) return [];
 
   const ids = commutes.map((c) => c.id);
@@ -47,14 +47,14 @@ export async function listCommutes(deviceId: string): Promise<CommuteWithLegs[]>
 
 /** A single commute, ownership-checked, or null. */
 export async function getCommute(
-  deviceId: string,
+  userId: string,
   id: string,
 ): Promise<CommuteWithLegs | null> {
   const db = getDb();
   const rows = await db
     .select()
     .from(commute)
-    .where(and(eq(commute.id, id), eq(commute.deviceId, deviceId)))
+    .where(and(eq(commute.id, id), eq(commute.userId, userId)))
     .limit(1);
   const c = rows[0];
   if (!c) return null;
@@ -87,7 +87,7 @@ function legValues(commuteId: string, input: CommuteInput) {
  * NOT NULL in the DB (pre per-day model), so seed them from the first leg to
  * satisfy the constraint; new code never reads them.
  */
-export async function createCommute(deviceId: string, input: CommuteInput): Promise<string> {
+export async function createCommute(userId: string, input: CommuteInput): Promise<string> {
   const db = getDb();
   const first = input.legs[0]!;
   const seedWindow = first.am.start ?? first.pm.start ?? "07:00";
@@ -97,7 +97,7 @@ export async function createCommute(deviceId: string, input: CommuteInput): Prom
   const inserted = await db
     .insert(commute)
     .values({
-      deviceId,
+      userId,
       label: input.label,
       homeCrs: input.homeCrs,
       homeLabel: input.homeLabel,
@@ -117,7 +117,7 @@ export async function createCommute(deviceId: string, input: CommuteInput): Prom
 
 /** Replaces a commute's fields and all its legs (ownership-checked). */
 export async function updateCommute(
-  deviceId: string,
+  userId: string,
   id: string,
   input: CommuteInput,
 ): Promise<boolean> {
@@ -125,7 +125,7 @@ export async function updateCommute(
   const owned = await db
     .select({ id: commute.id })
     .from(commute)
-    .where(and(eq(commute.id, id), eq(commute.deviceId, deviceId)))
+    .where(and(eq(commute.id, id), eq(commute.userId, userId)))
     .limit(1);
   if (owned.length === 0) return false;
 
@@ -140,11 +140,11 @@ export async function updateCommute(
   return true;
 }
 
-export async function deleteCommute(deviceId: string, id: string): Promise<boolean> {
+export async function deleteCommute(userId: string, id: string): Promise<boolean> {
   const db = getDb();
   const res = await db
     .delete(commute)
-    .where(and(eq(commute.id, id), eq(commute.deviceId, deviceId)))
+    .where(and(eq(commute.id, id), eq(commute.userId, userId)))
     .returning({ id: commute.id });
   return res.length > 0;
 }

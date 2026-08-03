@@ -17,6 +17,7 @@ import {
 import { TrainDetailPanel } from "./train-detail-panel";
 import { BusStopPanel } from "./bus-stop-panel";
 import { BusRoutePanel } from "./bus-route-panel";
+import { addSignallingLayers, SignallingMapLayer } from "./signalling-map-layer";
 import {
   addMapIcons,
   arrowOffsetEms,
@@ -208,12 +209,25 @@ export function LiveMap() {
   const [tflStops, setTflStops] = useState<TflStop[]>([]);
   const [tflBuses, setTflBuses] = useState<ApproxBus[]>([]);
   const [showTfl, setShowTfl] = useState(true);
+  // Off by default: the national signalling overlay is opt-in, same reasoning
+  // as the tube/bus/DLR toggle — it shouldn't compete visually with live
+  // trains unless asked for.
+  const [showSignalling, setShowSignalling] = useState(false);
+  // mapRef is a ref, not state, so SignallingMapLayer (which needs the actual
+  // instance as a prop to attach its own effects) can't read it directly —
+  // this flips once on load to trigger the one re-render it needs.
+  const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
   // Bus stop and bus-route panels are mutually exclusive with the train panel
   // and each other — only one map-driven detail panel is ever open at a time.
   const [selectedStop, setSelectedStop] = useState<TflStop | null>(null);
   const [selectedBusRoute, setSelectedBusRoute] = useState<{ lineId: string; direction: string; lineName: string } | null>(null);
   const [busRoute, setBusRoute] = useState<BusRoute | null>(null);
   const trains = useMemo(() => [...trainsById.values()], [trainsById]);
+  // Lets the feature-state effect below check "is this train still on the
+  // map" without depending on `trains` (a new array every tick) — see that
+  // effect's comment for why that dependency caused a maplibre crash.
+  const trainsByIdRef = useRef(trainsById);
+  trainsByIdRef.current = trainsById;
   const baseSelected = useMemo(
     () => (selectedId ? (trainsById.get(selectedId) ?? null) : null),
     [trainsById, selectedId],
@@ -456,6 +470,7 @@ export function LiveMap() {
       cancelled = true;
       mapRef.current?.remove();
       mapRef.current = null;
+      setMapInstance(null);
     };
   }, []);
 
@@ -481,6 +496,8 @@ export function LiveMap() {
   const attachMapHandlers = useCallback((map: maplibregl.Map) => {
     map.on("load", () => {
       addMapIcons(map);
+      addSignallingLayers(map);
+      setMapInstance(map);
 
       map.addSource(TFL_STOPS_SOURCE, {
         type: "geojson",
@@ -754,11 +771,32 @@ export function LiveMap() {
   // Selection is a feature-state flag, not part of the data. Clicking a train
   // used to re-serialise and re-upload every feature on the map purely to flip
   // one boolean; this touches two.
+  //
+  // Deliberately keyed on [selectedId] alone, NOT on `trains` — `trains` was a
+  // new array reference on every trainsById update (every ~5s tick), which
+  // fired this effect's cleanup (removeFeatureState) on every tick rather than
+  // only on an actual selection change. That widened the window for a known
+  // maplibre-gl bug (github.com/maplibre/maplibre-gl-js issue #7535, fixed
+  // upstream only in the not-yet-adopted v6): removeFeatureState can leave
+  // its internal deletedStates bookkeeping in a state coalesceChanges doesn't
+  // expect if it's called again for the same id before a render coalesces the
+  // previous call — surfacing as an uncatchable "Cannot convert undefined or
+  // null to object" crash deep in the render loop (a try/catch here can't see
+  // it; the throw happens later, inside map._render). trainsByIdRef reads the
+  // latest trains without needing them in the dependency array. The cleanup
+  // below also checks real feature state first so it never re-issues a
+  // removeFeatureState the previous run of this effect already performed.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !selectedId) return;
+    let unmounted = false;
     const apply = () => {
-      if (!selectedId) return;
+      if (unmounted) return;
+      // Don't touch feature state for a train that's no longer in the data —
+      // it may have scrolled off nr_train_position's freshness window between
+      // selection and this effect running, and maplibre has no feature to
+      // attach state to at that point.
+      if (!trainsByIdRef.current.has(selectedId)) return;
       try {
         map.setFeatureState({ source: TRAINS_SOURCE, id: selectedId }, { selected: true });
       } catch {
@@ -768,14 +806,21 @@ export function LiveMap() {
     if (map.isStyleLoaded()) apply();
     else map.once("load", apply);
     return () => {
-      if (!selectedId) return;
+      unmounted = true;
       try {
-        map.removeFeatureState({ source: TRAINS_SOURCE, id: selectedId }, "selected");
+        // Idempotency guard: only remove state that's actually still set, so
+        // a second cleanup call for the same id (StrictMode double-invoke,
+        // or a rapid selection change) never re-issues removeFeatureState for
+        // state already removed — the trigger for the maplibre bug above.
+        const state = map.getFeatureState({ source: TRAINS_SOURCE, id: selectedId });
+        if (state && state.selected !== undefined) {
+          map.removeFeatureState({ source: TRAINS_SOURCE, id: selectedId }, "selected");
+        }
       } catch {
         // The style can be gone if the map unmounted first.
       }
     };
-  }, [selectedId, trains]);
+  }, [selectedId]);
 
   // The selected train's route line, drawn for one train only.
   useEffect(() => {
@@ -838,7 +883,17 @@ export function LiveMap() {
         >
           {showTfl ? "Hide" : "Show"} tube/bus/DLR
         </button>
+        <button
+          type="button"
+          className="map-tfl-toggle"
+          aria-pressed={showSignalling}
+          onClick={() => setShowSignalling((v) => !v)}
+        >
+          {showSignalling ? "Hide" : "Show"} signalling
+        </button>
       </div>
+
+      <SignallingMapLayer map={mapInstance} enabled={showSignalling} />
 
       <div ref={containerRef} className="live-map-canvas" />
 
@@ -876,9 +931,21 @@ export function LiveMap() {
             <span className="map-key map-key-tfl-bus">Approx. bus</span>
           </>
         )}
+        {showSignalling && (
+          <>
+            <span className="map-key map-key-sig-off">Signal clear</span>
+            <span className="map-key map-key-sig-red">Signal at danger</span>
+            <span className="map-key map-key-sig-unknown">Signal, no data</span>
+            <span className="map-key map-key-berth-occupied">Berth occupied</span>
+            <span className="map-key map-key-berth-blocked">Section ahead blocked</span>
+            <span className="map-key map-key-train-path">Recent path</span>
+          </>
+        )}
         <span className="map-legend-note">
           Rail positions from Network Rail TRUST &amp; Train Describer — timing-point derived, not
           GPS. Bus positions are approximated from TfL arrival countdowns, not tracked GPS.
+          {showSignalling &&
+            " Signal markers only appear where a signal can be tied to a real station location — coverage is partial and uneven across the network, and even a marker with real decoded data may be paired to the wrong physical signal (no reliable id links published SOP maps to specific signals). Berth occupancy, block state and recent paths need no published signal data, don't have that pairing problem, and cover more of the network, but still only where a berth resolves to a real station location."}
         </span>
       </p>
     </div>

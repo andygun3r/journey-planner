@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 /**
  * Traksy-style corridor signalling board. Draws the berth graph (auto-laid-out
- * server-side from SMART) as a linear track diagram, with live headcodes riding
- * their berths and signal aspects decoded from S-class where SOP data exists.
- * Signals with no SOP mapping render "unknown" (grey) — honest to the data.
+ * server-side from SMART) as a single-lane linear track diagram, with live
+ * headcodes riding their berths and signal aspects decoded from S-class where
+ * SOP data exists. Signals with no SOP mapping render "unknown" (grey) —
+ * honest to the data.
  *
- * Shown in a modal launched from a train's detail panel. Live over SSE, with
- * polling as the fallback.
+ * Shown in a modal launched from a station board — every TD area signalling
+ * that station, not one train's corridor. Live over SSE, with polling as the
+ * fallback.
  *
  * The layout arrives once and stays put. It comes from SMART reference data and
  * does not change while the modal is open, but it used to be re-sent — hundreds
@@ -23,12 +25,17 @@ interface LaidBerth {
   berth: string;
   x: number;
   y: number;
+  place?: string;
+  crs?: string;
+  platform?: string;
 }
 interface DiagramSignal {
   id: string;
   itemId?: string;
   aspect: "off" | "red" | "unknown";
   occupiedAhead?: boolean;
+  routeSet?: boolean;
+  berthAhead?: string;
   mapped: boolean;
   x: number;
   y: number;
@@ -176,7 +183,43 @@ export function SignallingDiagram({
     return m;
   }, [layout]);
 
+  // One label per distinct place, at its leftmost x, so a station spanning many
+  // berths/platforms only gets labelled once. Ranks near the start of a large
+  // area can bunch dozens of distinct places into a narrow x range (many
+  // source nodes with no incoming edge all land at x=MARGIN); labelling every
+  // one there would just overlap into an unreadable smear, so once sorted by
+  // x we drop any label too close to the one already placed.
+  const MIN_LABEL_GAP = 60;
+  const placeLabels = useMemo(() => {
+    const leftmost = new Map<string, number>();
+    for (const b of layout?.berths ?? []) {
+      if (!b.place) continue;
+      const x = leftmost.get(b.place);
+      if (x === undefined || b.x < x) leftmost.set(b.place, b.x);
+    }
+    const sorted = [...leftmost.entries()]
+      .map(([place, x]) => ({ place, x }))
+      .sort((a, b) => a.x - b.x);
+    const spaced: typeof sorted = [];
+    let lastX = -Infinity;
+    for (const label of sorted) {
+      if (label.x - lastX < MIN_LABEL_GAP) continue;
+      spaced.push(label);
+      lastX = label.x;
+    }
+    return spaced;
+  }, [layout]);
+
   const hasBerths = (layout?.berths.length ?? 0) > 0;
+  const LABEL_BAND = 70;
+  const viewBoxHeight = (layout?.height ?? 0) + (placeLabels.length ? LABEL_BAND : 0);
+  // Render close to native size (viewBox units are already pixel-scale, e.g.
+  // 90px per berth column) rather than stretching to the modal's width — a
+  // wide/tall corridor stays legible and the board scrolls instead of
+  // squashing everything into the panel.
+  const SCALE = 1.5;
+  const renderWidth = (layout?.width ?? 0) * SCALE;
+  const renderHeight = viewBoxHeight * SCALE;
 
   return (
     <div className="sig-modal" role="dialog" aria-modal="true" aria-label="Signalling diagram">
@@ -210,7 +253,9 @@ export function SignallingDiagram({
           )}
           {hasBerths && layout && data && (
             <svg
-              viewBox={`0 0 ${layout.width} ${layout.height}`}
+              viewBox={`0 0 ${layout.width} ${viewBoxHeight}`}
+              width={renderWidth}
+              height={renderHeight}
               className="sig-svg"
               role="img"
               aria-label="Corridor signalling diagram"
@@ -224,21 +269,47 @@ export function SignallingDiagram({
                   return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className="sig-track" />;
                 })}
               </g>
-              {/* Signals */}
+              {/* Route-set overlay: a highlighted line from a signal to the berth its route protects. */}
+              <g className="sig-routes">
+                {data.signals.map((s) => {
+                  if (!s.routeSet || !s.berthAhead) return null;
+                  const ahead = berthById.get(s.berthAhead);
+                  if (!ahead) return null;
+                  return (
+                    <line
+                      key={`route-${s.id}`}
+                      x1={s.x}
+                      y1={s.y}
+                      x2={ahead.x}
+                      y2={ahead.y}
+                      className="sig-route-set"
+                    />
+                  );
+                })}
+              </g>
+              {/* Signals: a short trackside post with a coloured head, angled off the line. */}
               <g className="sig-signals">
                 {data.signals.map((s) => (
-                  <circle
-                    key={s.id}
-                    cx={s.x}
-                    cy={s.y}
-                    r={4}
-                    className={`sig-signal sig-signal-${s.aspect}`}
-                  >
-                    <title>
-                      {s.itemId ? `Signal ${s.itemId}: ` : "Signal: "}
-                      {s.aspect === "unknown" ? "no data" : s.aspect}
-                    </title>
-                  </circle>
+                  <g key={s.id} className="sig-signal-mark">
+                    <line x1={s.x} y1={s.y} x2={s.x} y2={s.y - 8} className="sig-signal-post" />
+                    <circle
+                      cx={s.x}
+                      cy={s.y - 8}
+                      r={3}
+                      className={`sig-signal-head sig-signal-${s.aspect}`}
+                    >
+                      <title>
+                        {s.itemId ? `Signal ${s.itemId}: ` : "Signal: "}
+                        {s.aspect === "unknown" ? "no data" : s.aspect}
+                        {s.routeSet ? " · route set" : ""}
+                      </title>
+                    </circle>
+                    {s.mapped && s.itemId && (
+                      <text x={s.x} y={s.y - 12} className="sig-signal-label" textAnchor="middle">
+                        {s.itemId}
+                      </text>
+                    )}
+                  </g>
                 ))}
               </g>
               {/* Berths */}
@@ -246,14 +317,18 @@ export function SignallingDiagram({
                 {layout.berths.map((b) => (
                   <rect
                     key={b.id}
-                    x={b.x - 9}
-                    y={b.y - 6}
-                    width={18}
-                    height={12}
+                    x={b.x - 11}
+                    y={b.y - 7}
+                    width={22}
+                    height={14}
                     rx={2}
                     className="sig-berth"
                   >
-                    <title>{`${b.tdArea} berth ${b.berth}`}</title>
+                    <title>
+                      {b.place ? `${b.place} — ` : ""}
+                      {b.tdArea} berth {b.berth}
+                      {b.platform ? ` · platform ${b.platform}` : ""}
+                    </title>
                   </rect>
                 ))}
               </g>
@@ -265,31 +340,55 @@ export function SignallingDiagram({
                   return (
                     <g key={t.headcode + t.berthId} className={t.focus ? "sig-train-focus" : ""}>
                       <rect
-                        x={b.x - 9}
-                        y={b.y - 6}
-                        width={18}
-                        height={12}
+                        x={b.x - 11}
+                        y={b.y - 7}
+                        width={22}
+                        height={14}
                         rx={2}
                         className={`sig-berth-occupied${t.focus ? " sig-berth-focus" : ""}`}
                       />
-                      <text x={b.x} y={b.y - 10} className="sig-headcode" textAnchor="middle">
+                      <text
+                        x={b.x}
+                        y={b.y}
+                        className="sig-headcode"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                      >
                         {t.headcode}
                       </text>
                     </g>
                   );
                 })}
               </g>
+              {/* Station/place labels, once per distinct place, below the track. */}
+              <g className="sig-places">
+                {placeLabels.map(({ place, x }) => (
+                  <text
+                    key={place}
+                    x={x}
+                    y={layout.height + 16}
+                    className="sig-place-label"
+                    textAnchor="end"
+                    transform={`rotate(-40 ${x} ${layout.height + 16})`}
+                  >
+                    {place}
+                  </text>
+                ))}
+              </g>
             </svg>
           )}
         </div>
 
         <p className="sig-legend">
-          <span className="sig-key sig-key-off">Off</span>
+          <span className="sig-key sig-key-off">Off (clear)</span>
           <span className="sig-key sig-key-red">On (red)</span>
+          <span className="sig-key sig-key-route">Route set</span>
           <span className="sig-key sig-key-unknown">No data</span>
           <span className="sig-legend-note">
             Aspects decoded from Network Rail TD S-class where SOP maps exist. Legacy areas without
-            published maps show “no data”.
+            published maps show “no data”. Signals are matched to their decoded data by position
+            along the line, not a verified id — even a signal showing a real aspect may be paired
+            to the wrong one.
           </span>
         </p>
       </div>

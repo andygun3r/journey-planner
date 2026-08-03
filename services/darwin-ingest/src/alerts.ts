@@ -1,4 +1,4 @@
-import { alert, commute, commuteCorridor, commuteHoliday, getSharedDb, device } from "@mainline/db";
+import { alert, commute, commuteCorridor, commuteHoliday, getSharedDb, user } from "@mainline/db";
 import { isDateInHolidayRange } from "@mainline/shared";
 import { and, eq, sql } from "drizzle-orm";
 import type { Redis } from "ioredis";
@@ -10,7 +10,7 @@ import { sendPush } from "./push.js";
  * delay for a train, this checks whether that train (train_uid + scheduled
  * start date) is in any commute's precomputed corridor, and if so raises an
  * alert: an `alert` row (deduped), a Redis publish for the live feed/SSE, and a
- * Web Push to the device if it has a subscription.
+ * Web Push to the user if they have a subscription.
  *
  * A small in-memory set of "uids we care about today/tomorrow" is refreshed
  * periodically so the vast majority of Darwin events (not on anyone's commute)
@@ -44,7 +44,7 @@ export function invalidateTrackedUids(): void {
 
 interface MatchedCommute {
   commuteId: string;
-  deviceId: string;
+  userId: string;
   commuteLabel: string;
   commuteLegId: string | null;
   direction: string | null;
@@ -54,31 +54,31 @@ interface MatchedCommute {
   pushSubscription: unknown;
 }
 
-/** Corridors (with device + commute) that this train serves on this date. */
+/** Corridors (with owning user + commute) that this train serves on this date. */
 async function matchingCommutes(uid: string, ssd: string): Promise<MatchedCommute[]> {
   return db
     .select({
       commuteId: commuteCorridor.commuteId,
-      deviceId: commute.deviceId,
+      userId: commute.userId,
       commuteLabel: commute.label,
       commuteLegId: commuteCorridor.commuteLegId,
       direction: commuteCorridor.direction,
       serviceDate: commuteCorridor.serviceDate,
       originCrs: commuteCorridor.originCrs,
       destCrs: commuteCorridor.destCrs,
-      pushSubscription: device.pushSubscription,
+      pushSubscription: user.pushSubscription,
     })
     .from(commuteCorridor)
     .innerJoin(commute, eq(commute.id, commuteCorridor.commuteId))
-    .innerJoin(device, eq(device.id, commute.deviceId))
+    .innerJoin(user, eq(user.id, commute.userId))
     .where(and(eq(commuteCorridor.trainUid, uid), eq(commuteCorridor.serviceDate, ssd)));
 }
 
-async function isDeviceOnHoliday(deviceId: string, date: string): Promise<boolean> {
+async function isUserOnHoliday(userId: string, date: string): Promise<boolean> {
   const rows = await db
     .select({ startDate: commuteHoliday.startDate, endDate: commuteHoliday.endDate })
     .from(commuteHoliday)
-    .where(eq(commuteHoliday.deviceId, deviceId));
+    .where(eq(commuteHoliday.userId, userId));
   return isDateInHolidayRange(date, rows);
 }
 
@@ -93,7 +93,7 @@ interface RaiseArgs {
 
 /** Insert (deduped), publish, and push a single alert for one matched commute. */
 async function raiseAlert({ match, kind, rid, headline, detail, redis }: RaiseArgs): Promise<void> {
-  if (await isDeviceOnHoliday(match.deviceId, match.serviceDate)) return;
+  if (await isUserOnHoliday(match.userId, match.serviceDate)) return;
 
   const inserted = await db
     .insert(alert)
@@ -126,7 +126,7 @@ async function raiseAlert({ match, kind, rid, headline, detail, redis }: RaiseAr
     direction: match.direction,
   };
   if (redis) {
-    await redis.publish(`commute:alert:${match.deviceId}`, JSON.stringify(payload));
+    await redis.publish(`commute:alert:${match.userId}`, JSON.stringify(payload));
   }
 
   if (match.pushSubscription) {
@@ -138,10 +138,7 @@ async function raiseAlert({ match, kind, rid, headline, detail, redis }: RaiseAr
     });
     if (failStatus === 404 || failStatus === 410) {
       // Subscription is gone — clear it so we stop trying.
-      await db
-        .update(device)
-        .set({ pushSubscription: null })
-        .where(eq(device.id, match.deviceId));
+      await db.update(user).set({ pushSubscription: null }).where(eq(user.id, match.userId));
     }
   }
 }

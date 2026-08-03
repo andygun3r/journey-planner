@@ -416,7 +416,7 @@ export default async function ServicePage({
       {service.progress.networkRail && service.rid && (
         <>
           <ServicePositionMap rid={service.rid} />
-          <AdvancedViewToggle serviceId={id} rid={service.rid} />
+          <AdvancedViewToggle serviceId={id} />
         </>
       )}
 

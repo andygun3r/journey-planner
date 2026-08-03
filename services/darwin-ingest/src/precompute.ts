@@ -233,11 +233,11 @@ export async function precomputeAllCorridors(): Promise<void> {
   const started = Date.now();
   const dates = horizonDates();
 
-  // Load all commutes + their legs, and holidays grouped by device.
+  // Load all commutes + their legs, and holidays grouped by owning user.
   const commutes = await db
     .select({
       id: commute.id,
-      deviceId: commute.deviceId,
+      userId: commute.userId,
       homeCrs: commute.homeCrs,
     })
     .from(commute);
@@ -255,16 +255,16 @@ export async function precomputeAllCorridors(): Promise<void> {
   }
 
   const holidays = await db.select().from(commuteHoliday);
-  const holidaysByDevice = new Map<string, { startDate: string; endDate: string }[]>();
+  const holidaysByUser = new Map<string, { startDate: string; endDate: string }[]>();
   for (const h of holidays) {
-    const arr = holidaysByDevice.get(h.deviceId) ?? [];
+    const arr = holidaysByUser.get(h.userId) ?? [];
     arr.push({ startDate: h.startDate, endDate: h.endDate });
-    holidaysByDevice.set(h.deviceId, arr);
+    holidaysByUser.set(h.userId, arr);
   }
 
   for (const c of commutes) {
     if (!c.homeCrs) continue; // commute without a home location can't be resolved
-    const deviceHols = holidaysByDevice.get(c.deviceId) ?? [];
+    const userHols = holidaysByUser.get(c.userId) ?? [];
     for (const leg of legsByCommute.get(c.id) ?? []) {
       const legRow: LegRow = {
         commuteId: c.id,
@@ -278,8 +278,8 @@ export async function precomputeAllCorridors(): Promise<void> {
         pmWindowEnd: leg.pmWindowEnd,
       };
       for (const serviceDate of dates) {
-        await resolveCorridor(legRow, "am", serviceDate, deviceHols);
-        await resolveCorridor(legRow, "pm", serviceDate, deviceHols);
+        await resolveCorridor(legRow, "am", serviceDate, userHols);
+        await resolveCorridor(legRow, "pm", serviceDate, userHols);
       }
     }
   }

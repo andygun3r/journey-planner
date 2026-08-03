@@ -710,6 +710,25 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
+.board-signal-btn {
+  display: inline-flex;
+  align-self: flex-start;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.25rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.board-signal-btn:hover {
+  border-color: var(--ring);
+}
+
 /* Board: time | destination | platform | expected — a stack of rounded,
    elevated cards (the signature "Departure Card"), not a ruled table.
    The four columns are shared by the card and its legend, so the two can't
@@ -1512,27 +1531,50 @@ a {
   gap: 0.4rem;
   margin-top: 0.15rem;
   font-size: 0.78rem;
-  color: var(--accent);
+  color: var(--ok);
   font-weight: 550;
+}
+
+.board-position-late {
+  color: var(--danger);
 }
 
 .board-position-dot {
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--ok);
   flex: none;
-  box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 70%, transparent);
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--ok) 70%, transparent);
   animation: position-pulse 2.4s ease-out infinite;
+}
+
+.board-position-late .board-position-dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--danger) 70%, transparent);
 }
 
 @keyframes position-pulse {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in oklch, var(--accent) 55%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--ok) 55%, transparent);
   }
   70%,
   100% {
-    box-shadow: 0 0 0 0.4rem color-mix(in oklch, var(--accent) 0%, transparent);
+    box-shadow: 0 0 0 0.4rem color-mix(in oklch, var(--ok) 0%, transparent);
+  }
+}
+
+.board-position-late .board-position-dot {
+  animation: position-pulse-late 2.4s ease-out infinite;
+}
+
+@keyframes position-pulse-late {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--danger) 55%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 0.4rem color-mix(in oklch, var(--danger) 0%, transparent);
   }
 }
 
@@ -1940,13 +1982,14 @@ a {
 
 /* ---- Live service progress tracker ---- */
 
-/* Countdown pill */
+/* Countdown pill — colour comes from the enclosing .status-ontime/.status-delayed
+   span; this rule must not set its own color or it wins the cascade over that
+   parent and every countdown renders red regardless of status. */
 .countdown {
   font-family: var(--font-time);
   font-variant-numeric: tabular-nums;
   font-weight: 650;
   font-size: 0.9rem;
-  color: var(--accent);
 }
 
 .countdown-due {
@@ -2300,11 +2343,38 @@ a {
   margin-top: 0.5rem;
 }
 
+.advanced-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.advanced-view-toggle:hover {
+  border-color: var(--ring);
+}
+.advanced-view-toggle-chevron {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
 .advanced-view {
   margin-top: 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  padding: 0.85rem 0.95rem 1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  background: var(--surface);
 }
 
 /* Three cells (time, location, event), so three columns — borrowing `.call`'s
@@ -2488,23 +2558,6 @@ a.map-tip-anchor:hover .map-tip {
   font-weight: 600;
 }
 
-.map-panel-signal {
-  font: inherit;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-align: left;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--surface-2);
-  color: var(--ink);
-  cursor: pointer;
-  transition: border-color 0.15s ease;
-}
-.map-panel-signal:hover {
-  border-color: var(--ring);
-}
-
 /* ---- Bus stop / bus route map panels ---- */
 .map-panel-departures {
   margin: 0;
@@ -2624,19 +2677,24 @@ a.map-tip-anchor:hover .map-tip {
 .sig-board {
   flex: 1;
   min-height: 12rem;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
   background: var(--surface-2);
   padding: 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
 }
+/*
+ * The layout is a single lane (see signalling-layout.ts) but can still be
+ * hundreds of berths wide — forcing it to `width: 100%` used to scale the
+ * whole viewBox down to the modal's width, squashing a long corridor into an
+ * unreadably thin strip. Render it at roughly its real pixel size instead (1
+ * viewBox unit ~ 1px, scaled up for legibility) and let `.sig-board` scroll
+ * horizontally, like panning along a strip map. There's nothing to scroll
+ * vertically — the diagram is exactly as tall as one lane.
+ */
 .sig-svg {
-  width: 100%;
-  height: auto;
-  min-width: 30rem;
   display: block;
 }
 .sig-empty {
@@ -2646,16 +2704,23 @@ a.map-tip-anchor:hover .map-tip {
   padding: 2rem;
 }
 .sig-track {
-  stroke: color-mix(in oklch, var(--ink) 35%, transparent);
-  stroke-width: 2;
+  stroke: color-mix(in oklch, var(--ink) 70%, transparent);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.sig-route-set {
+  stroke: #2f7bff;
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.85;
 }
 .sig-berth {
-  fill: color-mix(in oklch, var(--ink) 12%, transparent);
-  stroke: color-mix(in oklch, var(--ink) 25%, transparent);
-  stroke-width: 0.5;
+  fill: color-mix(in oklch, var(--ink) 82%, transparent);
+  stroke: color-mix(in oklch, var(--ink) 40%, transparent);
+  stroke-width: 0.75;
 }
 .sig-berth-occupied {
-  fill: color-mix(in oklch, var(--accent) 55%, transparent);
+  fill: color-mix(in oklch, var(--accent) 70%, transparent);
   stroke: var(--accent);
   stroke-width: 1;
 }
@@ -2664,16 +2729,25 @@ a.map-tip-anchor:hover .map-tip {
 }
 .sig-headcode {
   font-family: var(--font-time, monospace);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
-  fill: var(--ink);
+  fill: #fff;
 }
 .sig-train-focus .sig-headcode {
-  fill: var(--accent);
+  fill: var(--bg);
 }
-.sig-signal {
+.sig-signal-post {
+  stroke: color-mix(in oklch, var(--ink) 60%, transparent);
+  stroke-width: 1.25;
+}
+.sig-signal-head {
   stroke: var(--bg);
   stroke-width: 0.75;
+}
+.sig-signal-label {
+  font-family: var(--font-time, monospace);
+  font-size: 6px;
+  fill: var(--muted);
 }
 .sig-signal-off {
   fill: var(--ok);
@@ -2683,6 +2757,10 @@ a.map-tip-anchor:hover .map-tip {
 }
 .sig-signal-unknown {
   fill: color-mix(in oklch, var(--muted) 60%, transparent);
+}
+.sig-place-label {
+  font-size: 8px;
+  fill: var(--muted);
 }
 .sig-legend {
   display: flex;
@@ -2709,6 +2787,9 @@ a.map-tip-anchor:hover .map-tip {
 }
 .sig-key-red::before {
   background: var(--danger);
+}
+.sig-key-route::before {
+  background: #2f7bff;
 }
 .sig-key-unknown::before {
   background: color-mix(in oklch, var(--muted) 60%, transparent);
@@ -2782,6 +2863,25 @@ a.map-tip-anchor:hover .map-tip {
 }
 .map-key-tfl-bus::before {
   background: #8a4fd6;
+}
+.map-key-sig-off::before {
+  background: #2f9e44;
+}
+.map-key-sig-red::before {
+  background: #e03131;
+}
+.map-key-sig-unknown::before {
+  background: #868e96;
+}
+.map-key-berth-occupied::before {
+  background: #2f7bff;
+}
+.map-key-berth-blocked::before {
+  background: #e03131;
+}
+.map-key-train-path::before {
+  background: #2f7bff;
+  opacity: 0.7;
 }
 .map-legend-note {
   margin-left: auto;
@@ -3203,16 +3303,52 @@ details[open] > .commute-dep-link .commute-dep-chevron {
   border-bottom: 2px solid var(--primary);
 }
 
+/* ---- Network status: one panel, three internally-divided sections ---- */
+
+.status-panel {
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.status-section {
+  padding: 1.1rem 1.35rem;
+  border-top: 1px solid var(--border);
+}
+.status-section:first-child {
+  border-top: none;
+}
+
+.status-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.status-section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.status-section-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+/* National PPM hero figure, sits inline at the top of its section rather
+   than as its own elevated card. */
 .ppm-hero {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 1rem 2rem;
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
-  background: var(--surface);
-  padding: 1.25rem 1.35rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.9rem;
 }
 .ppm-hero-fig {
   display: flex;
@@ -3221,56 +3357,43 @@ details[open] > .commute-dep-link .commute-dep-chevron {
 .ppm-hero-num {
   font-family: var(--font-time);
   font-variant-numeric: tabular-nums;
-  font-size: 3rem;
+  font-size: 2.5rem;
   font-weight: 700;
   line-height: 1;
   color: var(--ink);
 }
 .ppm-hero-label {
   color: var(--muted);
-  font-size: 0.9rem;
-  margin-top: 0.3rem;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
 }
 .ppm-hero-meta {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 .ppm-hero-sub {
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   margin: 0;
-  max-width: 40ch;
+  max-width: 42ch;
 }
 .ppm-vstp {
   color: var(--muted);
-  font-size: 0.9rem;
-  margin: 0 0 1rem;
+  font-size: 0.82rem;
+  margin: 0.6rem 0 0;
 }
 
-.ppm-table {
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
-  overflow: hidden;
-}
 .ppm-row {
   display: grid;
   grid-template-columns: 1.6fr 0.6fr 0.6fr 2fr auto;
   gap: 0.75rem;
   align-items: center;
-  padding: 0.6rem 0.85rem;
-  border-bottom: 1px solid var(--border);
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--border);
 }
-.ppm-row:last-child {
-  border-bottom: none;
-}
-.ppm-head {
-  background: var(--surface-2);
-  font-size: 0.75rem;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+.ppm-row:first-child {
+  border-top: none;
 }
 .ppm-op {
   font-weight: 600;
@@ -3293,11 +3416,64 @@ details[open] > .commute-dep-link .commute-dep-chevron {
 .ppm-status {
   justify-self: end;
 }
-.ppm-note {
-  color: var(--muted);
+
+/* An operator row with an active disruption: the operator name becomes a
+   collapsible disclosure instead of a separate disruptions card/section. */
+.ppm-row-disrupted {
+  grid-template-columns: 1.6fr 0.6fr 0.6fr 2fr auto;
+  row-gap: 0.3rem;
+}
+.ppm-op-disruption {
+  grid-column: 1;
+}
+.ppm-op-disruption[open] {
+  grid-column: 1 / -1;
+}
+.ppm-op-disruption summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  list-style: none;
+}
+.ppm-op-disruption summary::-webkit-details-marker {
+  display: none;
+}
+.ppm-op-disruption-icon {
+  color: var(--warn);
   font-size: 0.8rem;
-  margin-top: 1rem;
+}
+.ppm-op-disruption-body {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
   max-width: 60ch;
+}
+
+/* Rich per-incident content (summary + parsed description blocks + link),
+   shown when the network disruption sweep found a matching incident;
+   .ppm-op-disruption-body above is the fallback one-liner when it didn't. */
+.ppm-op-disruption-item {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  max-width: 68ch;
+}
+.ppm-op-disruption-item:first-child {
+  margin-top: 0.35rem;
+  padding-top: 0;
+  border-top: none;
+}
+.ppm-op-disruption-summary {
+  margin: 0 0 0.3rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.tfl-row {
+  grid-template-columns: 1fr auto;
 }
 
 @media (max-width: 40rem) {
@@ -3308,23 +3484,9 @@ details[open] > .commute-dep-link .commute-dep-chevron {
   .ppm-counts {
     grid-column: 1 / -1;
   }
-  .ppm-head span:nth-child(3),
-  .ppm-head span:nth-child(4) {
-    display: none;
-  }
   .ppm-figure.ppm-muted {
     display: none;
   }
-}
-
-.tfl-heading {
-  font-size: 1rem;
-  font-weight: 650;
-  color: var(--ink);
-  margin: 1.75rem 0 0.75rem;
-}
-.tfl-row {
-  grid-template-columns: 1fr auto;
 }
 
 /* ---- Leave/arrive toggle + journey→live links ---- */

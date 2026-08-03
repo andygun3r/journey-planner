@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SignallingDiagram } from "./signalling-diagram";
 
 /** Mirrors apps/web/lib/train-history.ts's PositionHistoryEntry (client-side type only). */
 interface PositionHistoryEntry {
@@ -35,14 +34,14 @@ function eventLabel(e: string): string {
 
 /**
  * The service-detail page's "advanced view": a timestamped list of every
- * junction/berth actually passed (from the new position-history table),
- * alongside the existing live signalling-diagram corridor view — composed
- * side by side rather than merged, so each stays focused on what it's good
- * at (historical breadcrumb vs. live corridor state).
+ * junction/berth actually passed, from the position-history table.
+ *
+ * The signalling diagram used to live here too, but a single train's corridor
+ * didn't tell you anything a station-level view couldn't — it's now reached
+ * from the station board page instead.
  */
-export function ServiceAdvancedView({ serviceId, rid }: { serviceId: string; rid: string }) {
+export function ServiceAdvancedView({ serviceId }: { serviceId: string }) {
   const [data, setData] = useState<HistoryResponse | null>(null);
-  const [showSignalling, setShowSignalling] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,22 +91,6 @@ export function ServiceAdvancedView({ serviceId, rid }: { serviceId: string; rid
           </ol>
         )}
       </div>
-
-      <button
-        type="button"
-        className="map-panel-signal"
-        onClick={() => setShowSignalling(true)}
-      >
-        View live signalling diagram →
-      </button>
-
-      {showSignalling && (
-        <SignallingDiagram
-          query={`rid=${encodeURIComponent(rid)}`}
-          title="Signalling"
-          onClose={() => setShowSignalling(false)}
-        />
-      )}
     </div>
   );
 }

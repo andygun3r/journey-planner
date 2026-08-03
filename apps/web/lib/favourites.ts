@@ -13,11 +13,11 @@ export interface FavouriteJourney {
 }
 
 /** A device's saved journeys, most-recently-used first, with station names. */
-export async function listFavourites(deviceId: string): Promise<FavouriteJourney[]> {
+export async function listFavourites(userId: string): Promise<FavouriteJourney[]> {
   const rows = await getDb()
     .select()
     .from(favouriteJourney)
-    .where(eq(favouriteJourney.deviceId, deviceId))
+    .where(eq(favouriteJourney.userId, userId))
     .orderBy(desc(favouriteJourney.lastUsedAt));
 
   return Promise.all(
@@ -34,7 +34,7 @@ export async function listFavourites(deviceId: string): Promise<FavouriteJourney
 
 /** Whether a device has saved a given from→to pair. */
 export async function isFavourite(
-  deviceId: string,
+  userId: string,
   fromCrs: string,
   toCrs: string,
 ): Promise<boolean> {
@@ -43,7 +43,7 @@ export async function isFavourite(
     .from(favouriteJourney)
     .where(
       and(
-        eq(favouriteJourney.deviceId, deviceId),
+        eq(favouriteJourney.userId, userId),
         eq(favouriteJourney.fromCrs, fromCrs),
         eq(favouriteJourney.toCrs, toCrs),
       ),
@@ -54,7 +54,7 @@ export async function isFavourite(
 
 /** Save a journey (idempotent per from→to); bumps lastUsedAt if it exists. */
 export async function addFavourite(
-  deviceId: string,
+  userId: string,
   fromCrs: string,
   toCrs: string,
 ): Promise<void> {
@@ -64,7 +64,7 @@ export async function addFavourite(
     .from(favouriteJourney)
     .where(
       and(
-        eq(favouriteJourney.deviceId, deviceId),
+        eq(favouriteJourney.userId, userId),
         eq(favouriteJourney.fromCrs, fromCrs),
         eq(favouriteJourney.toCrs, toCrs),
       ),
@@ -78,15 +78,15 @@ export async function addFavourite(
       .where(eq(favouriteJourney.id, existing[0]!.id));
     return;
   }
-  await db.insert(favouriteJourney).values({ deviceId, fromCrs, toCrs });
+  await db.insert(favouriteJourney).values({ userId, fromCrs, toCrs });
 }
 
-export async function removeFavourite(deviceId: string, fromCrs: string, toCrs: string): Promise<void> {
+export async function removeFavourite(userId: string, fromCrs: string, toCrs: string): Promise<void> {
   await getDb()
     .delete(favouriteJourney)
     .where(
       and(
-        eq(favouriteJourney.deviceId, deviceId),
+        eq(favouriteJourney.userId, userId),
         eq(favouriteJourney.fromCrs, fromCrs),
         eq(favouriteJourney.toCrs, toCrs),
       ),
@@ -94,13 +94,13 @@ export async function removeFavourite(deviceId: string, fromCrs: string, toCrs: 
 }
 
 /** Bump lastUsedAt when a saved journey is re-run, so ordering reflects use. */
-export async function touchFavourite(deviceId: string, fromCrs: string, toCrs: string): Promise<void> {
+export async function touchFavourite(userId: string, fromCrs: string, toCrs: string): Promise<void> {
   await getDb()
     .update(favouriteJourney)
     .set({ lastUsedAt: new Date() })
     .where(
       and(
-        eq(favouriteJourney.deviceId, deviceId),
+        eq(favouriteJourney.userId, userId),
         eq(favouriteJourney.fromCrs, fromCrs),
         eq(favouriteJourney.toCrs, toCrs),
       ),

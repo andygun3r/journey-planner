@@ -32,13 +32,13 @@ export type DashboardState =
  * train's final destination. Live disruption context comes straight from the
  * disruptions API.
  */
-export async function getDashboardData(deviceId: string, now = new Date()): Promise<DashboardState> {
-  const commutes = await listCommutes(deviceId);
+export async function getDashboardData(userId: string, now = new Date()): Promise<DashboardState> {
+  const commutes = await listCommutes(userId);
   if (commutes.length === 0) return { kind: "no-commute" };
 
   // v1: focus on the first commute. (Multiple commutes can be surfaced later.)
   const commute = commutes[0]!;
-  const holidays = await holidayRangesFor(deviceId);
+  const holidays = await holidayRangesFor(userId);
 
   const record: CommuteRecord = {
     id: commute.id,
