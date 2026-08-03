@@ -115,6 +115,11 @@ healthchecks + `restart: unless-stopped`.
    If `/map` is enabled, set `NEXT_PUBLIC_TILES_URL` to the public URL Coolify
    routes to `orm-proxy:8000`, and set `ORM_PUBLIC_HOST` to the same host
    without the protocol.
+   On first deploy, `motis`, `darwin-ingest`, and `nr-ingest` intentionally
+   stay alive in a waiting/disabled state when their prerequisites are missing
+   (no imported routing data yet, or no feed credentials yet). That prevents
+   Coolify from burning through its restart limit before the app has been
+   bootstrapped.
 4. **Bootstrap order matters** — MOTIS has nothing to serve and darwin-ingest's
    corridor precompute has nothing to resolve against until routing data
    exists. Note that Coolify showing the stack as "healthy" doesn't mean
@@ -122,10 +127,10 @@ healthchecks + `restart: unless-stopped`.
    `motis` intentionally has no `depends_on` gate from `web` (it needs this
    manual bootstrap first), so a green dashboard can still mean an
    unimported, empty MOTIS:
-   - Database migrations are applied automatically by the `web` container
-     before Next.js starts. To run them manually instead, set
-     `SKIP_DB_MIGRATIONS=1` and run `pnpm db:migrate` against the deployed
-     `DATABASE_URL` (or run it as a Coolify pre-deployment command).
+   - Run `pnpm db:migrate` against the deployed `DATABASE_URL` (or run it as
+     a Coolify pre-deployment/one-off command). The `web` container can also
+     run migrations before Next.js starts when `RUN_DB_MIGRATIONS=1`, but leave
+     that unset if you do not want a failed migration to restart-loop the app.
    - Run the ETL once to populate the `gtfs-data` volume:
      `docker compose --profile etl run --rm etl timetable`
      — or, on a low-memory server, use the local-import-then-upload flow

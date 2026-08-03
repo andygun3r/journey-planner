@@ -86,7 +86,7 @@ services:
       MOTIS_URL: http://motis:8080
       ETL_GTFS_OUT_DIR: /data/gtfs
       NEXT_PUBLIC_TILES_URL: ${NEXT_PUBLIC_TILES_URL:-http://localhost:8081}
-      SKIP_DB_MIGRATIONS: ${SKIP_DB_MIGRATIONS:-}
+      RUN_DB_MIGRATIONS: ${RUN_DB_MIGRATIONS:-}
       # Sign-in (Better Auth: passkey + magic link) — see .env.example.
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
@@ -144,7 +144,19 @@ services:
     # import writes ./data relative to config.yml (both live in /data),
     # so the server must resolve them from that working directory.
     working_dir: /data
-    command: ["/motis", "server"]
+    # Fresh Coolify deploys start every default service before the timetable
+    # has been imported. `motis server` exits when /data/config.yml is absent,
+    # which Coolify interprets as a crash loop and eventually stops trying.
+    # Stay alive until the first ETL/import creates the serving data.
+    command:
+      - sh
+      - -c
+      - |
+        until [ -f /data/config.yml ]; do
+          echo "[motis] waiting for imported routing data at /data/config.yml"
+          sleep 300
+        done
+        exec /motis server
     volumes:
       - motis-data:/data
       - gtfs-data:/input
@@ -158,7 +170,9 @@ services:
     healthcheck:
       # MOTIS has no dedicated /health path; hitting any real API route and
       # accepting non-5xx confirms the HTTP server came up after import.
-      test: ["CMD-SHELL", "wget -q -S -O /dev/null http://127.0.0.1:8080/api/v1/geocode?text=x 2>&1 | grep -qE 'HTTP/[0-9.]+ [1-4][0-9][0-9]'"]
+      # Before the first import, the container is intentionally waiting rather
+      # than serving, so report healthy to avoid deploy-manager restart loops.
+      test: ["CMD-SHELL", "test ! -f /data/config.yml || wget -q -S -O /dev/null http://127.0.0.1:8080/api/v1/geocode?text=x 2>&1 | grep -qE 'HTTP/[0-9.]+ [1-4][0-9][0-9]'"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -401,6 +415,15 @@ services:
     build:
       context: .
       dockerfile: services/darwin-ingest/Dockerfile
+    command:
+      - sh
+      - -c
+      - |
+        if [ -z "$${RDM_KAFKA_BOOTSTRAP_SERVERS:-}" ] || [ -z "$${RDM_KAFKA_TOPIC:-}" ] || [ -z "$${RDM_CONSUMER_KEY:-}" ] || [ -z "$${RDM_CONSUMER_SECRET:-}" ]; then
+          echo "[darwin-ingest] disabled: set RDM_KAFKA_BOOTSTRAP_SERVERS, RDM_KAFKA_TOPIC, RDM_CONSUMER_KEY and RDM_CONSUMER_SECRET to enable"
+          while true; do sleep 3600; done
+        fi
+        exec node dist/index.js
     environment:
       DATABASE_URL: postgres://mainline:mainline@postgres:5432/mainline
       REDIS_URL: redis://redis:6379
@@ -436,7 +459,7 @@ services:
       # the container. node -e is already the pattern the web healthcheck uses.
       test:
         - CMD-SHELL
-        - node -e "let m=0;try{m=require('fs').statSync(process.env.INGEST_HEARTBEAT_FILE||'/tmp/ingest-heartbeat').mtimeMs}catch{};process.exit(Date.now()-m<300000?0:1)"
+        - if [ -z "$${RDM_KAFKA_BOOTSTRAP_SERVERS:-}" ] || [ -z "$${RDM_KAFKA_TOPIC:-}" ] || [ -z "$${RDM_CONSUMER_KEY:-}" ] || [ -z "$${RDM_CONSUMER_SECRET:-}" ]; then exit 0; fi; node -e "let m=0;try{m=require('fs').statSync(process.env.INGEST_HEARTBEAT_FILE||'/tmp/ingest-heartbeat').mtimeMs}catch{};process.exit(Date.now()-m<300000?0:1)"
       interval: 30s
       timeout: 5s
       retries: 3
@@ -457,6 +480,15 @@ services:
     build:
       context: .
       dockerfile: services/nr-ingest/Dockerfile
+    command:
+      - sh
+      - -c
+      - |
+        if [ -z "$${NETWORKRAIL_USERNAME:-}" ] || [ -z "$${NETWORKRAIL_PASSWORD:-}" ]; then
+          echo "[nr-ingest] disabled: set NETWORKRAIL_USERNAME and NETWORKRAIL_PASSWORD to enable"
+          while true; do sleep 3600; done
+        fi
+        exec node dist/index.js
     environment:
       DATABASE_URL: postgres://mainline:mainline@postgres:5432/mainline
       REDIS_URL: redis://redis:6379
@@ -506,7 +538,7 @@ services:
       # the container. node -e is already the pattern the web healthcheck uses.
       test:
         - CMD-SHELL
-        - node -e "let m=0;try{m=require('fs').statSync(process.env.INGEST_HEARTBEAT_FILE||'/tmp/ingest-heartbeat').mtimeMs}catch{};process.exit(Date.now()-m<300000?0:1)"
+        - if [ -z "$${NETWORKRAIL_USERNAME:-}" ] || [ -z "$${NETWORKRAIL_PASSWORD:-}" ]; then exit 0; fi; node -e "let m=0;try{m=require('fs').statSync(process.env.INGEST_HEARTBEAT_FILE||'/tmp/ingest-heartbeat').mtimeMs}catch{};process.exit(Date.now()-m<300000?0:1)"
       interval: 30s
       timeout: 5s
       retries: 3
