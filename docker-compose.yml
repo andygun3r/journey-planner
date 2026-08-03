@@ -78,11 +78,14 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_TILES_URL: ${NEXT_PUBLIC_TILES_URL:-http://localhost:8081}
     environment:
       DATABASE_URL: postgres://mainline:mainline@postgres:5432/mainline
       REDIS_URL: redis://redis:6379
       MOTIS_URL: http://motis:8080
       ETL_GTFS_OUT_DIR: /data/gtfs
+      NEXT_PUBLIC_TILES_URL: ${NEXT_PUBLIC_TILES_URL:-http://localhost:8081}
       # Sign-in (Better Auth: passkey + magic link) — see .env.example.
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}

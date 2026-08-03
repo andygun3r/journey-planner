@@ -2,13 +2,15 @@ FROM node:22-alpine AS builder
 RUN npm install -g pnpm@11
 WORKDIR /app
 ENV DATABASE_URL=postgres://mainline:mainline@localhost:5432/mainline
-ENV BETTER_AUTH_SECRET=build-time-placeholder
+ENV BETTER_AUTH_SECRET=build-time-placeholder-not-used-at-runtime-32chars
 ENV BETTER_AUTH_URL=http://localhost:3000
+ARG NEXT_PUBLIC_TILES_URL=
+ENV NEXT_PUBLIC_TILES_URL=$NEXT_PUBLIC_TILES_URL
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json tsconfig.base.json ./
 COPY apps ./apps
 COPY services ./services
 COPY packages ./packages
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --filter web...
 RUN pnpm exec turbo build --filter=web
 
 FROM node:22-alpine AS runner

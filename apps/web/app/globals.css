@@ -35,8 +35,8 @@
   --radius: 16px; /* cards, panels, notices, board rows, map, modal */
   --radius-control: 10px; /* inputs, small chips, cal cells */
   --radius-pill: 999px; /* primary buttons, status chips */
-  --font-ui: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-time: var(--font-inter), system-ui, sans-serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-time: system-ui, -apple-system, "Segoe UI", sans-serif;
   /* Reserve room for the fixed bottom tab bar on mobile. */
   --tabbar-height: 4rem;
   color-scheme: light;

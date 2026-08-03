@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
 import Link from "next/link";
 import { FocusOnNavigate } from "@/components/focus-on-navigate";
 import { RegisterSW } from "@/components/register-sw";
@@ -13,12 +12,6 @@ import "./globals.css";
    who picked dark never sees a light flash. Light is the default; this only
    ever adds data-theme="dark", never removes the (default) light state. */
 const THEME_INIT_SCRIPT = `try{if(localStorage.getItem("mainline-theme")==="dark"){document.documentElement.dataset.theme="dark"}}catch(e){}`;
-
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-inter",
-});
 
 export const metadata: Metadata = {
   title: "Mainline",
@@ -37,7 +30,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-GB" className={inter.variable} suppressHydrationWarning>
+    <html lang="en-GB" suppressHydrationWarning>
       <head>
         {/* Must run before first paint, so it stays an inline blocking script
             rather than next/script. suppressHydrationWarning: this script

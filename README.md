@@ -98,16 +98,23 @@ healthchecks + `restart: unless-stopped`.
 1. **New Resource → Docker Compose**, point it at this repo, compose file
    `docker-compose.yml`.
 2. Set env vars in Coolify's UI (these become the values `${VAR:-}` in the
-   compose file resolve to) — see `.env.example` for the full list:
+   compose file resolve to) before the first build — see `.env.example` for
+   the full list:
    `RDM_KAFKA_*`, `NRDP_USERNAME`/`PASSWORD` (or `DTD_SFTP_*` — see below),
    `LDBWS_*` from the RDM Live Arrival and Departure Boards product,
    `DISRUPTIONS_API_KEY`, `NETWORKRAIL_USERNAME`/`PASSWORD`,
    `NR_TD_KAFKA_*` for the RailData TD product, `TFL_APP_KEY`, `VAPID_*`,
    and (for `/map`) `NEXT_PUBLIC_TILES_URL`/`ORM_PUBLIC_HOST`.
+   `NEXT_PUBLIC_TILES_URL` is baked into the Next.js client bundle at image
+   build time, so changing it later requires a rebuild/redeploy, not only a
+   container restart.
 3. Expose only `web`'s port 3000 (and, if using `/map`, `orm-proxy`'s port
    8000) through Coolify's proxy/domain. `motis` (8080) only needs to be
    reachable from `web`/`darwin-ingest` on the compose network — don't route
    a public domain to it.
+   If `/map` is enabled, set `NEXT_PUBLIC_TILES_URL` to the public URL Coolify
+   routes to `orm-proxy:8000`, and set `ORM_PUBLIC_HOST` to the same host
+   without the protocol.
 4. **Bootstrap order matters** — MOTIS has nothing to serve and darwin-ingest's
    corridor precompute has nothing to resolve against until routing data
    exists. Note that Coolify showing the stack as "healthy" doesn't mean
