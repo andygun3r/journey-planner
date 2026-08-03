@@ -61,6 +61,13 @@ export function startSftpSyncJob(): string {
   });
 }
 
+export function startAllSftpSyncJob(): string {
+  return startJob(async (onProgress) => {
+    const { syncAllRailDataFromSftp } = await import("./etl-sftp-sync");
+    await syncAllRailDataFromSftp(onProgress);
+  });
+}
+
 /**
  * `hostZipPath` is where the web container just wrote the upload (under the
  * shared dtd-archive volume); `containerZipPath` is the same file's path as

@@ -612,6 +612,13 @@ a {
   overflow-y: auto;
 }
 
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
 /* ---- Skeletons ---- */
 
 .skeleton-row {

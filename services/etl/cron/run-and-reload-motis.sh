@@ -43,3 +43,13 @@ pnpm tsx src/index.ts timetable
 
 echo "Timetable refresh succeeded — reloading MOTIS"
 sh "$HERE/motis-reimport.sh"
+
+echo "Syncing DTD fares from SFTP…"
+pnpm tsx src/index.ts fares
+
+echo "Syncing Network Rail reference files from SFTP…"
+NR_REFERENCE_SYNC_CONTAINER="${NR_REFERENCE_SYNC_CONTAINER_NAME:-mainline-nr-reference-sync-1}"
+docker exec "$NR_REFERENCE_SYNC_CONTAINER" node dist/index.js reference-sftp
+
+echo "Syncing Network Rail Track Model from SFTP…"
+pnpm tsx src/index.ts track-model-sftp

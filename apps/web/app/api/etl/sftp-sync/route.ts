@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { checkEtlAuth } from "@/lib/etl-auth";
-import { startSftpSyncJob } from "@/lib/etl-jobs";
+import { startAllSftpSyncJob, startSftpSyncJob } from "@/lib/etl-jobs";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,6 +14,8 @@ export async function POST(req: Request) {
   const authError = await checkEtlAuth(req);
   if (authError) return authError;
 
-  const jobId = startSftpSyncJob();
+  const body = await req.json().catch(() => ({}));
+  const scope = (body as { scope?: string }).scope;
+  const jobId = scope === "all" ? startAllSftpSyncJob() : startSftpSyncJob();
   return NextResponse.json({ jobId });
 }

@@ -26,13 +26,13 @@ function useSftp(): boolean {
   return Boolean(process.env.DTD_SFTP_HOST);
 }
 
-/** Latest source mtime (epoch ms) among successfully imported timetable runs, per etl_run. */
-async function latestImportedTimetableMtime(): Promise<number> {
+/** Latest source mtime (epoch ms) among successfully imported runs for a feed, per etl_run. */
+async function latestImportedFeedMtime(feed: "timetable" | "fares"): Promise<number> {
   const db = createDb();
   const rows = await db
     .select({ sourceModifiedAt: etlRun.sourceModifiedAt })
     .from(etlRun)
-    .where(and(eq(etlRun.feed, "timetable"), eq(etlRun.ok, true)));
+    .where(and(eq(etlRun.feed, feed), eq(etlRun.ok, true)));
   let latest = 0;
   for (const r of rows) {
     const ms = r.sourceModifiedAt?.getTime() ?? 0;
@@ -82,7 +82,7 @@ async function timetable(source?: string): Promise<void> {
     // SFTP folder — process every zip newer than the last successful import,
     // oldest first, so a full followed by same-day/since-last-run updates
     // all land in delivery order instead of only the single newest file.
-    const since = await latestImportedTimetableMtime();
+    const since = await latestImportedFeedMtime("timetable");
     const pending = await downloadPendingFeedsViaSftp("timetable", ARCHIVE_DIR, since);
     if (pending.length === 0) {
       console.log("No new timetable files on SFTP — nothing to do.");
@@ -128,13 +128,33 @@ async function postprocessOnly(feedVersion = "unknown"): Promise<void> {
   console.log(`GTFS ready: ${result.gtfsZip}`);
 }
 
-async function fares(source?: string): Promise<void> {
-  const zip =
-    source ??
-    (useSftp() ? await downloadFeedViaSftp("fares", ARCHIVE_DIR) : await downloadFeed("fares", ARCHIVE_DIR));
+async function importFaresZip(zip: string, sourceModifiedAt?: number): Promise<void> {
+  const feedVersion = path.basename(zip, path.extname(zip));
   await importFares(zip);
-  await loadFares();
+  await loadFares({
+    version: feedVersion,
+    sourceModifiedAt: sourceModifiedAt ? new Date(sourceModifiedAt) : undefined,
+  });
   console.log("Fares loaded into Postgres.");
+}
+
+async function fares(source?: string): Promise<void> {
+  if (source) {
+    await importFaresZip(source);
+  } else if (useSftp()) {
+    const since = await latestImportedFeedMtime("fares");
+    const pending = await downloadPendingFeedsViaSftp("fares", ARCHIVE_DIR, since);
+    if (pending.length === 0) {
+      console.log("No new fares files on SFTP — nothing to do.");
+      return;
+    }
+    console.log(`${pending.length} new fares file(s) to import: ${pending.map((p) => path.basename(p.path)).join(", ")}`);
+    for (const file of pending) {
+      await importFaresZip(file.path, file.sourceModifiedAt);
+    }
+  } else {
+    await importFaresZip(await downloadFeed("fares", ARCHIVE_DIR));
+  }
 }
 
 const command = process.argv[2];

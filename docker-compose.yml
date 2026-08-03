@@ -86,6 +86,7 @@ services:
       MOTIS_URL: http://motis:8080
       ETL_GTFS_OUT_DIR: /data/gtfs
       NEXT_PUBLIC_TILES_URL: ${NEXT_PUBLIC_TILES_URL:-http://localhost:8081}
+      SKIP_DB_MIGRATIONS: ${SKIP_DB_MIGRATIONS:-}
       # Sign-in (Better Auth: passkey + magic link) — see .env.example.
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
@@ -103,6 +104,9 @@ services:
       # lib/etl-sftp-sync.ts) — same Coolify naming caveat as above, verify
       # with `docker compose ps etl-cron`.
       ETL_CRON_CONTAINER_NAME: ${ETL_CRON_CONTAINER_NAME:-mainline-etl-cron-1}
+      # Target for SMART/TPS reference file SFTP processing in the all-data
+      # sync path — same Coolify naming caveat as the two above.
+      NR_REFERENCE_SYNC_CONTAINER_NAME: ${NR_REFERENCE_SYNC_CONTAINER_NAME:-mainline-nr-reference-sync-1}
     ports:
       - "3000:3000"
     volumes:
@@ -341,6 +345,9 @@ services:
       # prefixes/suffixes compose project names, so verify with
       # `docker compose ps motis` and override here if it doesn't match.
       MOTIS_CONTAINER_NAME: ${MOTIS_CONTAINER_NAME:-mainline-motis-1}
+      # Lets the 2am SFTP sweep run SMART/TPS reference processing inside
+      # nr-reference-sync via the host docker socket.
+      NR_REFERENCE_SYNC_CONTAINER_NAME: ${NR_REFERENCE_SYNC_CONTAINER_NAME:-mainline-nr-reference-sync-1}
     # dcron's setpgid(0,0) call at startup fails with EPERM when crond runs
     # as PID 1 (a session leader may never change its own process group).
     # Backgrounding it under a shell keeps crond as a non-leader child.

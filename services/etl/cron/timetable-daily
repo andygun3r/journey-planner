@@ -1,8 +1,5 @@
-# Nightly DTD timetable pull + GTFS rebuild + motis restart. Runs inside the
-# etl-cron container under busybox crond. Logs go to stdout so
-# `docker compose logs etl-cron` / Coolify's log viewer show each run.
+# Nightly SFTP sweep: DTD timetable + MOTIS reload, DTD fares, NR SMART/TPS
+# reference files, and Network Rail Track Model. Runs inside the etl-cron
+# container under busybox crond. Logs go to stdout so `docker compose logs
+# etl-cron` / Coolify's log viewer show each run.
 0 2 * * * /app/services/etl/cron/run-and-reload-motis.sh >> /proc/1/fd/1 2>> /proc/1/fd/2
-# Sweep any Network Rail Track Model SFTP drops after the timetable window.
-# The command no-ops when no NWR_TrackModel* files are present and deletes
-# remote files only after a successful import.
-30 3 * * * cd /app/services/etl && pnpm tsx src/index.ts track-model-sftp >> /proc/1/fd/1 2>> /proc/1/fd/2

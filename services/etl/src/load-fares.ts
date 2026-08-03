@@ -49,7 +49,12 @@ async function insertBatched<T>(
   }
 }
 
-export async function loadFares(): Promise<void> {
+export interface LoadFaresOptions {
+  version?: string;
+  sourceModifiedAt?: Date;
+}
+
+export async function loadFares(options: LoadFaresOptions = {}): Promise<void> {
   const mysqlUrl = process.env.ETL_MYSQL_URL ?? "mysql://root:etl@mariadb:3306/dtd";
   const conn = await mysql.createConnection(mysqlUrl);
   const db = createDb();
@@ -172,7 +177,8 @@ export async function loadFares(): Promise<void> {
 
       await tx.insert(etlRun).values({
         feed: "fares",
-        version: "RJFAF",
+        version: options.version ?? "RJFAF",
+        sourceModifiedAt: options.sourceModifiedAt,
         ok: true,
         detail: `${flows.length} flows, ${fares.length} fares, ${ticketTypes.length} ticket types`,
       });

@@ -10,13 +10,9 @@ import { reloadMotis } from "./motis-reload";
  * container instead, via the same docker socket etl-apply.ts uses to restart
  * motis.
  */
-async function runEtlCronTimetable(onProgress: ApplyProgress, arg?: string): Promise<void> {
-  const container = process.env.ETL_CRON_CONTAINER_NAME ?? "mainline-etl-cron-1";
-  const args = ["exec", container, "pnpm", "tsx", "src/index.ts", "timetable"];
-  if (arg) args.push(arg);
-
+async function runDockerExec(onProgress: ApplyProgress, container: string, args: string[]): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("docker", args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("docker", ["exec", container, ...args], { stdio: ["ignore", "pipe", "pipe"] });
 
     const forwardLines = (chunk: Buffer) => {
       for (const line of chunk.toString("utf8").split("\n")) {
@@ -27,9 +23,20 @@ async function runEtlCronTimetable(onProgress: ApplyProgress, arg?: string): Pro
     child.stderr.on("data", forwardLines);
 
     child.on("error", reject);
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`import exited ${code}`))));
+    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${container} exited ${code}`))));
   });
+}
 
+async function runEtlCronCommand(onProgress: ApplyProgress, command: string, arg?: string): Promise<void> {
+  const container = process.env.ETL_CRON_CONTAINER_NAME ?? "mainline-etl-cron-1";
+  const args = ["pnpm", "tsx", "src/index.ts", command];
+  if (arg) args.push(arg);
+  onProgress(`[etl] running ${command}${arg ? ` ${arg}` : ""}`);
+  await runDockerExec(onProgress, container, args);
+}
+
+async function runEtlCronTimetable(onProgress: ApplyProgress, arg?: string): Promise<void> {
+  await runEtlCronCommand(onProgress, "timetable", arg);
   // Import AND restart. This used to only restart, which does nothing at all
   // against already-preprocessed data — so this path reported success while
   // leaving routing on the old timetable, with Postgres and MOTIS disagreeing.
@@ -45,6 +52,24 @@ async function runEtlCronTimetable(onProgress: ApplyProgress, arg?: string): Pro
  */
 export async function syncTimetableFromSftp(onProgress: ApplyProgress): Promise<void> {
   await runEtlCronTimetable(onProgress);
+}
+
+/**
+ * On-demand SFTP sweep for every rail data drop the deployment understands:
+ * DTD timetable, DTD fares, NR SMART/TPS reference files, and Network Rail
+ * Track Model snapshots. Each underlying command is idempotent/no-op when its
+ * SFTP folder has nothing new.
+ */
+export async function syncAllRailDataFromSftp(onProgress: ApplyProgress): Promise<void> {
+  await runEtlCronTimetable(onProgress);
+  await runEtlCronCommand(onProgress, "fares");
+
+  const referenceContainer = process.env.NR_REFERENCE_SYNC_CONTAINER_NAME ?? "mainline-nr-reference-sync-1";
+  onProgress("[nr] running reference-sftp");
+  await runDockerExec(onProgress, referenceContainer, ["node", "dist/index.js", "reference-sftp"]);
+
+  await runEtlCronCommand(onProgress, "track-model-sftp");
+  onProgress("All SFTP rail data sync complete.");
 }
 
 /**

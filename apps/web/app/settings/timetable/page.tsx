@@ -103,7 +103,7 @@ export default async function TimetableSettingsPage() {
         <summary>How this works</summary>
         <p>
           {sftpAvailable &&
-            "\"Get latest timetable\" fetches the newest file from the rail data provider and loads it in automatically. "}
+            "\"Get latest timetable\" fetches only timetable files. \"Sync all SFTP data\" also handles fares, Network Rail SMART/TPS reference files, and Track Model drops. "}
           You can also upload a timetable file directly — either the original zip from the data
           provider, or a bundle produced by the <code>etl package</code> tool. Either way it&apos;s
           loaded in automatically, and journey planning uses it as soon as it&apos;s done.

@@ -122,8 +122,10 @@ healthchecks + `restart: unless-stopped`.
    `motis` intentionally has no `depends_on` gate from `web` (it needs this
    manual bootstrap first), so a green dashboard can still mean an
    unimported, empty MOTIS:
-   - `pnpm db:migrate` against the deployed `DATABASE_URL` (or run as a
-     Coolify pre-deployment command).
+   - Database migrations are applied automatically by the `web` container
+     before Next.js starts. To run them manually instead, set
+     `SKIP_DB_MIGRATIONS=1` and run `pnpm db:migrate` against the deployed
+     `DATABASE_URL` (or run it as a Coolify pre-deployment command).
    - Run the ETL once to populate the `gtfs-data` volume:
      `docker compose --profile etl run --rm etl timetable`
      — or, on a low-memory server, use the local-import-then-upload flow
@@ -145,27 +147,32 @@ healthchecks + `restart: unless-stopped`.
    separate RailData **NWR Train Describer (TD)** Kafka consumer key/secret, not
    the Darwin Kafka credentials.
 6. **Keeping the timetable current**: `etl-cron` runs in the default (non-profile)
-   service set and re-runs the timetable pipeline nightly at 2am using the
-   crontab in `services/etl/cron/timetable-daily`. Set `DTD_SFTP_HOST` (+
+   service set and runs the SFTP rail-data sweep nightly at 2am using the
+   crontab in `services/etl/cron/timetable-daily`: timetable import + MOTIS
+   reload, fares import, SMART/TPS reference sync, then Track Model sync. Set
+   `DTD_SFTP_HOST` (+
    `DTD_SFTP_USERNAME`/`PASSWORD`/`PORT`/`*_DIR`) to pull via RDG's SFTP
    delivery instead of the NRDP HTTPS API — see `.env.example`. After each
    nightly run, `run-and-reload-motis.sh` runs `motis import` then restarts
    `motis` (or add an equivalent Coolify post-hook) so it serves the
    refreshed GTFS zip; it doesn't watch the volume for changes, and a bare
    restart without the import step is a no-op against stale preprocessed data.
-   Network Rail reference/geometry SFTP drops are handled separately:
+   You can run the same sweep on demand from `/settings/timetable` with
+   **Sync all SFTP data**. Network Rail reference/geometry SFTP drops are also
+   available as individual commands:
    `pnpm --filter @mainline/nr-ingest start reference-sftp` processes
    `SMARTExtract.*.gz` and `TPS_Data.tar.gz`;
    `pnpm --filter @mainline/etl exec tsx src/index.ts track-model-sftp`
    processes the newest `NWR_TrackModel*` snapshot. Both delete remote files
    only after successful processing unless `NR_SFTP_DELETE_PROCESSED=false`.
 7. **Container-name env vars**: `MOTIS_CONTAINER_NAME` and
-   `ETL_CRON_CONTAINER_NAME` (both in `.env.example`) default to plain Docker
+   `ETL_CRON_CONTAINER_NAME` and `NR_REFERENCE_SYNC_CONTAINER_NAME` (all in
+   `.env.example`) default to plain Docker
    Compose's `<project>-<service>-1` naming, which Coolify's compose deploys
    often don't match (Coolify prefixes/suffixes project names). If the
-   restart-after-timetable-apply step or the on-demand SFTP sync endpoint
-   fails silently, check the actual container name in Coolify's UI (or
-   `docker ps`) and override these env vars to match.
+   restart-after-timetable-apply step, the on-demand SFTP sync endpoint, or
+   SMART/TPS reference sync fails, check the actual container names in
+   Coolify's UI (or `docker ps`) and override these env vars to match.
 8. **`web` and `etl-cron` mount `/var/run/docker.sock`** (to restart `motis`
    after a timetable reload — MOTIS has no live-reload API). This is full
    host Docker socket passthrough: anyone who can exec into either container

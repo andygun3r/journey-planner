@@ -59,6 +59,24 @@ export function TimetableUploadForm({ sftpAvailable }: { sftpAvailable: boolean 
     sftp.watch(jobId, "running");
   }
 
+  async function handleAllSftpSync() {
+    sftp.reset();
+    sftp.setPhase("running");
+    const res = await fetch("/api/etl/sftp-sync", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scope: "all" }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      sftp.setPhase("error");
+      alert(`Sync failed: ${body.error ?? res.statusText}`);
+      return;
+    }
+    const { jobId } = (await res.json()) as { jobId: string };
+    sftp.watch(jobId, "running");
+  }
+
   async function handleFileUpload(e: React.FormEvent) {
     e.preventDefault();
     const file = fileRef.current?.files?.[0];
@@ -95,16 +113,21 @@ export function TimetableUploadForm({ sftpAvailable }: { sftpAvailable: boolean 
       {sftpAvailable && (
         <div className="field">
           <p>Get the newest timetable straight from the rail data provider — one click, nothing to download.</p>
-          <button type="button" className="btn btn-primary" onClick={handleSftpSync} disabled={sftpBusy}>
-            {sftpBusy ? "Fetching…" : "Get latest timetable"}
-          </button>
+          <div className="button-row">
+            <button type="button" className="btn btn-primary" onClick={handleSftpSync} disabled={sftpBusy}>
+              {sftpBusy ? "Fetching…" : "Get latest timetable"}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={handleAllSftpSync} disabled={sftpBusy}>
+              {sftpBusy ? "Syncing…" : "Sync all SFTP data"}
+            </button>
+          </div>
 
           {sftp.lines.length > 0 && (
             <pre className="etl-log" aria-live="polite">
               {sftp.lines.join("\n")}
             </pre>
           )}
-          {sftp.phase === "done" && <div className="notice">Timetable updated.</div>}
+          {sftp.phase === "done" && <div className="notice">SFTP sync finished.</div>}
           {sftp.phase === "error" && <div className="notice notice-danger">That didn&apos;t work — see the log above.</div>}
         </div>
       )}
