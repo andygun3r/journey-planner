@@ -7,7 +7,7 @@ import { acquireSingletonLock, createDb, etlRun } from "@mainline/db";
  * Two problems this solves.
  *
  * **Overlapping runs.** There are four ways to start one: the nightly cron, a
- * manual `docker compose --profile etl run`, the /api/etl/sftp-sync endpoint,
+ * manual `docker run --rm etl timetable`, the /api/etl/sftp-sync endpoint,
  * and a bundle upload. They share one MariaDB scratch database, one fixed
  * prepared-zip path, one raw GTFS zip, and they all truncate `station` and
  * `trip_mapping`. Two at once corrupt each other quietly. The ingest services

@@ -1,5 +1,6 @@
 # Nightly SFTP sweep: DTD timetable + MOTIS reload, DTD fares, NR SMART/TPS
 # reference files, and Network Rail Track Model. Runs inside the etl-cron
-# container under busybox crond. Logs go to stdout so `docker compose logs
-# etl-cron` / Coolify's log viewer show each run.
+# Coolify app's container under busybox crond (started as a child process by
+# src/server.ts when ETL_CRON=1 — see the Dockerfile). Logs go to stdout so
+# Coolify's log viewer shows each run.
 0 2 * * * /app/services/etl/cron/run-and-reload-motis.sh >> /proc/1/fd/1 2>> /proc/1/fd/2

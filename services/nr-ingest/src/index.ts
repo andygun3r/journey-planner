@@ -16,6 +16,7 @@ import { beat } from "./heartbeat.js";
 import { closePublisher, publishCrs } from "./publish.js";
 import { connect, nrConfig, TOPICS } from "./stomp.js";
 import { createTdKafka, tdKafkaConfigured, tdKafkaGroupId, tdKafkaTopic, type TdKafkaConsumer } from "./kafka.js";
+import { startServer } from "./server.js";
 
 /**
  * Network Rail ingester: consumes TRUST movements over Network Rail STOMP and
@@ -30,7 +31,11 @@ import { createTdKafka, tdKafkaConfigured, tdKafkaGroupId, tdKafkaTopic, type Td
  * down positioning.
  *
  * Sub-commands:
- *   (default)   run the live ingester
+ *   (default)   run the live ingester. Also starts the internal HTTP server
+ *               (see server.ts) when HTTP_PORT is set, so `web`/etl-cron —
+ *               separate Coolify apps now, with no shared Docker socket —
+ *               can trigger POST /reference-sftp instead of `docker exec`ing
+ *               into a sibling container by name.
  *   reference   download + load CORPUS + SMART, then exit
  *   reference-sftp
  *               pull SMARTExtract.*.gz and TPS_Data.tar.gz from RDG SFTP,
@@ -356,5 +361,7 @@ if (command === "reference") {
     process.exit(1);
   }
   installShutdown();
+  const httpPort = process.env.HTTP_PORT ? Number(process.env.HTTP_PORT) : undefined;
+  if (httpPort) startServer(httpPort);
   await runIngest();
 }

@@ -15,8 +15,9 @@ UK rail journey & commute planner — live Darwin/Network Rail data, self-hosted
   live stream rather than polled.
 - **Live GB train map** (`/map`) — live Network Rail train positions plus TfL
   stops/buses, rendered over a self-hosted OpenRailwayMap-vector tile stack
-  (see `vendor/openrailwaymap-vector`, a git submodule). Positions are
-  computed once and pushed to every viewer over SSE, not re-queried per tab.
+  (see "Map stack" under Deploying — a separate repo/Coolify project, not part
+  of this one). Positions are computed once and pushed to every viewer over
+  SSE, not re-queried per tab.
 - **TfL integration** — tube/bus/DLR/Overground/Elizabeth line/tram data
   (`apps/web/lib/tfl*.ts`) stitched onto rail journeys for interchange status
   and last-mile bus arrivals.
@@ -49,29 +50,42 @@ the stream.
 - `packages/shared` — domain types (zod) + CRS/TIPLOC/NLC/STANOX and NaPTAN code utilities, UK time helpers
 - `packages/db` — Drizzle schema, migrations, client
 - `packages/routing-adapter` — engine-agnostic `plan()`/`departures()`; MOTIS v2 (nigiri) implementation
-- `vendor/openrailwaymap-vector` — git submodule, the vector tile stack behind `/map` (see [OpenRailwayMap-vector](https://github.com/hiddewie/OpenRailwayMap-vector))
+
+The vector tile stack behind `/map` ([OpenRailwayMap-vector](https://github.com/hiddewie/OpenRailwayMap-vector))
+is **not** part of this repo — it deploys as its own, separate Coolify
+project, wired to `web` purely over HTTP env vars (`NEXT_PUBLIC_TILES_URL`/
+`ORM_PUBLIC_HOST`), the same pattern as `MOTIS_URL` or `ETL_URL`. See "Map
+stack" under Deploying.
 
 ## Getting started
 
 ```sh
-git clone --recurse-submodules <repo-url>   # or: git submodule update --init
+git clone <repo-url>
 pnpm install
 cp .env.example .env          # fill in RDM credentials as feeds come online
-docker compose up -d postgres redis   # host ports 5434 (pg) / 6380 (redis)
+pnpm dev:up                   # starts postgres/redis (plain docker containers) + web + darwin-ingest + nr-ingest
 DATABASE_URL=postgres://mainline:mainline@localhost:5434/mainline pnpm db:migrate
-pnpm --filter web dev         # http://localhost:3000
 ```
+
+`pnpm dev:up` (see `scripts/dev-up.sh`) starts Postgres and Redis as plain
+named Docker containers (`mainline-dev-postgres`/`-redis`, host ports 5434/6380)
+and runs `web`/`darwin-ingest`/`nr-ingest` directly with `pnpm`/`tsx` — no
+Docker Compose, matching how each service deploys in production now (see
+"Deploying" below). `pnpm dev:down` stops everything. Web is at
+http://localhost:3000.
+
+MOTIS and the ETL aren't part of the normal dev loop — MOTIS needs GTFS
+output to exist first, and the ETL is run-to-completion, not a daemon. Run
+them directly when you need them: `pnpm --filter @mainline/etl timetable`,
+then start a local `motis` container by hand pointed at the resulting
+`data/gtfs` output (see the `motis` app's config in "Deploying" below for the
+image/command shape — locally you can run the same image directly with
+`docker run`).
 
 The live map (`/map`) additionally needs the OpenRailwayMap-vector tile stack
-running — see the `orm-db`/`orm-import`/`orm-martin`/`orm-api`/`orm-proxy`
-services in `docker-compose.yml` for one-time setup (GB OSM import required).
-Everything else works without it.
-
-Full stack (web built into a container):
-
-```sh
-docker compose up --build
-```
+running — that's a separate repo entirely (see "Map stack" under Deploying),
+so clone it separately and follow its own `SETUP.md` for local dev. Everything
+else in this repo works without it.
 
 Health check: `curl localhost:3000/api/health` → `{ ok, postgres, redis }`.
 
@@ -83,34 +97,82 @@ and board cache hit rate.
 
 ## Deploying (Coolify)
 
-`docker-compose.yml` is server-safe as-is: `postgres`/`redis` publish no host
-ports (only `docker-compose.override.yml`, local-dev-only and not read by
-Coolify, does that), and `web`/`motis`/`darwin-ingest`/`nr-ingest` all carry
-healthchecks + `restart: unless-stopped`.
+Each service is its own Coolify app now, not one Docker Compose stack — the
+old setup meant a single failing container could take Coolify's health
+tracking for the *whole* stack down with it, and there was no way to
+restart/redeploy one service in isolation. Services talk to each other over
+plain HTTP using env vars you set explicitly in Coolify's UI (see
+`.env.example`'s "Internal service-to-service calls" section) — no shared
+Docker socket, no shared volumes, no container-name guessing.
 
-0. **Submodule**: `vendor/openrailwaymap-vector` is a git submodule (needed
-   only for `/map`'s tile stack — `orm-db`/`orm-import`/`orm-martin`/`orm-api`/`orm-proxy`).
-   Confirm Coolify's source settings actually do a **recursive** clone
-   (check its Git source / "Submodules" option); a shallow, non-recursive
-   clone leaves the directory empty and those five services' builds will
-   fail with "path not found." If you don't need `/map`, you can remove
-   those services from the compose file instead of fighting the clone config.
-1. **New Resource → Docker Compose**, point it at this repo, compose file
-   `docker-compose.yml`.
-2. Set env vars in Coolify's UI (these become the values `${VAR:-}` in the
-   compose file resolve to) before the first build — see `.env.example` for
-   the full list:
-   `RDM_KAFKA_*`, `NRDP_USERNAME`/`PASSWORD` (or `DTD_SFTP_*` — see below),
-   `LDBWS_*` from the RDM Live Arrival and Departure Boards product,
-   `DISRUPTIONS_API_KEY`, `NETWORKRAIL_USERNAME`/`PASSWORD`,
-   `NR_TD_KAFKA_*` for the RailData TD product, `TFL_APP_KEY`, `VAPID_*`,
-   and (for `/map`) `NEXT_PUBLIC_TILES_URL`/`ORM_PUBLIC_HOST`.
-   `NEXT_PUBLIC_TILES_URL` is baked into the Next.js client bundle at image
-   build time, so changing it later requires a rebuild/redeploy, not only a
-   container restart.
+**Apps to create** (Coolify → New Resource → Dockerfile, one per row):
+
+| App | Dockerfile | Standing or one-off | Public? |
+|---|---|---|---|
+| `postgres` | Coolify's managed Postgres, or `postgres:17-alpine` directly | standing | no |
+| `redis` | Coolify's managed Redis, or `redis:8-alpine` directly | standing | no |
+| `web` | `apps/web/Dockerfile` | standing | **yes** |
+| `darwin-ingest` | `services/darwin-ingest/Dockerfile` | standing | no |
+| `nr-ingest` | `services/nr-ingest/Dockerfile` | standing | no |
+| `etl-cron` | `services/etl/Dockerfile`, command `server` | standing | no |
+| `mariadb` | `mariadb:11` | standing (etl-cron's scratch DB) | no |
+| `motis` | `ghcr.io/motis-project/motis:latest` — see below | standing | no |
+| `motis-sidecar` | `services/motis-sidecar/Dockerfile` — second container in the `motis` app | standing | no |
+
+**In a separate Coolify project**, built from your own fork of
+[OpenRailwayMap-vector](https://github.com/hiddewie/OpenRailwayMap-vector) —
+not this repo (see "Map stack", step 9):
+
+| App | Dockerfile (in the fork) | Standing or one-off | Public? |
+|---|---|---|---|
+| `orm-db` | `db/Dockerfile` | standing | no |
+| `orm-import` | `import/Dockerfile` | one-off (GB OSM import) | no |
+| `orm-martin` | `martin.Dockerfile` | standing | no |
+| `orm-api` | `api.Dockerfile` | standing | no |
+| `orm-proxy` | `proxy.Dockerfile` | standing | **yes** |
+
+### Quickstart
+
+1. Fork [hiddewie/OpenRailwayMap-vector](https://github.com/hiddewie/OpenRailwayMap-vector)
+   on GitHub, then create a **separate Coolify project** pointed at your
+   fork (see "Map stack", step 9, for what goes there).
+2. Generate the internal secrets (step 1 below).
+3. Create `postgres`, `redis` (step 2).
+4. Create `web`, set its env (step 3), including `RUN_DB_MIGRATIONS=1` and
+   `NEXT_PUBLIC_TILES_URL` (build arg — you can set this to your eventual
+   `orm-proxy` domain now, or come back and rebuild once that's up). Deploy,
+   confirm `/api/health` shows the schema present.
+5. Sign up, promote yourself to admin (first-deploy order, step 3).
+6. Create `darwin-ingest`, `nr-ingest` (step 4).
+7. Create `motis` + `motis-sidecar` as one two-container app (steps 7–8).
+8. Create `mariadb` + `etl-cron` (steps 5–6).
+9. Build the map stack in your fork's Coolify project: `orm-db`,
+   `orm-import` (one-off, GB OSM import), `orm-martin`, `orm-api`,
+   `orm-proxy` (step 9). Once `orm-proxy` has a public domain, set
+   `ORM_PUBLIC_HOST` on it and confirm/rebuild `NEXT_PUBLIC_TILES_URL` on
+   `web` to match.
+10. Trigger the first timetable import (first-deploy order, step 5).
+11. Optionally load NR reference data (first-deploy order, step 6).
+
+That's the full path — each numbered step above maps to the matching
+numbered step in the detailed reference below (its own 1–10, not this list's
+numbering).
+
+### Full reference
+1. **Generate the internal secrets once** (`openssl rand -base64 32` each):
+   `ETL_INTERNAL_KEY`, `NR_INGEST_INTERNAL_KEY`, `MOTIS_REIMPORT_KEY`. Each
+   value is set on **both** the calling app and the receiving app — see
+   `.env.example` for exactly which app needs which side.
+2. **`postgres`/`redis`**: no public port, no special config beyond the
+   defaults in `.env.example`'s "Core infrastructure" section.
+3. **`web`**: build arg `NEXT_PUBLIC_TILES_URL` (baked into the client bundle
+   at build time — changing it later needs a rebuild, not just a restart).
+   Runtime env: `DATABASE_URL`, `REDIS_URL`, `MOTIS_URL`, `ETL_URL` +
+   `ETL_INTERNAL_KEY`, `NR_INGEST_URL` + `NR_INGEST_INTERNAL_KEY`,
+   `MOTIS_REIMPORT_URL` + `MOTIS_REIMPORT_KEY`.
 
    **Sign-in and migrations — easy to miss, and the most common cause of "the
-   stack looks healthy but I can't log in":**
+   app looks healthy but I can't log in":**
    - `BETTER_AUTH_SECRET` — generate with `openssl rand -base64 32`. Sessions
      don't sign correctly without it.
    - `BETTER_AUTH_URL` — must equal the real public domain Coolify routes to
@@ -119,114 +181,122 @@ healthchecks + `restart: unless-stopped`.
    - `RESEND_API_KEY` — required if you want magic-link sign-in (passkey
      works without it, but you need at least one working sign-in method).
    - `RUN_DB_MIGRATIONS=1` — **set this for the first deploy.** Without it,
-     the `web` container starts against an empty, unmigrated database (no
-     `user`/`session` tables), and every sign-in attempt fails even though
-     Coolify shows the stack as healthy — `/api/health` only checks that
-     Postgres is reachable, not that the schema exists. It's safe to set on
-     a first deploy because there's nothing yet to fail a migration against.
-     You can unset it again after confirming the schema is up, per the
-     restart-loop caveat below.
-3. Expose only `web`'s port 3000 (and, if using `/map`, `orm-proxy`'s port
-   8000) through Coolify's proxy/domain. `motis` (8080) only needs to be
-   reachable from `web`/`darwin-ingest` on the compose network — don't route
-   a public domain to it.
-   If `/map` is enabled, set `NEXT_PUBLIC_TILES_URL` to the public URL Coolify
-   routes to `orm-proxy:8000`, and set `ORM_PUBLIC_HOST` to the same host
-   without the protocol.
-   On first deploy, `motis`, `darwin-ingest`, and `nr-ingest` intentionally
-   stay alive in a waiting/disabled state when their prerequisites are missing
-   (no imported routing data yet, or no feed credentials yet). That prevents
-   Coolify from burning through its restart limit before the app has been
-   bootstrapped.
-4. **Bootstrap order matters** — MOTIS has nothing to serve and darwin-ingest's
-   corridor precompute has nothing to resolve against until routing data
-   exists. Note that Coolify showing the stack as "healthy" doesn't mean
-   routing works or that anyone can sign in — `web`'s healthcheck only checks
-   Postgres/Redis connectivity and (see `/api/health`) that the schema exists,
-   and `motis` intentionally has no `depends_on` gate from `web` (it needs
-   this manual bootstrap first), so a green dashboard can still mean an
-   unimported, empty MOTIS.
-
-   **First-deploy order:**
-   1. Set the sign-in/migration env vars above, including `RUN_DB_MIGRATIONS=1`,
-      then deploy.
-   2. Confirm `curl <your-domain>/api/health` reports the schema as present
-      (not just `ok: true` — see the route's response shape). If it doesn't,
-      migrations didn't run; check the `web` container logs for
-      `[web] applying database migrations` vs `[web] skipping database migrations`.
-   3. Sign up via the UI (passkey or magic link), then promote yourself to
-      admin. You need direct DB access for this — Postgres has no published
-      host port on Coolify by design, so use Coolify's container terminal
-      (or `docker compose exec postgres psql -U mainline` if you have shell
-      access to the host):
-      ```sql
-      update "user" set role = 'admin' where email = 'you@example.com';
-      ```
-   4. Continue with the routing/timetable bootstrap below.
-   - Alternatively, run `pnpm db:migrate` against the deployed `DATABASE_URL`
-     as a one-off Coolify command instead of `RUN_DB_MIGRATIONS=1` — same
-     effect, but keeps `RUN_DB_MIGRATIONS` unset on the `web` container so a
-     later bad migration can't restart-loop the app. Whichever way you apply
-     them, migrations must run before anyone can sign in.
-   - Run the ETL once to populate the `gtfs-data` volume:
-     `docker compose --profile etl run --rm etl timetable`
-     — or, on a low-memory server, use the local-import-then-upload flow
-     below instead of running this on the server.
-   - Then run `motis import` (`docker exec <motis-container> /motis import -d /data/data -c /data/config.yml`)
-     and restart `motis` so it serves the fresh GTFS — a restart alone does
-     NOT reimport, `motis server` only ever serves whatever's already
-     preprocessed under `/data/data`.
-   - For NR positioning, load reference data once:
-     `docker compose run --rm nr-ingest pnpm tsx src/index.ts reference`
-     or, if RDG SFTP is delivering `SMARTExtract.csv.gz` /
-     `SMARTExtract.json.gz`, use:
-     `docker compose run --rm nr-ingest node dist/index.js reference-sftp`
-     and the headcode map (re-run roughly daily):
-     `docker compose run --rm nr-ingest pnpm tsx src/index.ts headcodes`
-5. The board (LDBWS) and journey planning work without Darwin/NR live feeds —
-   deploy incrementally and add `RDM_*`, `NETWORKRAIL_*` and `NR_TD_KAFKA_*`
-   credentials as each feed subscription comes online. `NR_TD_KAFKA_*` uses the
-   separate RailData **NWR Train Describer (TD)** Kafka consumer key/secret, not
-   the Darwin Kafka credentials.
-6. **Keeping the timetable current**: `etl-cron` (profile `etl`, alongside
-   `mariadb` — see the compose file; start both with
-   `docker compose --profile etl up -d etl-cron mariadb` once initial
-   bring-up is confirmed stable on your host's RAM) runs the SFTP rail-data
-   sweep nightly at 2am using the crontab in
-   `services/etl/cron/timetable-daily`: timetable import + MOTIS reload,
-   fares import, SMART/TPS reference sync, then Track Model sync. Both are
-   profile-gated rather than always-on because together they're the largest
-   chunk of idle memory in the stack (mariadb alone is a 4g ceiling for a
-   job that runs once a day) — worth deferring until you've confirmed the
-   rest of the stack is stable within your host's RAM. Set `DTD_SFTP_HOST` (+
-   `DTD_SFTP_USERNAME`/`PASSWORD`/`PORT`/`*_DIR`) to pull via RDG's SFTP
-   delivery instead of the NRDP HTTPS API — see `.env.example`. After each
-   nightly run, `run-and-reload-motis.sh` runs `motis import` then restarts
-   `motis` (or add an equivalent Coolify post-hook) so it serves the
-   refreshed GTFS zip; it doesn't watch the volume for changes, and a bare
-   restart without the import step is a no-op against stale preprocessed data.
-   You can run the same sweep on demand from `/settings/timetable` with
-   **Sync all SFTP data**. Network Rail reference/geometry SFTP drops are also
-   available as individual commands:
-   `pnpm --filter @mainline/nr-ingest start reference-sftp` processes
-   `SMARTExtract.*.gz` and `TPS_Data.tar.gz`;
-   `pnpm --filter @mainline/etl exec tsx src/index.ts track-model-sftp`
-   processes the newest `NWR_TrackModel*` snapshot. Both delete remote files
-   only after successful processing unless `NR_SFTP_DELETE_PROCESSED=false`.
-7. **Container-name env vars**: `MOTIS_CONTAINER_NAME` and
-   `ETL_CRON_CONTAINER_NAME` and `NR_REFERENCE_SYNC_CONTAINER_NAME` (all in
-   `.env.example`) default to plain Docker
-   Compose's `<project>-<service>-1` naming, which Coolify's compose deploys
-   often don't match (Coolify prefixes/suffixes project names). If the
-   restart-after-timetable-apply step, the on-demand SFTP sync endpoint, or
-   SMART/TPS reference sync fails, check the actual container names in
-   Coolify's UI (or `docker ps`) and override these env vars to match.
-8. **`web` and `etl-cron` mount `/var/run/docker.sock`** (to restart `motis`
-   after a timetable reload — MOTIS has no live-reload API). This is full
-   host Docker socket passthrough: anyone who can exec into either container
-   can control every container on the host. Acceptable for a personal
-   single-tenant deploy; be aware of it before exposing shell/exec access to
-   anyone else, or before running other sensitive workloads on the same host.
+     `web` starts against an empty, unmigrated database (no `user`/`session`
+     tables), and every sign-in attempt fails even though Coolify shows the
+     app as healthy — `/api/health` only checks that Postgres is reachable,
+     not that the schema exists. It's safe to set on a first deploy because
+     there's nothing yet to fail a migration against. Unset it again after
+     confirming the schema is up, or run `pnpm db:migrate` as a one-off
+     Coolify command instead — either way, migrations must run before anyone
+     can sign in. See the first-deploy order below.
+4. **`darwin-ingest`/`nr-ingest`**: `DATABASE_URL`, `REDIS_URL`, `MOTIS_URL`
+   (darwin-ingest only, for corridor precompute), plus each service's own
+   feed credentials (`RDM_KAFKA_*`/`RDM_CONSUMER_*` for darwin-ingest;
+   `NETWORKRAIL_*`/`NR_TD_KAFKA_*` for nr-ingest). Both self-disable (stay
+   alive, doing nothing) rather than crash-loop when their credentials are
+   unset — deploy them before feed subscriptions are ready, add credentials
+   later. `nr-ingest` also needs `NR_INGEST_INTERNAL_KEY` set (receiving
+   side) for the `/reference-sftp` endpoint `web` calls.
+5. **`etl-cron`**: command `server` (not the default `timetable`). Env:
+   `DATABASE_URL`, `ETL_MYSQL_URL` (pointed at `mariadb`), `ORM_DATABASE_URL`
+   (pointed at `orm-db`, if using `/map` — note `orm-db` lives in the
+   separate map-stack Coolify project, so this crosses projects; use
+   whatever address/port that project exposes it on, not an internal-only
+   hostname), `HTTP_PORT=4000`, `ETL_CRON=1`
+   (starts the nightly crond sweep as a child process — see
+   `services/etl/cron/timetable-daily`), `ETL_INTERNAL_KEY` (receiving side),
+   `MOTIS_REIMPORT_URL` + `MOTIS_REIMPORT_KEY` (to push GTFS + trigger
+   reimport after each pipeline run), `NR_INGEST_URL` +
+   `NR_INGEST_INTERNAL_KEY` (to trigger nr-ingest's reference sync as part of
+   the nightly sweep), plus `NRDP_USERNAME`/`PASSWORD` or `DTD_SFTP_*`.
+6. **`mariadb`**: plain `mariadb:11` image, `MARIADB_ROOT_PASSWORD=etl`,
+   `MARIADB_DATABASE=dtd` — etl-cron's scratch DB for the `dtd2mysql`
+   conversion step. Give it real memory (4GB+); it's idle almost all day and
+   busy for one nightly job, so a generous limit here costs nothing most of
+   the time.
+7. **`motis`**: image `ghcr.io/motis-project/motis:latest`, command:
+   ```sh
+   sh -c 'until [ -f /data/config.yml ]; do echo "waiting for imported routing data"; sleep 300; done; exec /motis server'
+   ```
+   (stays alive waiting rather than exiting — MOTIS exits immediately if
+   `/data/config.yml` doesn't exist yet, which would otherwise look like a
+   crash loop before the first import). Not public — only `web`,
+   `darwin-ingest`, and `motis-sidecar` need to reach it.
+8. **`motis-sidecar`**: a **second container in the same Coolify app as
+   `motis`**, built from `services/motis-sidecar/Dockerfile`. Needs
+   `MOTIS_REIMPORT_KEY` (receiving side) and the host's Docker socket mounted
+   (`/var/run/docker.sock`) — it's the one piece of this deployment that
+   still needs Docker control-plane access, because MOTIS has no live-reload
+   API and its only reimport mechanism (`motis import` + restart) requires
+   it. Being in the same app as `motis` means its `docker run
+   --volumes-from motis` / `docker restart motis` calls always target the
+   right sibling container — no cross-app container-name guessing.
+   `MOTIS_CONTAINER_NAME` defaults to `motis`; override it if Coolify names
+   the container differently on your host (check `docker ps`).
+9. **Map stack** (only if using `/map`): [OpenRailwayMap-vector](https://github.com/hiddewie/OpenRailwayMap-vector)
+   deploys as a **separate Coolify project**, built from your own fork of
+   that repo (fork it, then point Coolify's Git source at your fork — this
+   sidesteps the recursive-submodule-clone issues of vendoring it inside this
+   repo, and there's no runtime coupling to this app besides HTTP). Create
+   `orm-db`/`orm-import`/`orm-martin`/`orm-api`/`orm-proxy` there, following
+   its own `SETUP.md` for the GB OSM import, adapted to standalone Coolify
+   apps instead of its documented Compose setup. `orm-proxy` is the only one
+   that needs a public domain — point `NEXT_PUBLIC_TILES_URL` (on `web`,
+   build-time) and `ORM_PUBLIC_HOST` (on `orm-proxy`) at it.
+10. **First-deploy order** — a green dashboard across every app doesn't mean
+    routing works or anyone can sign in; `web`'s healthcheck only checks
+    Postgres/Redis/schema, and `motis` intentionally waits rather than
+    serving until it's been imported:
+    1. Deploy `postgres`, `redis` first.
+    2. Deploy `web` with `RUN_DB_MIGRATIONS=1` set. Confirm
+       `curl <your-domain>/api/health` reports the schema as present — if
+       not, check `web`'s logs for
+       `[web] applying database migrations` vs `[web] skipping...`.
+    3. Sign up via the UI, then promote yourself to admin via direct DB
+       access (Coolify's container terminal on the `postgres` app, or
+       `psql` if you've exposed a port):
+       ```sql
+       update "user" set role = 'admin' where email = 'you@example.com';
+       ```
+    4. Deploy `darwin-ingest`, `nr-ingest`, `motis` + `motis-sidecar`,
+       `mariadb`, `etl-cron`.
+    5. Trigger a timetable import — either `POST /timetable` on `etl-cron`
+       (with the `x-internal-key` header) or, on a low-memory server, the
+       local-import-then-upload flow below. This pushes the produced GTFS to
+       `motis-sidecar` and triggers the reimport automatically — no separate
+       manual `motis import` step.
+    6. For NR positioning, load reference data once against `nr-ingest`
+       (Coolify's one-off command, or from your machine against the deployed
+       `DATABASE_URL`): `pnpm --filter @mainline/nr-ingest start reference`
+       or, if RDG SFTP is delivering `SMARTExtract.*.gz`, `... reference-sftp`,
+       and the headcode map (re-run roughly daily):
+       `pnpm --filter @mainline/nr-ingest start headcodes`.
+11. The board (LDBWS) and journey planning work without Darwin/NR live
+    feeds — deploy incrementally and add `RDM_*`, `NETWORKRAIL_*` and
+    `NR_TD_KAFKA_*` credentials as each feed subscription comes online.
+    `NR_TD_KAFKA_*` uses the separate RailData **NWR Train Describer (TD)**
+    Kafka consumer key/secret, not the Darwin Kafka credentials.
+12. **Keeping the timetable current**: `etl-cron`'s crond sweep (started by
+    `ETL_CRON=1`) fires nightly at 2am per `services/etl/cron/timetable-daily`:
+    timetable import + MOTIS reload, fares import, SMART/TPS reference sync,
+    then Track Model sync. Set `DTD_SFTP_HOST` (+
+    `DTD_SFTP_USERNAME`/`PASSWORD`/`PORT`/`*_DIR`) to pull via RDG's SFTP
+    delivery instead of the NRDP HTTPS API — see `.env.example`. You can run
+    the same sweep on demand from `/settings/timetable` with **Sync all SFTP
+    data**. Network Rail reference/geometry SFTP drops are also available as
+    individual commands: `pnpm --filter @mainline/nr-ingest start reference-sftp`
+    processes `SMARTExtract.*.gz` and `TPS_Data.tar.gz`;
+    `pnpm --filter @mainline/etl exec tsx src/index.ts track-model-sftp`
+    processes the newest `NWR_TrackModel*` snapshot. Both delete remote files
+    only after successful processing unless `NR_SFTP_DELETE_PROCESSED=false`.
+13. **`motis-sidecar` mounts `/var/run/docker.sock`** (to run `motis import`
+    in a throwaway container and restart `motis` — MOTIS has no live-reload
+    API). This is full host Docker socket passthrough: anyone who can exec
+    into that container can control every container on the host. It's scoped
+    to a single small purpose-built container now, rather than shared across
+    `web` and `etl-cron` as before — smaller blast radius, but still worth
+    being aware of before exposing shell/exec access to anyone else, or
+    running other sensitive workloads on the same host.
 
 ### Low-memory server: import locally, upload the bundle
 
@@ -239,22 +309,23 @@ so something has to run the same conversion; the fix is choosing *where*.
 Run the full monthly import on your own machine instead of the server:
 
 ```sh
-docker compose --profile etl run --rm etl package
+pnpm --filter @mainline/etl exec tsx src/index.ts package
 ```
 
 This runs the same pipeline (download → `dtd2mysql` import → GTFS export →
 postprocess) but instead of loading into Postgres, packages the result into
 `bundle-<feedVersion>.tar.gz` (GTFS zip + derived station/trip-mapping CSVs +
 manifest — see `services/etl/src/package-bundle.ts`). No MariaDB or
-`dtd2mysql` ever runs on the server for this path.
+`dtd2mysql` ever runs on the server for this path — you need a local MariaDB
+scratch DB for this command (`ETL_MYSQL_URL` pointed at it), not the server's.
 
-Then upload it from the server's `/settings/timetable` page. The server
-loads the bundle straight into Postgres, then runs `motis import` and
-restarts `motis` to serve the new data — skipping the heavy conversion step
-entirely.
+Then upload it from the server's `/settings/timetable` page. The web app
+loads the bundle's station/trip-mapping data straight into Postgres, then
+uploads the bundled GTFS zip to `motis-sidecar` and triggers a reimport —
+skipping the heavy conversion step on the server entirely.
 
 `etl-cron` on the server keeps handling **daily** delta updates via
-`DTD_SFTP_*` as in step 6 above — those files are much smaller than a full
+`DTD_SFTP_*` as in step 12 above — those files are much smaller than a full
 monthly extract, so leave that running server-side unless it also proves to
 be too heavy, in which case repeat the same `package` + upload flow for
 daily deltas.

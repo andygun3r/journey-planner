@@ -230,7 +230,7 @@ export default async function Home() {
             has nothing to suggest.
           </p>
           <p>
-            Run <code>docker compose --profile etl run --rm etl postprocess</code> to load
+            Run <code>pnpm --filter @mainline/etl exec tsx src/index.ts postprocess</code> to load
             stations and trip mappings, then refresh.
           </p>
         </div>

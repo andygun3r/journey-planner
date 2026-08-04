@@ -179,8 +179,7 @@ export default async function JourneysPage({
           <h2>Routing engine is offline</h2>
           <p>
             Mainline couldn&rsquo;t reach MOTIS to compute journeys. If you&rsquo;re running
-            locally, start it with{" "}
-            <code>docker compose --profile routing up -d motis</code> and try again.
+            locally, make sure the motis container is up (see README) and try again.
           </p>
         </div>
       )}

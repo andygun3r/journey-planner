@@ -30,8 +30,8 @@ import { basemapTileUrl, BASEMAP_SOURCE, isDarkTheme, loadAbsoluteStyle } from "
 
 /**
  * Live GB train map: full-bleed MapLibre canvas over the self-hosted
- * OpenRailwayMap-vector stack (see docker-compose.yml's orm-db/import/martin/
- * proxy services) — its nginx proxy serves the "standard" style at /style.
+ * OpenRailwayMap-vector stack (see the orm-db/orm-import/orm-martin/orm-proxy
+ * Coolify apps) — its nginx proxy serves the "standard" style at /style.
  * Fetches Network Rail positions every 15s and plots them as a GeoJSON layer.
  * On load, centers on the browser's geolocation at ~5 miles wide; falls back
  * to a London-centered default at the same zoom if permission is denied or

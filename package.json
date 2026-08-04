@@ -9,15 +9,13 @@
     "dev": "turbo dev",
     "dev:up": "bash scripts/dev-up.sh",
     "dev:down": "bash scripts/dev-down.sh",
-    "docker:up": "docker compose up -d --build",
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "db:generate": "pnpm --filter @mainline/db generate",
     "db:migrate": "pnpm --filter @mainline/db migrate",
-    "etl:timetable": "pnpm --filter @mainline/etl timetable",
-    "timetable:update": "docker compose --profile etl build etl && docker compose --profile etl run --rm etl timetable && docker compose --profile routing run --rm motis /motis import -d /data/data -c /data/config.yml && docker compose --profile routing restart motis"
+    "etl:timetable": "pnpm --filter @mainline/etl timetable"
   },
   "devDependencies": {
     "turbo": "^2.5.0",

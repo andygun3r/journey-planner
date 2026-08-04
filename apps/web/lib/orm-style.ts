@@ -3,8 +3,8 @@
 import type maplibregl from "maplibre-gl";
 
 /**
- * Shared loader for the self-hosted OpenRailwayMap-vector style (see
- * docker-compose.yml's orm-db/import/martin/proxy services) composited over a
+ * Shared loader for the self-hosted OpenRailwayMap-vector style (see the
+ * orm-db/orm-import/orm-martin/orm-proxy Coolify apps) composited over a
  * CARTO raster basemap. Used by both the full live map (/map) and the
  * service-detail position map, which replaced an SVG schematic so that every
  * map in the app is the same real rail cartography.
@@ -36,8 +36,9 @@ function absolutize(path: string): string {
  * layers of track/signals/stations, but no background, land, water or place
  * labels — it's meant to sit over a general basemap (openrailwaymap.org
  * composites it over OSM the same way). We don't run our own basemap import
- * (see vendor/openrailwaymap-vector/SETUP.md — it only ingests railway
- * features), so this pulls CARTO's free, no-key raster tiles underneath it.
+ * (the OpenRailwayMap-vector project's own SETUP.md — a separate repo, see
+ * README's Deploying > Map stack — only ingests railway features), so this
+ * pulls CARTO's free, no-key raster tiles underneath it.
  *
  * Raster, not vector: CARTO's vector basemap ships its own sprite and glyph
  * URLs, and MapLibre allows only one sprite/glyphs pair per style — merging

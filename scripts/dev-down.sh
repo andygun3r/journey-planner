@@ -22,6 +22,6 @@ pkill -f "\-\-import tsx src/index.ts" 2>/dev/null
 true
 
 echo "==> Stopping postgres + redis"
-docker compose stop postgres redis
+docker stop mainline-dev-postgres mainline-dev-redis 2>/dev/null || true
 
 echo "Done."

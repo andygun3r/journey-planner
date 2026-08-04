@@ -23,7 +23,8 @@ pnpm + Turbo workspace, Node ≥ 22, TypeScript everywhere.
 - `apps/web` — Next.js 16 app: pages, API routes, and the SSE live-update stream.
 - `services/darwin-ingest` — RDM Darwin Push Port Kafka consumer → Postgres/Redis, plus commute-alert matching and nightly corridor precompute.
 - `services/nr-ingest` — Network Rail STOMP consumer (TRUST movements + Train Describer + VSTP/TSR/RTPPM) → Postgres, publishes CRS deltas to Redis.
-- `services/etl` — batch DTD timetable/fares download → GTFS conversion (dtd2mysql) → MOTIS + Postgres. Run-to-completion, not a daemon.
+- `services/etl` — batch DTD timetable/fares download → GTFS conversion (dtd2mysql) → MOTIS + Postgres. Runs as a one-off CLI command, or as a standing service (`ETL_CRON=1`, exposes an HTTP API — see `src/server.ts`) for the nightly cron + on-demand calls from `web`.
+- `services/motis-sidecar` — small HTTP-triggered wrapper around `docker run .../motis import` + `docker restart` for the MOTIS reimport-after-timetable-update step (MOTIS has no live-reload API). Deployed as a second container alongside `motis` in the same Coolify app, since it needs the host Docker socket to control its sibling container.
 - `packages/shared` — domain types (zod) + CRS/TIPLOC/NLC/STANOX code utilities.
 - `packages/db` — Drizzle schema, migrations, client.
 - `packages/routing-adapter` — engine-agnostic `plan()`/`departures()`; MOTIS v2 (nigiri) implementation.
@@ -39,9 +40,8 @@ pnpm db:generate               # drizzle-kit generate (after schema.ts edits)
 pnpm db:migrate                # apply migrations
 pnpm etl:timetable             # run the timetable ETL
 
-docker compose up -d postgres redis   # host ports 5434 (pg) / 6380 (redis)
-docker compose --profile etl run --rm etl timetable
-docker compose --profile routing up -d motis
+pnpm dev:up                    # postgres/redis (plain docker containers, host ports 5434/6380) + web + darwin-ingest + nr-ingest
+pnpm dev:down                  # stop everything dev:up started
 ```
 
 **Host ports are non-standard on purpose**: Postgres is `5434` and Redis is `6380`
@@ -147,9 +147,10 @@ Batch bulk data driving the routing engine and fares, **not** RDM APIs. Download
   RJTTF/RJFAF products, on a separate account from `NRDP_USERNAME`/`PASSWORD`. Set
   `DTD_SFTP_HOST` (+ `DTD_SFTP_USERNAME`/`PASSWORD`/`PORT`/`*_DIR` vars) to switch the ETL
   from the NRDP HTTPS download to pulling the newest `.zip` over SFTP — see
-  `services/etl/src/sftp-download.ts`. The `etl-cron` compose service runs this nightly at
-  2am via a baked-in crontab (`services/etl/cron/timetable-daily`); `etl` stays the
-  profile-gated one-off runner for manual invocations.
+  `services/etl/src/sftp-download.ts`. The `etl-cron` Coolify app (the etl image running
+  in standing-service mode, `ETL_CRON=1`) runs this nightly at 2am via a baked-in crontab
+  (`services/etl/cron/timetable-daily`); the same image also runs as a one-off
+  `docker run --rm etl <command>` for manual invocations.
 - **Track Model SFTP**: `pnpm --filter @mainline/etl exec tsx src/index.ts track-model-sftp`
   pulls `NWR_TrackModel*`, imports it into `track_model_line` /
   `station_track_model_position`, then deletes the remote files after a successful

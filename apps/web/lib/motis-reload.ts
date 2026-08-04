@@ -1,65 +1,54 @@
-import { spawn } from "node:child_process";
-
 /**
- * Reimport the refreshed GTFS into MOTIS, then restart it.
+ * Pushes a GTFS zip to motis's sidecar and triggers a reimport + restart.
  *
- * Both steps, always. MOTIS has no live-reload API — `motis server` only serves
- * whatever is already preprocessed under /data/data, so a restart on its own
- * picks up nothing. The SFTP sync path used to restart without importing, which
- * meant it updated Postgres, reported success, and quietly left routing on the
- * old timetable. Having one helper both callers use is what stops that
- * happening again.
+ * MOTIS has no live-reload API — `motis server` only serves whatever is
+ * already preprocessed under /data/data, so a restart on its own picks up
+ * nothing; the import has to run first. Before the per-service Coolify
+ * split, this wrote the zip into a volume shared with motis and reached the
+ * Docker socket directly. motis is its own Coolify app now, so the zip
+ * travels over HTTP and a small sidecar container in that same app (see
+ * services/motis-sidecar) does the actual `docker run .../motis import` +
+ * `docker restart` — it has host socket access to its sibling motis
+ * container; this process no longer needs any.
  *
- * The import runs as its own throwaway container rather than `docker exec` into
- * the serving one, so it gets its own memory budget instead of sharing the
- * server's cgroup. Preprocessing the GB-wide dataset is the heaviest step in the
- * pipeline and has run the box out of memory; it must not also be squeezed by
- * whatever the live server is holding.
+ * Used only by the uploaded-bundle path (etl-apply.ts's applyBundle), which
+ * runs entirely inside this web container and produces its own GTFS zip
+ * without going through the etl service. The SFTP/full-timetable paths call
+ * etl's own HTTP endpoints instead, which push+reimport on etl's side of the
+ * pipeline directly (see etl-sftp-sync.ts).
  */
-
-function run(command: string, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let stderr = "";
-    child.stderr.on("data", (c: Buffer) => {
-      stderr += c.toString("utf8");
-    });
-    child.on("error", reject);
-    child.on("exit", (code) =>
-      code === 0
-        ? resolve()
-        : reject(new Error(`${command} ${args[0]} exited ${code}${stderr ? `: ${stderr.trim()}` : ""}`)),
-    );
-  });
-}
 
 export type ReloadProgress = (line: string) => void;
 
-export async function reloadMotis(onProgress: ReloadProgress): Promise<void> {
-  const container = process.env.MOTIS_CONTAINER_NAME ?? "mainline-motis-1";
-  const image = process.env.MOTIS_IMAGE ?? "ghcr.io/motis-project/motis:latest";
-  const importMemory = process.env.MOTIS_IMPORT_MEMORY;
+export async function reloadMotis(gtfsZipPath: string, onProgress: ReloadProgress): Promise<void> {
+  const baseUrl = process.env.MOTIS_REIMPORT_URL;
+  const key = process.env.MOTIS_REIMPORT_KEY;
+  if (!baseUrl || !key) {
+    throw new Error("MOTIS_REIMPORT_URL and MOTIS_REIMPORT_KEY must be set to reload motis");
+  }
 
-  onProgress("Reimporting into motis (separate container)...");
-  await run("docker", [
-    "run",
-    "--rm",
-    // Reuse the serving container's volumes, so the import writes where the
-    // server reads. Survives the volume renaming that deploy tools apply.
-    "--volumes-from",
-    container,
-    ...(importMemory ? ["--memory", importMemory] : []),
-    "-w",
-    "/data",
-    image,
-    "/motis",
-    "import",
-    "-d",
-    "/data/data",
-    "-c",
-    "/data/config.yml",
-  ]);
+  const { createReadStream } = await import("node:fs");
 
-  onProgress("Restarting motis to serve the new data...");
-  await run("docker", ["restart", container]);
+  onProgress("Uploading GTFS to motis sidecar...");
+  const uploadRes = await fetch(new URL("/upload-gtfs", baseUrl), {
+    method: "POST",
+    headers: { "x-internal-key": key, "content-type": "application/octet-stream" },
+    body: createReadStream(gtfsZipPath) as unknown as ReadableStream,
+    duplex: "half",
+  } as RequestInit);
+  if (!uploadRes.ok) {
+    const body = await uploadRes.text().catch(() => "");
+    throw new Error(`motis upload-gtfs failed: ${uploadRes.status}${body ? ` ${body}` : ""}`);
+  }
+
+  onProgress("Reimporting into motis (sidecar container)...");
+  const reimportRes = await fetch(new URL("/reimport", baseUrl), {
+    method: "POST",
+    headers: { "x-internal-key": key },
+  });
+  if (!reimportRes.ok) {
+    const body = await reimportRes.text().catch(() => "");
+    throw new Error(`motis reimport failed: ${reimportRes.status}${body ? ` ${body}` : ""}`);
+  }
+  onProgress("motis reimported and restarted.");
 }

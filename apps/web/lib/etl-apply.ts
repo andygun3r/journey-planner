@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, copyFile, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -95,11 +95,11 @@ async function loadTripMappingsCsv(csvPath: string): Promise<
 /**
  * Applies a bundle produced locally by `etl package` (see
  * services/etl/src/package-bundle.ts): loads the pre-converted station/trip
- * mapping CSVs into Postgres, drops the GTFS zip into the shared volume, and
- * reimports + restarts motis so it serves the new data — all without running
- * dtd2mysql on this (memory-constrained) server. `motis server` only ever
- * serves whatever's already preprocessed under /data/data — restarting alone
- * does NOT reimport, `motis import` must run first.
+ * mapping CSVs into Postgres, then uploads the GTFS zip to motis's sidecar
+ * and triggers a reimport + restart there — all without running dtd2mysql on
+ * this (memory-constrained) server. `motis server` only ever serves what's
+ * already preprocessed under /data/data — restarting alone does NOT
+ * reimport, `motis import` must run first (see motis-reload.ts).
  */
 export async function applyBundle(bundlePath: string, onProgress: ApplyProgress): Promise<void> {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "etl-apply-"));
@@ -154,12 +154,7 @@ export async function applyBundle(bundlePath: string, onProgress: ApplyProgress)
       });
     });
 
-    onProgress("Copying GTFS zip into the shared volume...");
-    const gtfsOutDir = process.env.ETL_GTFS_OUT_DIR ?? "/data/gtfs";
-    await mkdir(gtfsOutDir, { recursive: true });
-    await copyFile(path.join(tmp, "gb-rail.gtfs.zip"), path.join(gtfsOutDir, "gb-rail.gtfs.zip"));
-
-    await reloadMotis(onProgress);
+    await reloadMotis(path.join(tmp, "gb-rail.gtfs.zip"), onProgress);
 
     onProgress("Done.");
   } finally {

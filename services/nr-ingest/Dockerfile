@@ -12,4 +12,9 @@ WORKDIR /app/services/nr-ingest
 # Compiled output, not tsx. tsx transpiles at startup and keeps the
 # compiler resident for the life of the process — pointless for a daemon
 # that is built during the image build anyway.
+#
+# Set HTTP_PORT to also start the internal server web calls for on-demand
+# reference-sftp sync (see src/server.ts) — no separate nr-reference-sync
+# image needed anymore, that job is an endpoint on this same daemon now.
+EXPOSE 4001
 CMD ["node", "dist/index.js"]
