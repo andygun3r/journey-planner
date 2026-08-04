@@ -1,3 +1,0 @@
-[submodule "vendor/openrailwaymap-vector"]
-	path = vendor/openrailwaymap-vector
-	url = https://github.com/hiddewie/OpenRailwayMap-vector
