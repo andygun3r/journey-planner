@@ -25,6 +25,21 @@ async function checkPostgres(): Promise<boolean> {
   }
 }
 
+/**
+ * Distinct from checkPostgres: a reachable-but-unmigrated database still
+ * passes `select 1`. Coolify then shows the stack as healthy while every
+ * DB-touching route (including sign-in) 500s, because RUN_DB_MIGRATIONS
+ * was never set. This confirms the "user" table (from Better Auth) exists.
+ */
+async function checkSchema(): Promise<boolean> {
+  try {
+    await getDb().execute(sql`select 1 from "user" limit 1`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function checkRedis(): Promise<boolean> {
   const url = process.env.REDIS_URL;
   if (!url) return false;
@@ -41,9 +56,10 @@ async function checkRedis(): Promise<boolean> {
 }
 
 export async function GET() {
-  const [postgres, redis, timetable] = await Promise.all([
+  const [postgres, redis, schema, timetable] = await Promise.all([
     checkPostgres(),
     checkRedis(),
+    checkSchema(),
     timetableStatus(),
   ]);
 
@@ -52,9 +68,20 @@ export async function GET() {
   // app cannot fix a timetable import that stopped running — it would just add a
   // restart loop to an existing problem. `ok` stays about "can this process
   // serve requests"; the timetable block is there to be read.
+  //
+  // `schema` is reported the same way, and only when postgres is reachable —
+  // an unmigrated database is a deploy/config problem (see checkSchema), not
+  // a crash-worthy one; restarting web can't fix it either.
   const ok = postgres && redis;
   return NextResponse.json(
-    { ok, postgres, redis, timetable, service: "mainline-web" },
+    {
+      ok,
+      postgres,
+      redis,
+      schema: postgres ? schema : null,
+      timetable,
+      service: "mainline-web",
+    },
     { status: ok ? 200 : 503 },
   );
 }

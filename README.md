@@ -108,6 +108,24 @@ healthchecks + `restart: unless-stopped`.
    `NEXT_PUBLIC_TILES_URL` is baked into the Next.js client bundle at image
    build time, so changing it later requires a rebuild/redeploy, not only a
    container restart.
+
+   **Sign-in and migrations — easy to miss, and the most common cause of "the
+   stack looks healthy but I can't log in":**
+   - `BETTER_AUTH_SECRET` — generate with `openssl rand -base64 32`. Sessions
+     don't sign correctly without it.
+   - `BETTER_AUTH_URL` — must equal the real public domain Coolify routes to
+     `web` (not `localhost`). Passkey sign-in derives its `rpID` from this;
+     a mismatch breaks sign-in silently, with no obvious error.
+   - `RESEND_API_KEY` — required if you want magic-link sign-in (passkey
+     works without it, but you need at least one working sign-in method).
+   - `RUN_DB_MIGRATIONS=1` — **set this for the first deploy.** Without it,
+     the `web` container starts against an empty, unmigrated database (no
+     `user`/`session` tables), and every sign-in attempt fails even though
+     Coolify shows the stack as healthy — `/api/health` only checks that
+     Postgres is reachable, not that the schema exists. It's safe to set on
+     a first deploy because there's nothing yet to fail a migration against.
+     You can unset it again after confirming the schema is up, per the
+     restart-loop caveat below.
 3. Expose only `web`'s port 3000 (and, if using `/map`, `orm-proxy`'s port
    8000) through Coolify's proxy/domain. `motis` (8080) only needs to be
    reachable from `web`/`darwin-ingest` on the compose network — don't route
@@ -123,14 +141,33 @@ healthchecks + `restart: unless-stopped`.
 4. **Bootstrap order matters** — MOTIS has nothing to serve and darwin-ingest's
    corridor precompute has nothing to resolve against until routing data
    exists. Note that Coolify showing the stack as "healthy" doesn't mean
-   routing works — `web`'s healthcheck only checks Postgres/Redis, and
-   `motis` intentionally has no `depends_on` gate from `web` (it needs this
-   manual bootstrap first), so a green dashboard can still mean an
-   unimported, empty MOTIS:
-   - Run `pnpm db:migrate` against the deployed `DATABASE_URL` (or run it as
-     a Coolify pre-deployment/one-off command). The `web` container can also
-     run migrations before Next.js starts when `RUN_DB_MIGRATIONS=1`, but leave
-     that unset if you do not want a failed migration to restart-loop the app.
+   routing works or that anyone can sign in — `web`'s healthcheck only checks
+   Postgres/Redis connectivity and (see `/api/health`) that the schema exists,
+   and `motis` intentionally has no `depends_on` gate from `web` (it needs
+   this manual bootstrap first), so a green dashboard can still mean an
+   unimported, empty MOTIS.
+
+   **First-deploy order:**
+   1. Set the sign-in/migration env vars above, including `RUN_DB_MIGRATIONS=1`,
+      then deploy.
+   2. Confirm `curl <your-domain>/api/health` reports the schema as present
+      (not just `ok: true` — see the route's response shape). If it doesn't,
+      migrations didn't run; check the `web` container logs for
+      `[web] applying database migrations` vs `[web] skipping database migrations`.
+   3. Sign up via the UI (passkey or magic link), then promote yourself to
+      admin. You need direct DB access for this — Postgres has no published
+      host port on Coolify by design, so use Coolify's container terminal
+      (or `docker compose exec postgres psql -U mainline` if you have shell
+      access to the host):
+      ```sql
+      update "user" set role = 'admin' where email = 'you@example.com';
+      ```
+   4. Continue with the routing/timetable bootstrap below.
+   - Alternatively, run `pnpm db:migrate` against the deployed `DATABASE_URL`
+     as a one-off Coolify command instead of `RUN_DB_MIGRATIONS=1` — same
+     effect, but keeps `RUN_DB_MIGRATIONS` unset on the `web` container so a
+     later bad migration can't restart-loop the app. Whichever way you apply
+     them, migrations must run before anyone can sign in.
    - Run the ETL once to populate the `gtfs-data` volume:
      `docker compose --profile etl run --rm etl timetable`
      — or, on a low-memory server, use the local-import-then-upload flow
@@ -151,11 +188,17 @@ healthchecks + `restart: unless-stopped`.
    credentials as each feed subscription comes online. `NR_TD_KAFKA_*` uses the
    separate RailData **NWR Train Describer (TD)** Kafka consumer key/secret, not
    the Darwin Kafka credentials.
-6. **Keeping the timetable current**: `etl-cron` runs in the default (non-profile)
-   service set and runs the SFTP rail-data sweep nightly at 2am using the
-   crontab in `services/etl/cron/timetable-daily`: timetable import + MOTIS
-   reload, fares import, SMART/TPS reference sync, then Track Model sync. Set
-   `DTD_SFTP_HOST` (+
+6. **Keeping the timetable current**: `etl-cron` (profile `etl`, alongside
+   `mariadb` — see the compose file; start both with
+   `docker compose --profile etl up -d etl-cron mariadb` once initial
+   bring-up is confirmed stable on your host's RAM) runs the SFTP rail-data
+   sweep nightly at 2am using the crontab in
+   `services/etl/cron/timetable-daily`: timetable import + MOTIS reload,
+   fares import, SMART/TPS reference sync, then Track Model sync. Both are
+   profile-gated rather than always-on because together they're the largest
+   chunk of idle memory in the stack (mariadb alone is a 4g ceiling for a
+   job that runs once a day) — worth deferring until you've confirmed the
+   rest of the stack is stable within your host's RAM. Set `DTD_SFTP_HOST` (+
    `DTD_SFTP_USERNAME`/`PASSWORD`/`PORT`/`*_DIR`) to pull via RDG's SFTP
    delivery instead of the NRDP HTTPS API — see `.env.example`. After each
    nightly run, `run-and-reload-motis.sh` runs `motis import` then restarts

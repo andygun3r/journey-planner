@@ -349,10 +349,19 @@ services:
   # NOT reimport — `motis server` just serves whatever's already preprocessed
   # under /data/data). Enable once SFTP/NRDP credentials are in place —
   # otherwise the nightly run just fails and retries the next night.
+  #
+  # Profile-gated (`etl`), same as `etl` above, rather than always-on: this
+  # and mariadb below are together ~4-5GB of idle ceiling for a job that
+  # only runs once a day. On a RAM-constrained host, start it explicitly
+  # once initial bring-up is confirmed stable:
+  #   docker compose --profile etl up -d etl-cron mariadb
+  # If your host has headroom to spare, there's no harm leaving it up
+  # always — this only changes the default.
   etl-cron:
     build:
       context: .
       dockerfile: services/etl/Dockerfile
+    profiles: ["etl"]
     environment:
       <<: *etl-env
       # Must match the actual motis container name/id on this host — Coolify
@@ -387,9 +396,14 @@ services:
     # it wrong stops timetable updates silently.
 
   # MariaDB scratch for dtd2mysql only — canonical storage is Postgres.
-  # Not profile-gated: etl-cron (a standing service) needs it always up.
+  # Profile-gated (`etl`), same as etl-cron above: idle 23h59m/day at a 4g
+  # ceiling was the largest single chunk of always-on memory in this stack.
+  # Bring it up alongside etl-cron (see the profile note there) once initial
+  # bring-up is confirmed stable, or run it just for a one-off
+  # `docker compose --profile etl run --rm etl timetable`.
   mariadb:
     image: mariadb:11
+    profiles: ["etl"]
     environment:
       MARIADB_ROOT_PASSWORD: etl
       MARIADB_DATABASE: dtd
