@@ -147,8 +147,17 @@ every other app below.)
 
 ### Step 2 — `web`
 
-Coolify app, **Dockerfile** build type: `apps/web/Dockerfile`. This is your
-one public app — port 3000, this is what you route your domain to.
+Coolify app, **Dockerfile** build type. This is your one public app —
+port 3000, this is what you route your domain to.
+
+**Base Directory**: `/` (repo root) — **Dockerfile Location**:
+`apps/web/Dockerfile`. Don't put `apps/web/Dockerfile` into the Base
+Directory field: unlike `orm-db`/`orm-import` in step 8, this Dockerfile's
+`COPY` commands (`COPY apps ./apps`, `COPY packages ./packages`, etc.) need
+the build context to be the whole repo, not just `apps/web/`. Putting the
+full path in the wrong field fails with
+`mkdir: can't create directory '.../apps/web/Dockerfile': File exists` —
+Coolify tries to treat the file path as a directory to create.
 
 **Build arg:**
 ```
@@ -228,14 +237,22 @@ DATABASE_URL=postgres://mainline:mainline@<postgres-host>:5432/mainline
 REDIS_URL=redis://<redis-host>:6379
 MOTIS_URL=http://<motis-host>:8080
 ```
-Plus, only if you have an RDM Darwin subscription — **set all four together,
+Plus, only if you have an RDM Darwin subscription — **set all five together,
 or none of them**:
 ```
 RDM_KAFKA_BOOTSTRAP_SERVERS=...
 RDM_KAFKA_TOPIC=...
 RDM_CONSUMER_KEY=...
 RDM_CONSUMER_SECRET=...
+RDM_KAFKA_GROUP_ID=...
 ```
+`RDM_KAFKA_GROUP_ID` falls back to your consumer key if unset, so it *looks*
+optional in the code — but RDM's Confluent Cloud broker can enforce ACLs
+scoped to a specific consumer-group-id pattern. If yours does and you leave
+this unset, connecting fails with `TOPIC_AUTHORIZATION_FAILED` and the
+service crash-loops, even though every other credential is correct. Check
+your RDM subscription for the expected group id format and set it exactly.
+
 Plus, for commute-alert push notifications:
 ```
 VAPID_PUBLIC_KEY=...
@@ -257,13 +274,17 @@ NETWORKRAIL_USERNAME=...
 NETWORKRAIL_PASSWORD=...
 ```
 Plus, only if you're using RailData Kafka for Train Describer (optional —
-falls back to STOMP without it) — **set all four together, or none**:
+falls back to STOMP without it) — **set all five together, or none**:
 ```
 NR_TD_KAFKA_BOOTSTRAP_SERVERS=...
 NR_TD_KAFKA_TOPIC=...
 NR_TD_KAFKA_USERNAME=...
 NR_TD_KAFKA_PASSWORD=...
+NR_TD_KAFKA_GROUP_ID=mainline-nr-td-ingest
 ```
+Same caveat as `RDM_KAFKA_GROUP_ID` above — check RailData's subscription
+docs for whether your broker enforces a specific consumer-group-id pattern
+before assuming the default is fine.
 
 ⚠️ **The "all together, or none" rule matters.** Both services are meant to
 idle harmlessly (not crash) when a whole feed's credentials are unset — but
@@ -322,7 +343,29 @@ MARIADB_DATABASE=dtd
 ```
 
 **`etl-cron`**: Coolify app, **Dockerfile** build type: `services/etl/Dockerfile`.
-Set the **start command** to `server` (not the image's default `timetable`).
+**Leave Coolify's start command AND "Custom Docker Options"/entrypoint
+override fields completely empty — don't touch either of them.** The
+image's own default (`CMD ["timetable"]`, appended to
+`ENTRYPOINT ["pnpm", "tsx", "src/index.ts"]`) never actually gets used here:
+`HTTP_PORT` being set below makes `src/index.ts` switch into standing-server
+mode automatically before it ever looks at argv (see the top of that file).
+`HTTP_PORT`+`ETL_CRON` as plain **environment variables** (not a command
+override) are the only things that need setting.
+
+Two specific mistakes to avoid, both looking plausible but both wrong:
+- Setting the start command to `server` fails with
+  `exec: "server": executable file not found in $PATH` — Coolify replaces
+  the container's entrypoint with that single word, and Docker tries to run
+  a binary called `server`, which doesn't exist.
+- Setting a Custom Docker Option like `--entrypoint pnpm tsx src/index.ts server`
+  also fails, differently: `--entrypoint` only takes the *first* following
+  word as the entrypoint binary (`pnpm`), and the rest (`tsx src/index.ts
+  server`) get passed to it as plain arguments — which pnpm doesn't
+  recognize, so it just prints its own help text and the container never
+  starts your code at all.
+
+If you've set either of these, delete it and redeploy — the Dockerfile
+already does the right thing on its own once `HTTP_PORT`/`ETL_CRON` are set.
 ```
 DATABASE_URL=postgres://mainline:mainline@<postgres-host>:5432/mainline
 ETL_MYSQL_URL=mysql://root:etl@<mariadb-host>:3306/dtd

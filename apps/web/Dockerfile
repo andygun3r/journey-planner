@@ -12,6 +12,13 @@ COPY services ./services
 COPY packages ./packages
 RUN pnpm install --frozen-lockfile --filter web...
 RUN pnpm exec turbo build --filter=web
+# Next's standalone output only traces what the running server imports —
+# migrate.js is a separate script the server never calls, so drizzle-orm/
+# postgres never make it into .next/standalone/node_modules on their own.
+# A self-contained prod install of just @mainline/db (with its own
+# node_modules) sidesteps guessing which pnpm symlinks are safe to copy
+# piecemeal across build stages.
+RUN pnpm deploy --filter @mainline/db --prod --legacy /app/db-deploy
 
 FROM node:22-alpine AS runner
 RUN apk add --no-cache docker-cli
@@ -22,9 +29,7 @@ ENV PORT=3000
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public ./apps/web/public
-COPY --from=builder /app/packages/db/package.json ./packages/db/package.json
-COPY --from=builder /app/packages/db/dist ./packages/db/dist
-COPY --from=builder /app/packages/db/migrations ./packages/db/migrations
+COPY --from=builder /app/db-deploy ./packages/db
 COPY apps/web/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 EXPOSE 3000
