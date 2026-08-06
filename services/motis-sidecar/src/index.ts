@@ -77,6 +77,12 @@ async function ensureConfig(): Promise<void> {
     child.stderr.on("data", (c: Buffer) => {
       stderr += c.toString("utf8");
     });
+    // Without this, a child that exits/closes stdin early (e.g. docker pull
+    // still in progress, --volumes-from target gone) throws an unhandled
+    // EPIPE on the write below and crashes the whole sidecar process — not
+    // just this request. Swallow it here; `exit` below still reports the
+    // real failure via the child's exit code.
+    child.stdin.on("error", () => {});
     child.on("error", reject);
     child.on("exit", (code) =>
       code === 0 ? resolve() : reject(new Error(`docker run (write config.yml) exited ${code}${stderr ? `: ${stderr.trim()}` : ""}`)),
@@ -129,6 +135,10 @@ async function writeGtfsZip(body: NodeJS.ReadableStream): Promise<void> {
     child.stderr.on("data", (c: Buffer) => {
       stderr += c.toString("utf8");
     });
+    // See the matching comment in ensureConfig() — same unhandled-EPIPE
+    // crash risk here, and this is the path that actually hit it in
+    // practice (large GTFS upload, child exited before the stream finished).
+    child.stdin.on("error", () => {});
     child.on("error", reject);
     child.on("exit", (code) =>
       code === 0 ? resolve() : reject(new Error(`docker run (write gtfs) exited ${code}${stderr ? `: ${stderr.trim()}` : ""}`)),
