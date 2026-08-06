@@ -28,11 +28,30 @@ export async function GET() {
     .leftJoin(darwinTrain, eq(nrTrainPosition.rid, darwinTrain.rid))
     .where(and(isNotNull(nrTrainPosition.lastReportedAt), gte(nrTrainPosition.lastReportedAt, since)));
 
+  const withLatLon = await db
+    .select({
+      trainId: nrTrainPosition.trainId,
+      lastCrs: nrTrainPosition.lastCrs,
+      lat: sql<number | null>`coalesce(${station.trackLat}, ${station.lat})`,
+      lon: sql<number | null>`coalesce(${station.trackLon}, ${station.lon})`,
+      stationName: station.name,
+    })
+    .from(nrTrainPosition)
+    .leftJoin(station, eq(nrTrainPosition.lastCrs, station.crs))
+    .where(and(isNotNull(nrTrainPosition.lastReportedAt), gte(nrTrainPosition.lastReportedAt, since)))
+    .limit(10);
+
+  const nonNullLatLonCount = await db.execute(
+    sql`select count(*)::int as n from nr_train_position p left join station s on p.last_crs = s.crs where p.last_reported_at is not null and p.last_reported_at >= ${since.toISOString()}::timestamptz and coalesce(s.track_lat, s.lat) is not null`,
+  );
+
   return NextResponse.json({
     sinceIso: since.toISOString(),
     nowIso: new Date().toISOString(),
     rawCount: rawCount[0],
     drizzleCountNoJoin: drizzleCountNoJoin[0],
     drizzleCountWithJoin: drizzleCountWithJoin[0],
+    nonNullLatLonCount: nonNullLatLonCount[0],
+    sampleRows: withLatLon,
   });
 }
