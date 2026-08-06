@@ -16,6 +16,15 @@ RUN pnpm exec turbo build --filter=@mainline/etl^...
 COPY services/etl/cron/timetable-daily /etc/crontabs/root
 WORKDIR /app/services/etl
 
+# Downloaded feed archives (ETL_ARCHIVE_DIR) and exported GTFS
+# (ETL_GTFS_OUT_DIR) both live under /data by default — this must be backed
+# by a real persistent volume in Coolify's Storages tab (destination
+# /data), not just this declaration. Without one, every redeploy of this
+# app wipes /data and any in-progress or not-yet-uploaded archive with it —
+# the VOLUME instruction alone doesn't give Coolify a stable volume to
+# reattach across redeploys.
+VOLUME ["/data"]
+
 # Two ways to run this image:
 #   docker run --rm etl timetable                     (one-off CLI command)
 #   HTTP_PORT=4000 ETL_CRON=1 docker run etl server    (the etl-cron Coolify
