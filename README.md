@@ -433,20 +433,31 @@ top of this section.
     itself, so it only appears once an import has actually finished — which
     is the thing worth waiting for.
 - No env vars needed.
-- Persistent volume at `/data` — the imported timetable/routing data
-  (`/data/data`) and the config the sidecar writes (`/data/config.yml`).
-  Losing it means every app depending on `motis` goes back to "waiting for
-  imported routing data" until the next full ETL import.
-- Second persistent volume at `/input` — where `motis-sidecar` stages the
-  uploaded GTFS zip (`/input/gb-rail.gtfs.zip`), and what `config.yml`
-  points `motis import` at. Coolify creates it owned by `root`, but the
-  image runs as uid 100 / gid 101 (`motis`), so the upload fails with
+**Both of this app's volumes must be added explicitly in Coolify's
+Storages tab** — destination `/data` and destination `/input`. This is not
+optional bookkeeping. The motis image declares `VOLUME ["/data"]` itself,
+so if you don't add it, Docker still mounts *something* there: a fresh
+**anonymous** volume, created new on every container recreation. Everything
+works until the next redeploy, which silently swaps in an empty `/data` and
+leaves the imported timetable orphaned in the old volume — motis goes back
+to "waiting for imported routing data" for no visible reason. You can tell
+the two apart in `docker inspect motis --format '{{json .Mounts}}'`: a
+Coolify-managed volume has a readable name (`…-Motis-storage`), an
+anonymous one is 64 hex characters.
+
+- Volume at `/data` — the imported timetable/routing data (`/data/data`)
+  and the input config the sidecar writes (`/data/config.yml`).
+- Volume at `/input` — where `motis-sidecar` stages the uploaded GTFS zip
+  (`/input/gb-rail.gtfs.zip`), and what `config.yml` points `motis import`
+  at. Coolify creates volumes owned by `root`, but the image runs as
+  uid 100 / gid 101 (`motis`), so the upload fails with
   `can't create /input/gb-rail.gtfs.zip: Permission denied` until you fix
   ownership on the host once:
   ```sh
   chown -R 100:101 /var/lib/docker/volumes/<the-input-volume>/_data
   ```
-  (`docker inspect motis --format '{{json .Mounts}}'` gives the volume name.)
+  (`docker inspect motis --format '{{json .Mounts}}'` gives the volume
+  name.) The same applies to `/data` if the import can't write there.
 - No port publish needed — `web`/`darwin-ingest`/`etl-cron` reach it by
   container name (`mainline-motis:8080`) over the shared `coolify` network,
   not the host.
