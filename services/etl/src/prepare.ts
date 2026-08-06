@@ -13,7 +13,7 @@ const exec = promisify(execFile);
  * Zips that already use dotted extensions pass through unchanged.
  */
 
-const KNOWN_TYPES = ["MSN", "FLF", "MCA", "ZTR", "ALF", "CFA", "TSI"];
+export const KNOWN_TIMETABLE_TYPES = ["MSN", "FLF", "MCA", "ZTR", "ALF", "CFA", "TSI"];
 
 export async function prepareTimetableZip(srcZip: string, destDir: string): Promise<string> {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "dtd-prepare-"));
@@ -24,12 +24,12 @@ export async function prepareTimetableZip(srcZip: string, destDir: string): Prom
     for (const file of files) {
       const match = /^(.*?)(?:[._-]?)([A-Z]{3})\.txt$/i.exec(file);
       const type = match?.[2]?.toUpperCase();
-      if (match && type && KNOWN_TYPES.includes(type)) {
+      if (match && type && KNOWN_TIMETABLE_TYPES.includes(type)) {
         await rename(path.join(tmp, file), path.join(tmp, `${match[1]}.${type}`));
         renamed++;
       }
     }
-    if (renamed === 0 && !files.some((f) => KNOWN_TYPES.includes(path.extname(f).slice(1).toUpperCase()))) {
+    if (renamed === 0 && !files.some((f) => KNOWN_TIMETABLE_TYPES.includes(path.extname(f).slice(1).toUpperCase()))) {
       throw new Error(
         `prepare: no recognisable DTD timetable files in ${srcZip} (saw: ${files.join(", ")})`,
       );

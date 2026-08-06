@@ -1,6 +1,7 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import SftpClient from "ssh2-sftp-client";
+import { classifyZip } from "./classify-zip.js";
 
 /**
  * Pulls the latest DTD static feed zip from RDG's SFTP delivery — the push/pull
@@ -15,14 +16,12 @@ const REMOTE_DIRS: Record<SftpFeedName, string> = {
   fares: process.env.DTD_SFTP_FARES_DIR || "/fares",
 };
 
-// Some RDG SFTP accounts deliver every feed (timetable, fares, NR Track
-// Model, ...) into one shared root folder rather than per-feed
-// subdirectories — in that layout, pointing DTD_SFTP_TIMETABLE_DIR at "/"
-// would otherwise pick up every .zip in the folder, including files that
-// belong to a different feed entirely. Filenames are the only thing that
-// distinguishes them in that case, so filter by a per-feed prefix — set
-// only if your account needs it; unset means "no filtering, take every
-// .zip" (the original per-subfolder assumption).
+// Optional pre-filter for accounts that deliver every feed into one shared
+// root folder: narrows the SFTP directory listing by filename before
+// anything downloads, so a known filename pattern skips wasted downloads of
+// files that content-classification (below) would reject anyway. Not
+// required — classifyZip() catches mismatches either way — this is purely
+// a bandwidth/time optimization when you know your account's naming.
 const NAME_PREFIXES: Record<SftpFeedName, string | undefined> = {
   timetable: process.env.DTD_SFTP_TIMETABLE_PREFIX,
   fares: process.env.DTD_SFTP_FARES_PREFIX,
@@ -32,14 +31,6 @@ function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is not set — required for SFTP feed delivery`);
   return value;
-}
-
-/** Picks the most recently modified .zip in the remote directory. */
-async function latestZip(sftp: SftpClient, remoteDir: string, feed: SftpFeedName): Promise<SftpClient.FileInfo> {
-  const zips = await listZips(sftp, remoteDir, feed);
-  const [latest] = zips;
-  if (!latest) throw new Error(`No .zip files found in SFTP dir ${remoteDir}`);
-  return latest;
 }
 
 /** All .zip files in the remote directory matching the feed's name prefix (if set), oldest first. */
@@ -54,6 +45,39 @@ async function listZips(sftp: SftpClient, remoteDir: string, feed: SftpFeedName)
   );
   zips.sort((a, b) => a.modifyTime - b.modifyTime);
   return zips;
+}
+
+/**
+ * Downloads a candidate, then peeks inside to confirm it's actually the feed
+ * being asked for — some RDG SFTP accounts drop timetable/fares/Track Model
+ * files into one shared folder with no per-feed subdirectories, so a
+ * directory listing alone can't always tell them apart (see
+ * classify-zip.ts). Deletes and returns null on a mismatch rather than
+ * letting a wrong-feed zip reach dtd2mysql and fail deep in the pipeline.
+ */
+async function downloadIfMatches(
+  sftp: SftpClient,
+  remoteDir: string,
+  file: SftpClient.FileInfo,
+  destDir: string,
+  feed: SftpFeedName,
+): Promise<string | null> {
+  const dest = path.join(destDir, file.name);
+  await sftp.fastGet(`${remoteDir}/${file.name}`, dest);
+
+  const kind = await classifyZip(dest);
+  // "timetable" must actually look like one; "fares" has no reliable content
+  // signature of its own, so anything that isn't recognisably Track Model or
+  // timetable is accepted as fares — see classify-zip.ts.
+  const matches = feed === "timetable" ? kind === "timetable" : kind !== "track-model" && kind !== "timetable";
+  if (!matches) {
+    console.log(`Skipping ${file.name} — looks like ${kind}, not ${feed}`);
+    await unlink(dest);
+    return null;
+  }
+
+  console.log(`Downloaded ${feed} via SFTP -> ${dest}`);
+  return dest;
 }
 
 async function withSftp<T>(fn: (sftp: SftpClient) => Promise<T>): Promise<T> {
@@ -74,12 +98,16 @@ async function withSftp<T>(fn: (sftp: SftpClient) => Promise<T>): Promise<T> {
 export async function downloadFeedViaSftp(feed: SftpFeedName, destDir: string): Promise<string> {
   return withSftp(async (sftp) => {
     const remoteDir = REMOTE_DIRS[feed];
-    const file = await latestZip(sftp, remoteDir, feed);
+    const zips = await listZips(sftp, remoteDir, feed);
     await mkdir(destDir, { recursive: true });
-    const dest = path.join(destDir, file.name);
-    await sftp.fastGet(`${remoteDir}/${file.name}`, dest);
-    console.log(`Downloaded ${feed} via SFTP -> ${dest}`);
-    return dest;
+
+    // Newest first: try the most recent candidate, fall through to older
+    // ones if a shared-folder mismatch keeps rejecting them.
+    for (const file of [...zips].reverse()) {
+      const dest = await downloadIfMatches(sftp, remoteDir, file, destDir, feed);
+      if (dest) return dest;
+    }
+    throw new Error(`No ${feed} zip found in SFTP dir ${remoteDir}`);
   });
 }
 
@@ -112,10 +140,8 @@ export async function downloadPendingFeedsViaSftp(
     await mkdir(destDir, { recursive: true });
     const dests: DownloadedFeedFile[] = [];
     for (const file of pending) {
-      const dest = path.join(destDir, file.name);
-      await sftp.fastGet(`${remoteDir}/${file.name}`, dest);
-      console.log(`Downloaded ${feed} via SFTP -> ${dest}`);
-      dests.push({ path: dest, sourceModifiedAt: file.modifyTime });
+      const dest = await downloadIfMatches(sftp, remoteDir, file, destDir, feed);
+      if (dest) dests.push({ path: dest, sourceModifiedAt: file.modifyTime });
     }
     return dests;
   });

@@ -471,23 +471,27 @@ DTD_SFTP_TIMETABLE_DIR=<the real remote path, e.g. / if files are in the root>
 DTD_SFTP_FARES_DIR=<the real remote path, likewise>
 ```
 
-⚠️ **If your account uses one shared root folder for everything** (timetable,
+**If your account uses one shared root folder for everything** (timetable,
 fares, and NR Track Model files all mixed together — not separate
-subfolders), setting both dirs above to `/` means every `.zip` in that
-folder gets picked up for *each* feed, including files that belong to a
-different one entirely. This fails partway through with something like
-`no recognisable DTD timetable files in .../NWR_TrackModel*.zip` — the
-timetable step tried to import a Track Model archive because nothing told
-it the two apart. Filter by filename prefix instead:
+subfolders), you don't need to do anything extra: every candidate `.zip` is
+downloaded and its contents inspected before being handed to the timetable
+or fares pipeline (see `services/etl/src/classify-zip.ts`), so a Track Model
+archive that happens to be newest in the folder gets skipped automatically
+rather than crashing the run — you'll see `Skipping <file> — looks like
+track-model, not timetable` in the logs, which is expected, not an error.
+
+Optional: if your folder has many non-matching files (e.g. a long run of
+Track Model archives ahead of the timetable file you actually want), set a
+filename prefix to skip the wasted downloads rather than let content
+detection reject them one by one:
 ```
 DTD_SFTP_TIMETABLE_PREFIX=timetable
 DTD_SFTP_FARES_PREFIX=fares
 ```
 (Case-insensitive, matched against the start of each filename — adjust to
-whatever your account's actual filenames start with, e.g. `timetable_full.zip`
-and `timetable_update.zip` both match `timetable`.) Leave both blank if your
-account already separates feeds into distinct subfolders — the dir vars
-above are enough on their own in that case.
+whatever your account's actual filenames start with.) This is purely a
+bandwidth/time optimization — leave both blank and it still works correctly,
+just downloads more before finding a match.
 
 `ETL_CRON=1` starts the nightly 2am sweep as a background job inside this
 same app (see `services/etl/cron/timetable-daily`) — you don't need a
