@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
 
 /**
  * Wraps the dtd2mysql CLI (installed in the etl container image).
@@ -56,6 +58,14 @@ export async function importTimetable(zipPath: string): Promise<void> {
 }
 
 export async function exportGtfs(outZip: string): Promise<void> {
+  // dtd2mysql's --gtfs-zip writes the .txt files to a temp dir it creates
+  // itself, then shells out to `zip` to bundle them into outZip — but never
+  // creates outZip's own parent directory. Against a fresh volume where
+  // nothing has written to ETL_GTFS_OUT_DIR yet, `zip` fails with exit code
+  // 15 ("unable to create the zip file") because the directory doesn't
+  // exist. dtd2mysql won't fix this upstream (see its OutputGTFSZipCommand),
+  // so ensure it here before invoking it.
+  await mkdir(path.dirname(outZip), { recursive: true });
   await run(["--gtfs-zip", outZip]);
 }
 
