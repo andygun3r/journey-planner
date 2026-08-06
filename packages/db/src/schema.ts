@@ -835,7 +835,7 @@ export const railCorridor = pgTable(
 export const stationTrackModelPosition = pgTable("station_track_model_position", {
   crs: text("crs")
     .primaryKey()
-    .references(() => station.crs),
+    .references(() => station.crs, { onDelete: "cascade" }),
   elr: text("elr").notNull(),
   /** Interpolated mileage along the ELR at the snap point (miles, e.g. 29.14). */
   mileage: real("mileage").notNull(),

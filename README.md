@@ -126,24 +126,24 @@ or would rather proxy the hosted instance through `web` itself (no extra
 apps, no fork needed — see step 8 for both options). If you're skipping the
 map for now, ignore every step below marked **(map only)**.
 
-⚠️ **Set a fixed container name on every backend app, before its first
-deploy.** By default, Coolify names each app's container after an ephemeral
-build/instance ID (something like `g3gq4jwibve817jmk934lu34-072451594731`)
-that **changes on every redeploy** — Docker's internal DNS only resolves
-containers by that exact, changing name, with no stable alias registered per
-app. Pointing `web`'s env vars at one of these names works until the next
-redeploy of that backend app, then silently breaks with `fetch failed`
-(Node's `fetch` can't resolve/connect to a hostname that no longer exists).
-Look for a **Container Name** field in each app's settings (General or
-Advanced tab, depending on your Coolify version) and set it to something
-fixed before you deploy that app for the first time:
+⚠️ **Set a fixed container name on every standalone (non-Compose) backend
+app, before its first deploy.** By default, Coolify names each app's
+container after an ephemeral build/instance ID (something like
+`g3gq4jwibve817jmk934lu34-072451594731`) that **changes on every redeploy** —
+Docker's internal DNS only resolves containers by that exact, changing name,
+with no stable alias registered per app. Pointing `web`'s env vars at one of
+these names works until the next redeploy of that backend app, then silently
+breaks with `fetch failed` (Node's `fetch` can't resolve/connect to a
+hostname that no longer exists). Look for a **Container Name** field in each
+app's settings (General or Advanced tab, depending on your Coolify version)
+and set it to something fixed before you deploy that app for the first time:
 
 | App | Fixed container name |
 |---|---|
-| `motis` | `mainline-motis` |
-| `motis-sidecar` | `mainline-motis-sidecar` |
 | `etl-cron` | `mainline-etl` |
 | `nr-ingest` | `mainline-nr-ingest` |
+| `motis` | `mainline-motis` |
+| `motis-sidecar` | `mainline-motis-sidecar` |
 
 (`postgres`, `redis`, `darwin-ingest`, and `web` don't need this — nothing
 else in this deploy calls them by container name over HTTP. `mariadb` only
@@ -151,6 +151,25 @@ needs it if you'd rather use a name than remember its auto-generated one for
 `ETL_MYSQL_URL`.) Use these fixed names in the `http://<host>:<port>` URLs
 throughout the rest of this guide, instead of anything copied from `docker
 ps`.
+
+⚠️ **Deploy `motis`/`motis-sidecar` as two standalone Coolify apps, not a
+Docker Compose resource.** An earlier version of this guide ran them as one
+Compose app, on the theory that they only need to reach each other. That
+broke in practice: **a Compose resource runs on its own private Docker
+network, separate from every standalone app's shared `coolify` network** —
+so no hostname, fixed or otherwise, resolved between `motis`/`motis-sidecar`
+and `etl-cron`/`web`/`darwin-ingest`, regardless of naming. Confirmed
+directly on a real deploy: `etl-cron` couldn't resolve `motis-sidecar`'s
+container name at all (`wget: bad address ...`) even though the container
+was running fine, because
+`docker inspect <container> --format '{{json .NetworkSettings.Networks}}'`
+showed them on two different networks entirely (`coolify` vs. the Compose
+project's own auto-generated network). Routing around that by publishing
+host ports and reaching them via the host's Docker bridge address worked,
+but is a second failure mode waiting to happen: that bridge address isn't
+guaranteed stable, and the ports are reachable from anything else on the
+host, not just Coolify's containers. Two standalone apps on the shared
+`coolify` network sidesteps both problems — see step 5.
 
 ---
 
@@ -200,12 +219,12 @@ leave it blank and rebuild once you do.)
 ```
 DATABASE_URL=postgres://mainline:mainline@<postgres-host>:5432/mainline
 REDIS_URL=redis://<redis-host>:6379
-MOTIS_URL=http://<motis-host>:8080
+MOTIS_URL=http://mainline-motis:8080
 ETL_URL=http://<etl-cron-host>:4000
 ETL_INTERNAL_KEY=<from step 0>
 NR_INGEST_URL=http://<nr-ingest-host>:4001
 NR_INGEST_INTERNAL_KEY=<from step 0>
-MOTIS_REIMPORT_URL=http://<motis-sidecar-host>:4002
+MOTIS_REIMPORT_URL=http://mainline-motis-sidecar:4002
 MOTIS_REIMPORT_KEY=<from step 0>
 BETTER_AUTH_SECRET=<from step 0>
 BETTER_AUTH_URL=https://<your-real-public-domain>
@@ -216,7 +235,10 @@ RUN_DB_MIGRATIONS=1
 `BETTER_AUTH_URL` must be your **real public domain**, not `localhost` —
 sign-in derives a security check from it and breaks silently if it's wrong.
 `RUN_DB_MIGRATIONS=1` is only for this first deploy (see the checkpoint
-below) — unset it afterward.
+below) — unset it afterward. `MOTIS_URL`/`MOTIS_REIMPORT_URL` use the fixed
+container names set on `motis`/`motis-sidecar` in step 5 — both are
+standalone apps on the shared `coolify` network, so container-name DNS
+works the same way it does for `etl-cron`/`nr-ingest` above.
 
 **Optional, one per feature — skip anything you don't need yet, nothing
 below crashes the app if it's missing, the feature just won't work:**
@@ -264,8 +286,10 @@ and `services/nr-ingest/Dockerfile`. Neither is public.
 ```
 DATABASE_URL=postgres://mainline:mainline@<postgres-host>:5432/mainline
 REDIS_URL=redis://<redis-host>:6379
-MOTIS_URL=http://<motis-host>:8080
+MOTIS_URL=http://mainline-motis:8080
 ```
+(See step 5 — `motis` is deployed as a standalone app with a fixed container
+name, so it's reachable by name over the shared `coolify` network.)
 Plus, only if you have an RDM Darwin subscription — **set all five together,
 or none of them**:
 ```
@@ -362,34 +386,78 @@ to sync requests without `HTTP_PORT` set, even with no feed configured.
 
 ### Step 5 — `motis` + `motis-sidecar`
 
-**One Coolify app, two containers.** `motis` runs the routing engine;
-`motis-sidecar` is a small second container in the same app that has the
-things `motis` itself doesn't need — Docker socket access, to trigger
-reimports.
+**Two standalone Coolify apps**, both on the shared `coolify` network — not
+a Docker Compose resource. `motis` runs the routing engine; `motis-sidecar`
+is a small separate app that has the things `motis` itself doesn't need —
+Docker socket access, to trigger reimports.
 
-**`motis` container:**
+⚠️ **Don't deploy these as one Docker Compose app.** An earlier version of
+this guide did exactly that, on the theory that they only need to reach
+each other. It broke in practice: **a Compose resource runs on its own
+private Docker network, separate from every standalone app's shared
+`coolify` network.** Confirmed directly on a real deploy: `etl-cron` and
+`web` couldn't resolve `motis`/`motis-sidecar` by any container name at all
+— container-name DNS that works fine between `etl-cron` and `nr-ingest`
+(both standalone apps, same network) does not reach into a Compose app, no
+matter what either container is named. Publishing both containers' ports to
+the host and reaching them via the host's Docker bridge address works
+around that, but it's a second failure mode: that bridge address isn't
+guaranteed stable across hosts/reboots, and it makes both ports reachable by
+anything on the Docker host, not just Coolify's own containers. Deploying
+both as standalone apps avoids all of this — same network, same
+fixed-container-name pattern as `etl-cron`/`nr-ingest` in the table near the
+top of this section.
+
+**`motis` app** (Coolify **Docker Image** build type — no Dockerfile needed):
 - Image: `ghcr.io/motis-project/motis:latest`
+- **Container Name**: `mainline-motis` (set before first deploy — see the
+  fixed-container-name note near the top of this section)
 - Command:
   ```sh
   sh -c 'until [ -f /data/config.yml ]; do echo "waiting for imported routing data"; sleep 300; done; exec /motis server'
   ```
   (This makes it wait patiently instead of crash-looping before the first
   timetable import exists.)
-- No env vars needed. Not public.
+- No env vars needed.
+- Persistent volume at `/data` — this is where the imported timetable/routing
+  data lives; losing it means every app depending on `motis` goes back to
+  "waiting for imported routing data" until the next full ETL import.
+- No port publish needed — `web`/`darwin-ingest`/`etl-cron` reach it by
+  container name (`mainline-motis:8080`) over the shared `coolify` network,
+  not the host.
 
-**`motis-sidecar` container:**
+**`motis-sidecar` app** (Coolify **Dockerfile** build type):
 - Dockerfile: `services/motis-sidecar/Dockerfile`
+- **Container Name**: `mainline-motis-sidecar`
 - Mount the host's Docker socket: `/var/run/docker.sock`
 - Env vars:
   ```
   HTTP_PORT=4002
   MOTIS_REIMPORT_KEY=<from step 0>
-  MOTIS_CONTAINER_NAME=motis
+  MOTIS_CONTAINER_NAME=mainline-motis
   ```
-  (`MOTIS_CONTAINER_NAME` should match whatever Coolify actually names the
-  `motis` container — check `docker ps` if reimports later fail to find it.
-  `MOTIS_IMAGE` and `MOTIS_IMPORT_MEMORY` are optional overrides, defaults
-  are fine for most setups.)
+  (`MOTIS_CONTAINER_NAME` is used with the mounted Docker socket for
+  `docker run --volumes-from`/`docker restart` against its `motis` sibling —
+  this must be `motis`'s **actual Docker container name**, i.e. the fixed
+  name set above, regardless of how the two apps reach each other over the
+  network. `MOTIS_IMAGE` and `MOTIS_IMPORT_MEMORY` are optional overrides,
+  defaults are fine for most setups.)
+- No port publish needed, for the same reason as `motis` above.
+
+**On every app that needs to reach `motis`/`motis-sidecar`** (`web`,
+`darwin-ingest`, `etl-cron` — steps 2, 4, 6), use the fixed container names:
+```
+MOTIS_URL=http://mainline-motis:8080
+MOTIS_REIMPORT_URL=http://mainline-motis-sidecar:4002
+```
+Confirm with a live test before trusting it — from inside `etl-cron`'s
+container terminal:
+```sh
+wget -qO- --header="x-internal-key: <MOTIS_REIMPORT_KEY>" --post-data='' http://mainline-motis-sidecar:4002/reimport
+```
+A `bad address` error means the name isn't resolving (check both apps are
+standalone, not Compose, and that the Container Name field is actually set);
+a real response (even a 401 for a wrong key) means it's wired correctly.
 
 **Deploy this app now.**
 
@@ -434,11 +502,13 @@ ETL_MYSQL_URL=mysql://root:etl@<mariadb-host>:3306/dtd
 HTTP_PORT=4000
 ETL_CRON=1
 ETL_INTERNAL_KEY=<from step 0>
-MOTIS_REIMPORT_URL=http://<motis-sidecar-host>:4002
+MOTIS_REIMPORT_URL=http://mainline-motis-sidecar:4002
 MOTIS_REIMPORT_KEY=<from step 0>
 NR_INGEST_URL=http://<nr-ingest-host>:4001
 NR_INGEST_INTERNAL_KEY=<from step 0>
 ```
+(See step 5 — `motis-sidecar` is a standalone app with a fixed container
+name, reachable directly over the shared `coolify` network.)
 Plus one way of pulling the DTD timetable feed — either:
 ```
 NRDP_USERNAME=...
