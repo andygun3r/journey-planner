@@ -412,16 +412,41 @@ top of this section.
 - Image: `ghcr.io/motis-project/motis:latest`
 - **Container Name**: `mainline-motis` (set before first deploy — see the
   fixed-container-name note near the top of this section)
-- Command:
-  ```sh
-  sh -c 'until [ -f /data/config.yml ]; do echo "waiting for imported routing data"; sleep 300; done; exec /motis server'
+- Command — set this in **Custom Docker Options** as an `--entrypoint`
+  override (Coolify has no separate command field; plain options like
+  `-v` go in the same box):
   ```
-  (This makes it wait patiently instead of crash-looping before the first
-  timetable import exists.)
+  --entrypoint "sh -c 'until [ -f /data/data/config.yml ]; do echo waiting for imported routing data; sleep 300; done; exec /motis server -d /data/data'"
+  ```
+  Two details that both have to be right, and neither is obvious:
+  - **`-d /data/data` is required.** `motis server` defaults its data path
+    to `data`, *relative to the working directory*, and reads its config
+    from `{data path}/config.yml` — there's no `-c` flag on `server` the
+    way there is on `import`. Without `-d` it looks in the wrong place,
+    finds nothing, and dies with
+    `tt: no existing version found [key=nigiri_bin_ver] … hashes: {}` —
+    which reads like corrupt data but actually means "never found any".
+  - **The wait loop tests `/data/data/config.yml`, not `/data/config.yml`.**
+    `/data/config.yml` is the input config the sidecar writes *before*
+    running the import (see `ensureConfig()`); it exists long before there's
+    anything to serve. `/data/data/config.yml` is written by `motis import`
+    itself, so it only appears once an import has actually finished — which
+    is the thing worth waiting for.
 - No env vars needed.
-- Persistent volume at `/data` — this is where the imported timetable/routing
-  data lives; losing it means every app depending on `motis` goes back to
-  "waiting for imported routing data" until the next full ETL import.
+- Persistent volume at `/data` — the imported timetable/routing data
+  (`/data/data`) and the config the sidecar writes (`/data/config.yml`).
+  Losing it means every app depending on `motis` goes back to "waiting for
+  imported routing data" until the next full ETL import.
+- Second persistent volume at `/input` — where `motis-sidecar` stages the
+  uploaded GTFS zip (`/input/gb-rail.gtfs.zip`), and what `config.yml`
+  points `motis import` at. Coolify creates it owned by `root`, but the
+  image runs as uid 100 / gid 101 (`motis`), so the upload fails with
+  `can't create /input/gb-rail.gtfs.zip: Permission denied` until you fix
+  ownership on the host once:
+  ```sh
+  chown -R 100:101 /var/lib/docker/volumes/<the-input-volume>/_data
+  ```
+  (`docker inspect motis --format '{{json .Mounts}}'` gives the volume name.)
 - No port publish needed — `web`/`darwin-ingest`/`etl-cron` reach it by
   container name (`mainline-motis:8080`) over the shared `coolify` network,
   not the host.

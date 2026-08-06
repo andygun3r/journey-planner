@@ -54,11 +54,18 @@ timetable:
 /**
  * motis's own image has no bootstrap step that creates /data/config.yml —
  * it's expected to already exist before the first `motis import` ever runs.
- * On a fresh volume (new deploy, or a lost volume) that leaves motis stuck
- * forever in its "waiting for imported routing data" start command, and
- * `motis import` fails outright rather than creating one for itself. Write
- * it here, idempotently, right before every import — cheap, declarative,
- * and self-healing if the volume is ever recreated.
+ * On a fresh volume (new deploy, or a lost volume) `motis import` fails
+ * outright rather than creating one for itself. Write it here,
+ * idempotently, right before every import — cheap, declarative, and
+ * self-healing if the volume is ever recreated.
+ *
+ * Note this is the *input* config, at /data/config.yml, passed to `motis
+ * import -c`. The import writes its own copy into the data directory
+ * (/data/data/config.yml), and that copy is what `motis server` reads —
+ * server takes no -c flag, it always reads {data path}/config.yml. So
+ * /data/config.yml existing means "an import can run", not "there's
+ * something to serve"; only /data/data/config.yml means the latter. The
+ * motis container's start command waits on the latter (see README step 5).
  */
 async function ensureConfig(): Promise<void> {
   await new Promise<void>((resolve, reject) => {
