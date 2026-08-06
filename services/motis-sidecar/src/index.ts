@@ -34,7 +34,61 @@ const MOTIS_CONTAINER = process.env.MOTIS_CONTAINER_NAME ?? "motis";
 const MOTIS_IMAGE = process.env.MOTIS_IMAGE ?? "ghcr.io/motis-project/motis:latest";
 const IMPORT_MEMORY = process.env.MOTIS_IMPORT_MEMORY;
 
+// Dataset tag must match the routing adapter's MOTIS_DATASET_TAG default
+// ("gb-railgtfs") — that's the prefix it strips off every stop/trip id MOTIS
+// returns, so this can't drift from packages/routing-adapter/src/motis.ts.
+const DATASET_TAG = process.env.MOTIS_DATASET_TAG ?? "gb-railgtfs";
+
+const CONFIG_YML = `server:
+  web_folder: /ui
+  n_threads: 4
+timetable:
+  first_day: TODAY
+  num_days: 365
+  datasets:
+    ${DATASET_TAG}:
+      path: /input/gb-rail.gtfs.zip
+      default_bikes_allowed: false
+`;
+
+/**
+ * motis's own image has no bootstrap step that creates /data/config.yml —
+ * it's expected to already exist before the first `motis import` ever runs.
+ * On a fresh volume (new deploy, or a lost volume) that leaves motis stuck
+ * forever in its "waiting for imported routing data" start command, and
+ * `motis import` fails outright rather than creating one for itself. Write
+ * it here, idempotently, right before every import — cheap, declarative,
+ * and self-healing if the volume is ever recreated.
+ */
+async function ensureConfig(): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("docker", [
+      "run",
+      "--rm",
+      "-i",
+      "--volumes-from",
+      MOTIS_CONTAINER,
+      MOTIS_IMAGE,
+      "sh",
+      "-c",
+      "cat > /data/config.yml",
+    ]);
+    let stderr = "";
+    child.stderr.on("data", (c: Buffer) => {
+      stderr += c.toString("utf8");
+    });
+    child.on("error", reject);
+    child.on("exit", (code) =>
+      code === 0 ? resolve() : reject(new Error(`docker run (write config.yml) exited ${code}${stderr ? `: ${stderr.trim()}` : ""}`)),
+    );
+    child.stdin.end(CONFIG_YML);
+  });
+}
+
 async function reimport(): Promise<void> {
+  console.log("[motis-sidecar] writing config.yml into motis (separate container)…");
+  await ensureConfig();
+
   console.log("[motis-sidecar] reimporting GTFS into motis (separate container)…");
   await exec("docker", [
     "run",
