@@ -1,4 +1,4 @@
-import { acquireSingletonLock } from "@mainline/db";
+import { acquireSingletonLock } from "@signaller/db";
 import { Redis } from "ioredis";
 import cron from "node-cron";
 import { invalidateTrackedUids, matchCancellation, matchDelay } from "./alerts.js";
@@ -27,7 +27,7 @@ const redis = redisUrl ? new Redis(redisUrl) : null;
 if (!redis) console.warn("REDIS_URL not set — running without live pub/sub");
 
 const groupId =
-  process.env.RDM_KAFKA_GROUP_ID ?? process.env.RDM_CONSUMER_KEY ?? "mainline-darwin";
+  process.env.RDM_KAFKA_GROUP_ID ?? process.env.RDM_CONSUMER_KEY ?? "signaller-darwin";
 
 // Created in main(); kept module-scoped so shutdown() can disconnect it. This
 // stays null on the --precompute-now path, which must not require Kafka env.

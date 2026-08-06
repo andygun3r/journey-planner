@@ -3,7 +3,7 @@ import { SignallingDiagram } from "@/components/signalling-diagram";
 import { SIGNALLING_CORRIDORS } from "@/lib/signalling-corridors";
 
 export const metadata = {
-  title: "South West Main Line live signalling · Mainline",
+  title: "South West Main Line live signalling · Signaller",
 };
 
 export default function SwmlSignallingPage() {

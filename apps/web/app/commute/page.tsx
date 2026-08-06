@@ -31,7 +31,7 @@ export default async function CommuteDashboardPage() {
         <div className="notice">
           <h2>Set up your commute</h2>
           <p>
-            Tell Mainline your weekly schedule — where you travel each day and roughly when — and
+            Tell Signaller your weekly schedule — where you travel each day and roughly when — and
             we&rsquo;ll watch your usual trains and warn you when they&rsquo;re disrupted.
           </p>
           <p>
@@ -96,7 +96,7 @@ export default async function CommuteDashboardPage() {
         {state.engineOffline ? (
           <div className="notice notice-danger">
             <h2>Live routing is offline</h2>
-            <p>Mainline couldn&rsquo;t reach the routing engine to show your next trains.</p>
+            <p>Signaller couldn&rsquo;t reach the routing engine to show your next trains.</p>
           </div>
         ) : (
           <Departures journeys={state.journeys} />

@@ -1,5 +1,5 @@
-import { darwinStopForecast, railCorridor, station } from "@mainline/db";
-import { haversineMeters } from "@mainline/shared";
+import { darwinStopForecast, railCorridor, station } from "@signaller/db";
+import { haversineMeters } from "@signaller/shared";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";

@@ -1,4 +1,4 @@
-import { station } from "@mainline/db";
+import { station } from "@signaller/db";
 import { getDb } from "./db";
 
 export interface StationEntry {

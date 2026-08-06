@@ -1,4 +1,4 @@
-import { acquireSingletonLock } from "@mainline/db";
+import { acquireSingletonLock } from "@signaller/db";
 import { parseRtppm, parseTsr, parseVstp } from "./parse-feeds.js";
 import { parseMovements, parseSClass, parseTd } from "./parse.js";
 import { loadSop } from "./load-sop.js";

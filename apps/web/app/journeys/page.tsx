@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { isCrs, normaliseCrs } from "@mainline/shared";
+import { isCrs, normaliseCrs } from "@signaller/shared";
 import { FavouriteToggle } from "@/components/favourite-toggle";
 import { getUserId } from "@/lib/current-user";
 import { indicativeFare, formatFare } from "@/lib/fares";
@@ -178,7 +178,7 @@ export default async function JourneysPage({
         <div className="notice notice-danger">
           <h2>Routing engine is offline</h2>
           <p>
-            Mainline couldn&rsquo;t reach MOTIS to compute journeys. If you&rsquo;re running
+            Signaller couldn&rsquo;t reach MOTIS to compute journeys. If you&rsquo;re running
             locally, make sure the motis container is up (see README) and try again.
           </p>
         </div>

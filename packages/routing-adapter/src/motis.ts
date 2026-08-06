@@ -74,7 +74,7 @@ const MotisStopTimesResponse = z.object({ stopTimes: z.array(MotisStopTime) }).l
 /**
  * MOTIS namespaces GTFS stop ids with the dataset tag from config.yml
  * (e.g. "gb-railgtfs_KGX"). We add the prefix on the way in and strip it on
- * the way out so the rest of Mainline speaks bare CRS codes.
+ * the way out so the rest of Signaller speaks bare CRS codes.
  */
 const DATASET_TAG = process.env.MOTIS_DATASET_TAG ?? "gb-railgtfs";
 

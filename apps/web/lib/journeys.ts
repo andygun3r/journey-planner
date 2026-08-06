@@ -1,5 +1,5 @@
-import { createEngine, type RawItinerary, type RawLeg } from "@mainline/routing-adapter";
-import { isCrs, isNaptanId, normaliseCrs, operatorFromRouteName, TFL_MODES } from "@mainline/shared";
+import { createEngine, type RawItinerary, type RawLeg } from "@signaller/routing-adapter";
+import { isCrs, isNaptanId, normaliseCrs, operatorFromRouteName, TFL_MODES } from "@signaller/shared";
 import { computeStitchedStatus } from "./journey-status";
 import { stationName } from "./stations";
 import { journeyResults, lineStatus, type TflJourney, type TflJourneyLeg } from "./tfl";

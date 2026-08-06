@@ -12,7 +12,7 @@ UK rail commuters and travellers — starting with Andrew, a daily commuter. Con
 
 ## Product Purpose
 
-Mainline is a fast, self-reliant UK rail journey + commute planner: its own routing engine (MOTIS) over the national timetable, live Darwin data, indicative fares. It exists because the user has RDG data access but no National Rail journey planner licence — so it computes everything itself. Success: answers that are faster and calmer than nationalrail.co.uk, trustworthy live status, complex routes handled without fuss.
+Signaller is a fast, self-reliant UK rail journey + commute planner: its own routing engine (MOTIS) over the national timetable, live Darwin data, indicative fares. It exists because the user has RDG data access but no National Rail journey planner licence — so it computes everything itself. Success: answers that are faster and calmer than nationalrail.co.uk, trustworthy live status, complex routes handled without fuss.
 
 ## Positioning
 
@@ -35,7 +35,7 @@ A planner that *computes* rather than *proxies*: it runs its own MOTIS routing e
 
 ## Brand Commitments
 
-- **Name / wordmark:** "Mainline."
+- **Name / wordmark:** "Signaller."
 - **Voice:** precise, operational, unflappable — professional rail kit, departure-board energy, tabular clarity, high information density with zero fluff. Reads like equipment used by someone who runs the railway, not marketing aimed at a ticket buyer.
 - **Visual direction (user-volunteered, binding — superseded 2026-07-25, to be developed in new-work, not here):**
   - Anchor world: **bold red/blue duotone on white, evoking the incoming Great British Railways identity** without copying it — the double-arrow carries forward, but blue and red are used as equal partners (not one rare institutional colour), confidently across buttons, headers and status.

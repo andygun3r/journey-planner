@@ -5,15 +5,15 @@ import {
   commuteLeg,
   getSharedDb,
   tripMapping,
-} from "@mainline/db";
-import { createEngine, gtfsTripIdFromEngine, type RawItinerary } from "@mainline/routing-adapter";
+} from "@signaller/db";
+import { createEngine, gtfsTripIdFromEngine, type RawItinerary } from "@signaller/routing-adapter";
 import {
   dayOfWeekForDate,
   type Direction,
   isDateInHolidayRange,
   londonDate,
   londonWallTimeToIso,
-} from "@mainline/shared";
+} from "@signaller/shared";
 import { and, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
 
 /**

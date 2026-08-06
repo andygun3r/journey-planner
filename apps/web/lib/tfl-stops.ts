@@ -6,7 +6,7 @@
  * tfl_stop_point_cache on a slow schedule and serves reads straight from
  * Postgres.
  */
-import { tflStopPointCache } from "@mainline/db";
+import { tflStopPointCache } from "@signaller/db";
 import { and, between, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { getDb } from "./db";

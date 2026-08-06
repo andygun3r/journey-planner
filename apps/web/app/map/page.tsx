@@ -3,7 +3,7 @@ import { LiveMap } from "@/components/live-map";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Live map · Mainline",
+  title: "Live map · Signaller",
   description: "Every tracked GB train, live from Network Rail.",
 };
 

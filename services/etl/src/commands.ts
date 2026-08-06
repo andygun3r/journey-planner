@@ -1,5 +1,5 @@
 import path from "node:path";
-import { createDb, etlRun } from "@mainline/db";
+import { createDb, etlRun } from "@signaller/db";
 import { eq, and } from "drizzle-orm";
 import { downloadFeed } from "./download.js";
 import { downloadFeedViaSftp, downloadPendingFeedsViaSftp } from "./sftp-download.js";

@@ -1,4 +1,4 @@
-import { nrRtppm } from "@mainline/db";
+import { nrRtppm } from "@signaller/db";
 import { getDb } from "./db";
 
 /**

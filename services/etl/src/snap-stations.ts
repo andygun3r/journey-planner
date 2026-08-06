@@ -1,4 +1,4 @@
-import { station } from "@mainline/db";
+import { station } from "@signaller/db";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";

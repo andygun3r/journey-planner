@@ -1,4 +1,4 @@
-# Mainline
+# Signaller
 
 UK rail journey & commute planner — live Darwin/Network Rail data, self-hosted routing (MOTIS), indicative fares, a live GB train map, and TfL integration for the first/last mile. Built on Next.js 16, Postgres, Redis, and RDG Rail Data Marketplace feeds.
 
@@ -76,7 +76,7 @@ http://localhost:3000.
 
 MOTIS and the ETL aren't part of the normal dev loop — MOTIS needs GTFS
 output to exist first, and the ETL is run-to-completion, not a daemon. Run
-them directly when you need them: `pnpm --filter @mainline/etl timetable`,
+them directly when you need them: `pnpm --filter @signaller/etl timetable`,
 then start a local `motis` container by hand pointed at the resulting
 `data/gtfs` output (see the `motis` app's config in "Deploying" below for the
 image/command shape — locally you can run the same image directly with
@@ -343,7 +343,7 @@ NR_TD_KAFKA_BOOTSTRAP_SERVERS=broker1.example.com:9092
 NR_TD_KAFKA_TOPIC=...
 NR_TD_KAFKA_USERNAME=...
 NR_TD_KAFKA_PASSWORD=...
-NR_TD_KAFKA_GROUP_ID=mainline-nr-td-ingest
+NR_TD_KAFKA_GROUP_ID=signaller-nr-td-ingest
 ```
 ⚠️ `NR_TD_KAFKA_BOOTSTRAP_SERVERS` (and `RDM_KAFKA_BOOTSTRAP_SERVERS` on
 `darwin-ingest` above) must be **bare `host:port`, comma-separated for
@@ -659,7 +659,7 @@ Optionally, load Network Rail positioning reference data once (run from your
 own machine against the deployed `DATABASE_URL`, or as a Coolify one-off
 command):
 ```sh
-pnpm --filter @mainline/nr-ingest start reference
+pnpm --filter @signaller/nr-ingest start reference
 ```
 
 ---
@@ -730,7 +730,7 @@ memory-heavy part of the pipeline. On a small server it can struggle or OOM.
 Run the full monthly import on your own machine instead:
 
 ```sh
-pnpm --filter @mainline/etl exec tsx src/index.ts package
+pnpm --filter @signaller/etl exec tsx src/index.ts package
 ```
 
 This needs a local MariaDB scratch DB (`ETL_MYSQL_URL` pointed at it, not

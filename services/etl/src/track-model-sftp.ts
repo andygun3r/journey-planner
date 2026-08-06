@@ -30,7 +30,7 @@ function remoteDir(): string {
 }
 
 function workDir(): string {
-  return process.env.TRACK_MODEL_SFTP_WORK_DIR ?? "/tmp/mainline-track-model-sftp";
+  return process.env.TRACK_MODEL_SFTP_WORK_DIR ?? "/tmp/signaller-track-model-sftp";
 }
 
 function deleteProcessed(): boolean {

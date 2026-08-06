@@ -14,7 +14,7 @@
  *
  * Run once against the target DB: node --env-file=../../.env --import tsx scripts/backfill-seq.ts
  */
-import { createDb, darwinStopForecast } from "@mainline/db";
+import { createDb, darwinStopForecast } from "@signaller/db";
 import { asc, eq, sql } from "drizzle-orm";
 
 const db = createDb();

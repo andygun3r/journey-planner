@@ -26,7 +26,7 @@ The practical workflow is:
 2. Download its S-class/SOP/ECS attachment where one is published.
 3. Convert the relevant table into the normalized columns below.
 4. Drop the file in this directory, or set `SOP_DIR` to another directory.
-5. Load with `pnpm --filter @mainline/nr-ingest start sop`.
+5. Load with `pnpm --filter @signaller/nr-ingest start sop`.
 
 ## File formats
 

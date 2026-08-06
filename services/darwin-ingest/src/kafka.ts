@@ -16,7 +16,7 @@ export function createKafka(): Kafka {
   }
 
   return new Kafka({
-    clientId: "mainline-darwin-ingest",
+    clientId: "signaller-darwin-ingest",
     brokers,
     ssl: true,
     sasl: { mechanism: "plain", username, password },

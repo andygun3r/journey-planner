@@ -7,7 +7,7 @@ import {
   nrTrainPositionHistory,
   sopMapping,
   stationTrackModelPosition,
-} from "@mainline/db";
+} from "@signaller/db";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { namedSignallingCorridor } from "./signalling-corridors";

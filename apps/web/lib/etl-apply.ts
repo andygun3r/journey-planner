@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { getDb } from "./db";
-import { etlRun, station, tripMapping } from "@mainline/db";
+import { etlRun, station, tripMapping } from "@signaller/db";
 import { reloadMotis } from "./motis-reload";
 
 const exec = promisify(execFile);

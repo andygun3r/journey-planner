@@ -1,4 +1,4 @@
-import { acquireSingletonLock, createDb, etlRun } from "@mainline/db";
+import { acquireSingletonLock, createDb, etlRun } from "@signaller/db";
 
 /**
  * Wraps an ETL command so only one runs at a time, and so a failure leaves a

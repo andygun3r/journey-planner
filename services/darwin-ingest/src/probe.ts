@@ -3,12 +3,12 @@ import { createKafka, kafkaTopic } from "./kafka.js";
 /**
  * One-off: connect to the RDM Darwin topic, print the first few raw messages
  * so we can model the real Push Port JSON envelope before writing the parser.
- * Run: pnpm --filter @mainline/darwin-ingest probe
+ * Run: pnpm --filter @signaller/darwin-ingest probe
  */
 const kafka = createKafka();
 // RDM restricts the consumer group id. Convention: the group must equal (or be
 // prefixed by) the consumer key. Overridable via RDM_KAFKA_GROUP_ID.
-const groupId = process.env.RDM_KAFKA_GROUP_ID ?? process.env.RDM_CONSUMER_KEY ?? "mainline";
+const groupId = process.env.RDM_KAFKA_GROUP_ID ?? process.env.RDM_CONSUMER_KEY ?? "signaller";
 console.log(`Using consumer group: ${groupId}`);
 const consumer = kafka.consumer({ groupId });
 

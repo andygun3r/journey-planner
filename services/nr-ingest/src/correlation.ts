@@ -1,4 +1,4 @@
-import { hhmmToIso, resolvePatternTimes } from "@mainline/shared";
+import { hhmmToIso, resolvePatternTimes } from "@signaller/shared";
 
 /**
  * The pure half of headcode-to-rid correlation: given a candidate's calling

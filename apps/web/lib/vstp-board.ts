@@ -1,4 +1,4 @@
-import { nrVstpSchedule, station } from "@mainline/db";
+import { nrVstpSchedule, station } from "@signaller/db";
 import { and, eq, gte, isNull, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { BoardDeparture } from "./board";

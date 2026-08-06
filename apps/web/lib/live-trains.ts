@@ -4,9 +4,9 @@ import {
   nrTrainPosition,
   railCorridor,
   station,
-} from "@mainline/db";
+} from "@signaller/db";
 import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
-import { tocName } from "@mainline/shared";
+import { tocName } from "@signaller/shared";
 import { getDb } from "./db";
 import { resolvePatternTimes } from "./uk-time";
 

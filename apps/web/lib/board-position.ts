@@ -1,4 +1,4 @@
-import { darwinStopForecast, darwinTrain, nrHeadcode, nrTrainPosition, station } from "@mainline/db";
+import { darwinStopForecast, darwinTrain, nrHeadcode, nrTrainPosition, station } from "@signaller/db";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import { stationForecasts } from "./darwin-forecasts";
 import type { BoardDeparture, BoardPosition } from "./board";

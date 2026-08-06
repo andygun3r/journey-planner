@@ -1,4 +1,4 @@
-import { alert, commute } from "@mainline/db";
+import { alert, commute } from "@signaller/db";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "./db";
 

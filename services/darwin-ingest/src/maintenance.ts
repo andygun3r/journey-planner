@@ -1,4 +1,4 @@
-import { getSharedDb } from "@mainline/db";
+import { getSharedDb } from "@signaller/db";
 import { sql } from "drizzle-orm";
 
 const db = getSharedDb();
@@ -68,7 +68,7 @@ async function chunk(statement: ReturnType<typeof sql>): Promise<number> {
 /**
  * Delete daily data that no query can reach any more.
  *
- * Mainline ingests data with a ONE-DAY useful life — schedules, positions —
+ * Signaller ingests data with a ONE-DAY useful life — schedules, positions —
  * into tables that were built as if it were permanent, and nothing expired it.
  * Measured before this job existed:
  *

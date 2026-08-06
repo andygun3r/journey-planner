@@ -1,5 +1,5 @@
 {
-  "name": "@mainline/etl",
+  "name": "@signaller/etl",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,8 +10,8 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@mainline/db": "workspace:*",
-    "@mainline/shared": "workspace:*",
+    "@signaller/db": "workspace:*",
+    "@signaller/shared": "workspace:*",
     "drizzle-orm": "^0.44.0",
     "mysql2": "^3.11.0",
     "postgres": "^3.4.9",

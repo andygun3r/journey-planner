@@ -1,5 +1,5 @@
-import { commute, commuteLeg } from "@mainline/db";
-import { type CommuteInput, type CommuteLegInput, type CommuteLegRecord, type CommuteRecord } from "@mainline/shared";
+import { commute, commuteLeg } from "@signaller/db";
+import { type CommuteInput, type CommuteLegInput, type CommuteLegRecord, type CommuteRecord } from "@signaller/shared";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "./db";
 

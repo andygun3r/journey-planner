@@ -1,10 +1,10 @@
 import type { MetadataRoute } from "next";
 
-/** PWA manifest — makes Mainline installable as a platform tool. */
+/** PWA manifest — makes Signaller installable as a platform tool. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Mainline — UK rail planner",
-    short_name: "Mainline",
+    name: "Signaller — UK rail planner",
+    short_name: "Signaller",
     description: "UK rail journey and commute planning, live from Darwin.",
     start_url: "/",
     display: "standalone",

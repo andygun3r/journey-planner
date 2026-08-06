@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { TFL_MODES } from "@mainline/shared";
+import { TFL_MODES } from "@signaller/shared";
 import { getMapStops } from "@/lib/tfl-stops";
 import { tflConfigured } from "@/lib/tfl";
 

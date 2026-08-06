@@ -31,7 +31,7 @@ function remoteDir(): string {
 }
 
 function workDir(): string {
-  return process.env.NR_SFTP_WORK_DIR ?? "/tmp/mainline-nr-reference";
+  return process.env.NR_SFTP_WORK_DIR ?? "/tmp/signaller-nr-reference";
 }
 
 function tpsDir(): string {

@@ -1,4 +1,4 @@
-import { createDb, sopMapping } from "@mainline/db";
+import { createDb, sopMapping } from "@signaller/db";
 import { eq } from "drizzle-orm";
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";

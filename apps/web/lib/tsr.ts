@@ -1,4 +1,4 @@
-import { nrTsr } from "@mainline/db";
+import { nrTsr } from "@signaller/db";
 import { asc, gte, isNull, or } from "drizzle-orm";
 import { getDb } from "./db";
 

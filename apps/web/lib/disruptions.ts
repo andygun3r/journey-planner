@@ -1,12 +1,12 @@
 /**
  * Client for the RDG "National Rail Disruptions" REST API.
- * Two views used by Mainline:
+ * Two views used by Signaller:
  *   - station incidents: active disruptions affecting a given CRS
  *   - TOC service indicators: per-operator "good service / disruption" status
  * Auth: consumer key in the x-apikey header.
  */
 
-import { tocRegion } from "@mainline/shared";
+import { tocRegion } from "@signaller/shared";
 
 /** An inline run of a disruption paragraph: plain text or a link. */
 export type Inline = { text: string } | { text: string; href: string };

@@ -6,7 +6,7 @@ During coding, you must use clear language, short sentences and stray away from 
 
 ## What this is
 
-**Mainline** — a fast, self-reliant UK rail journey & commute planner. It runs its
+**Signaller** — a fast, self-reliant UK rail journey & commute planner. It runs its
 own routing engine (MOTIS) over the national timetable, layers live status from
 Darwin and Network Rail, and computes indicative fares. It exists because the owner
 has RDG data access but **no National Rail journey-planner licence** — so it computes
@@ -148,7 +148,7 @@ Batch bulk data driving the routing engine and fares, **not** RDM APIs. Download
   `DTD_SFTP_HOST` (+ `DTD_SFTP_USERNAME`/`PASSWORD`/`PORT`/`*_DIR` vars) to switch the ETL
   from the NRDP HTTPS download to pulling the newest `.zip` over SFTP — see
   `services/etl/src/sftp-download.ts`.
-- **Track Model SFTP**: `pnpm --filter @mainline/etl exec tsx src/index.ts track-model-sftp`
+- **Track Model SFTP**: `pnpm --filter @signaller/etl exec tsx src/index.ts track-model-sftp`
   pulls `NWR_TrackModel*`, imports it into `track_model_line` /
   `station_track_model_position`, then deletes the remote files after a successful
   load. It uses `NR_SFTP_*` credentials, falling back to `DTD_SFTP_*`.

@@ -31,13 +31,13 @@ interface Bus {
  * plain module-level variable would leak a connection per reload. This is the
  * standard pattern for a long-lived client in a Next app.
  */
-const globalForBus = globalThis as unknown as { __mainlineLiveBus?: Bus };
+const globalForBus = globalThis as unknown as { __signallerLiveBus?: Bus };
 
 function bus(): Bus {
-  globalForBus.__mainlineLiveBus ??= { redis: null, listeners: new Map(), patterns: new Map() };
+  globalForBus.__signallerLiveBus ??= { redis: null, listeners: new Map(), patterns: new Map() };
   // A process that was already running before patterns existed has no map.
-  globalForBus.__mainlineLiveBus.patterns ??= new Map();
-  return globalForBus.__mainlineLiveBus;
+  globalForBus.__signallerLiveBus.patterns ??= new Map();
+  return globalForBus.__signallerLiveBus;
 }
 
 /** Runs every listener in a set, isolating failures. */

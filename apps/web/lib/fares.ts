@@ -6,7 +6,7 @@ import {
   station,
   stationCluster,
   ticketType,
-} from "@mainline/db";
+} from "@signaller/db";
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { getDb } from "./db";
 

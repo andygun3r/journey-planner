@@ -1,4 +1,4 @@
-import { user } from "@mainline/db";
+import { user } from "@signaller/db";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 

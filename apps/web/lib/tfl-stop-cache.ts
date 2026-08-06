@@ -5,7 +5,7 @@
  * line status/arrivals, which stay in-memory (see tfl.ts) because they're
  * genuinely live. Rows are populated lazily as lookups happen; never hand-seeded.
  */
-import { tflStopPointCache } from "@mainline/db";
+import { tflStopPointCache } from "@signaller/db";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
 import { nearbyStopPoints, stopPoint, type TflStopPoint } from "./tfl";

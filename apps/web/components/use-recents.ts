@@ -15,7 +15,7 @@ export interface RecentSearch {
   at: number;
 }
 
-const KEY = "mainline:recents";
+const KEY = "signaller:recents";
 const MAX = 8;
 
 function read(): RecentSearch[] {

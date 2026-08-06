@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { normaliseCrs } from "@mainline/shared";
+import { normaliseCrs } from "@signaller/shared";
 import { getUserId } from "@/lib/current-user";
 import { addFavourite, listFavourites, removeFavourite } from "@/lib/favourites";
 

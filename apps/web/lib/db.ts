@@ -1,4 +1,4 @@
-import { createDb, type Db } from "@mainline/db";
+import { createDb, type Db } from "@signaller/db";
 
 let db: Db | null = null;
 

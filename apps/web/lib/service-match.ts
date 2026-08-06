@@ -2,7 +2,7 @@
  * Re-export only. The implementation moved to `packages/shared/src/service-match.ts`
  * so services/nr-ingest can use the same calling-pattern scoring to disambiguate
  * a headcode between several candidate runs — the same reason `uk-time.ts` was
- * moved there earlier. Import from "@mainline/shared" in new code.
+ * moved there earlier. Import from "@signaller/shared" in new code.
  */
 export {
   alignCallsToRun,
@@ -22,4 +22,4 @@ export {
   type RunStop,
   type TdMatch,
   type TdReport,
-} from "@mainline/shared";
+} from "@signaller/shared";

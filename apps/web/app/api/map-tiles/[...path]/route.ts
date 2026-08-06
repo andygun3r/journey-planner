@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
   const upstreamRes = await fetch(upstreamUrl, {
     headers: {
       Referer: req.nextUrl.origin,
-      "User-Agent": "Mainline (https://github.com/andygun3r/journey-planner)",
+      "User-Agent": "Signaller (https://github.com/andygun3r/journey-planner)",
     },
   });
 

@@ -1,6 +1,6 @@
 "use server";
 
-import { CommuteInput, HolidayInput } from "@mainline/shared";
+import { CommuteInput, HolidayInput } from "@signaller/shared";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {

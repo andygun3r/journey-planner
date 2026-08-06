@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { station, stationTrackModelPosition, trackModelLine } from "@mainline/db";
-import { bngToWgs84, haversineMeters, readDbf, readShpPolyLines } from "@mainline/shared";
+import { station, stationTrackModelPosition, trackModelLine } from "@signaller/db";
+import { bngToWgs84, haversineMeters, readDbf, readShpPolyLines } from "@signaller/shared";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";

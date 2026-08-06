@@ -7,10 +7,10 @@ import type maplibregl from "maplibre-gl";
  * map and the service-detail position map.
  */
 
-export const TRAIN_ICON = "mainline-train-icon";
-export const BUS_ICON = "mainline-bus-icon";
-export const ARROW_ICON = "mainline-direction-arrow";
-export const BERTH_PLATE_ICON = "mainline-berth-plate";
+export const TRAIN_ICON = "signaller-train-icon";
+export const BUS_ICON = "signaller-bus-icon";
+export const ARROW_ICON = "signaller-direction-arrow";
+export const BERTH_PLATE_ICON = "signaller-berth-plate";
 
 /**
  * Renders an SVG path string to an SDF (signed-distance-field) image MapLibre

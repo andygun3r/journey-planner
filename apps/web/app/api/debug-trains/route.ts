@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
-import { nrTrainPosition, station, darwinTrain } from "@mainline/db";
+import { nrTrainPosition, station, darwinTrain } from "@signaller/db";
 import { getDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";

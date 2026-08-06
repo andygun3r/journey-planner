@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "mainline-theme";
+const STORAGE_KEY = "signaller-theme";
 
 /**
  * Light is the app's default regardless of OS preference (see globals.css);

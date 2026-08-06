@@ -1,4 +1,4 @@
-import { nrRtppm, nrVstpSchedule } from "@mainline/db";
+import { nrRtppm, nrVstpSchedule } from "@signaller/db";
 import { desc, gte, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { londonDateKey } from "./uk-time";

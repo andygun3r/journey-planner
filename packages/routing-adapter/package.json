@@ -1,5 +1,5 @@
 {
-  "name": "@mainline/routing-adapter",
+  "name": "@signaller/routing-adapter",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@mainline/shared": "workspace:*",
+    "@signaller/shared": "workspace:*",
     "zod": "^4.0.0"
   },
   "devDependencies": {

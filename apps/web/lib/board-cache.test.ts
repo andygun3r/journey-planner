@@ -34,7 +34,7 @@ function deferred() {
 
 beforeEach(() => {
   getBoard.mockReset();
-  (globalThis as { __mainlineBoardCache?: Map<string, unknown> }).__mainlineBoardCache = new Map();
+  (globalThis as { __signallerBoardCache?: Map<string, unknown> }).__signallerBoardCache = new Map();
 });
 
 describe("cachedBoard", () => {

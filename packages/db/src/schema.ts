@@ -234,7 +234,7 @@ export const darwinFormation = pgTable("darwin_formation", {
 /**
  * CORPUS reference: maps STANOX <-> TIPLOC <-> CRS <-> NLC. Loaded from the
  * Network Rail CORPUS reference feed; lets us translate movement/berth reports
- * (STANOX-keyed) to the CRS/TIPLOC world the rest of Mainline uses.
+ * (STANOX-keyed) to the CRS/TIPLOC world the rest of Signaller uses.
  */
 export const nrCorpus = pgTable(
   "nr_corpus",
@@ -883,7 +883,7 @@ export const trackModelLine = pgTable(
 // Drizzle adapter conventions exactly (see apps/web/lib/auth.ts) — column
 // names/types here are what its core + magicLink + passkey + apiKey plugins
 // expect, not a house style. `role` and `pushSubscription` are the two fields
-// Mainline adds on top of that core shape.
+// Signaller adds on top of that core shape.
 // ---------------------------------------------------------------------------
 
 /**

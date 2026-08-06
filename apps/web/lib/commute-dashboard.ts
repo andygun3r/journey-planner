@@ -5,7 +5,7 @@ import {
   londonDate,
   londonWallTimeToIso,
   resolveActiveLeg,
-} from "@mainline/shared";
+} from "@signaller/shared";
 import { listCommutes } from "./commutes";
 import { type Disruption as BoardDisruption, fetchStationDisruptions } from "./disruptions";
 import { holidayRangesFor } from "./holidays";

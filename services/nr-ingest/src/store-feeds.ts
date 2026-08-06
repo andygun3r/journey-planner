@@ -1,4 +1,4 @@
-import { getSharedDb, nrRtppm, nrTsr, nrVstpSchedule } from "@mainline/db";
+import { getSharedDb, nrRtppm, nrTsr, nrVstpSchedule } from "@signaller/db";
 import { eq } from "drizzle-orm";
 import type { RtppmRow, Tsr, VstpSchedule } from "./parse-feeds.js";
 

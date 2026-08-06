@@ -22,7 +22,7 @@ async function CommuteStatus({ userId }: { userId: string | null }) {
         <div className="notice">
           <h2>Sign in to set up a commute</h2>
           <p>
-            Tell Mainline your weekly schedule and we&rsquo;ll watch your usual trains and warn
+            Tell Signaller your weekly schedule and we&rsquo;ll watch your usual trains and warn
             you when they&rsquo;re disrupted.
           </p>
           <p>
@@ -46,7 +46,7 @@ async function CommuteStatus({ userId }: { userId: string | null }) {
         <div className="notice">
           <h2>Set up your commute</h2>
           <p>
-            Tell Mainline your weekly schedule — where you travel each day and roughly when — and
+            Tell Signaller your weekly schedule — where you travel each day and roughly when — and
             we&rsquo;ll watch your usual trains and warn you when they&rsquo;re disrupted.
           </p>
           <p>
@@ -101,7 +101,7 @@ async function CommuteStatus({ userId }: { userId: string | null }) {
         {state.engineOffline ? (
           <div className="notice notice-danger">
             <h2>Live routing is offline</h2>
-            <p>Mainline couldn&rsquo;t reach the routing engine to show your next trains.</p>
+            <p>Signaller couldn&rsquo;t reach the routing engine to show your next trains.</p>
           </div>
         ) : (
           <Departures journeys={state.journeys} />
@@ -230,7 +230,7 @@ export default async function Home() {
             has nothing to suggest.
           </p>
           <p>
-            Run <code>pnpm --filter @mainline/etl exec tsx src/index.ts postprocess</code> to load
+            Run <code>pnpm --filter @signaller/etl exec tsx src/index.ts postprocess</code> to load
             stations and trip mappings, then refresh.
           </p>
         </div>

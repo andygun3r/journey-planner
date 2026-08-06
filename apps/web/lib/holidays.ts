@@ -1,5 +1,5 @@
-import { commuteHoliday } from "@mainline/db";
-import { type HolidayInput, type HolidayRange } from "@mainline/shared";
+import { commuteHoliday } from "@signaller/db";
+import { type HolidayInput, type HolidayRange } from "@signaller/shared";
 import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "./db";
 

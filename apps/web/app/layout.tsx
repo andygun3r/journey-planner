@@ -11,13 +11,13 @@ import "./globals.css";
 /* Applies a saved dark-theme choice before first paint, so a returning visitor
    who picked dark never sees a light flash. Light is the default; this only
    ever adds data-theme="dark", never removes the (default) light state. */
-const THEME_INIT_SCRIPT = `try{if(localStorage.getItem("mainline-theme")==="dark"){document.documentElement.dataset.theme="dark"}}catch(e){}`;
+const THEME_INIT_SCRIPT = `try{if(localStorage.getItem("signaller-theme")==="dark"){document.documentElement.dataset.theme="dark"}}catch(e){}`;
 
 export const metadata: Metadata = {
-  title: "Mainline",
+  title: "Signaller",
   description: "UK rail journey and commute planning, live from Darwin.",
-  applicationName: "Mainline",
-  appleWebApp: { capable: true, title: "Mainline", statusBarStyle: "default" },
+  applicationName: "Signaller",
+  appleWebApp: { capable: true, title: "Signaller", statusBarStyle: "default" },
   icons: {
     icon: "/icon.png",
     apple: "/apple-touch-icon.png",
@@ -44,9 +44,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
         <div className="shell">
           <header className="topbar">
-            <Link href="/" className="wordmark" aria-label="Mainline — home">
+            <Link href="/" className="wordmark" aria-label="Signaller — home">
               <DoubleArrow className="wordmark-mark" />
-              <span className="wordmark-text">Mainline</span>
+              <span className="wordmark-text">Signaller</span>
             </Link>
             <TopNav />
             <ThemeToggle />

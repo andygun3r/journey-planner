@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #EDEAE3; }
+  * { box-sizing: border-box; }
+</style>
+</helmet>
+
+<section style="display: flex; gap: 28px; flex-wrap: wrap; padding: 48px; align-items: flex-start; font-family: 'Inter', sans-serif;">
+  <sc-for list="{{ concepts }}" as="c" hint-placeholder-count="6">
+    <div style="width: 300px; background: #FFFFFF; border: 1px solid rgba(20,22,31,0.1); border-radius: 4px; padding: 28px; display: flex; flex-direction: column; gap: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-family: monospace; font-size: 11px; font-weight: 700; color: #FFFFFF; background: #1C2340; padding: 3px 8px; border-radius: 3px;">{{ c.id }}</div>
+      </div>
+      <div style="{{ c.stageStyle }}">
+        <div style="{{ c.markStyle }}">
+          <div style="{{ c.innerStyle }}"></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family: 'Archivo'; font-weight: 700; font-size: 16px; color: #1C2340;">{{ c.name }}</div>
+        <div style="font-size: 13px; line-height: 1.6; color: #6B6F80; margin-top: 6px;">{{ c.desc }}</div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; padding-top: 16px; border-top: 1px solid rgba(20,22,31,0.08);">
+        <div style="{{ c.smallMarkStyle }}"><div style="{{ c.smallInnerStyle }}"></div></div>
+        <div style="font-family: 'Archivo'; font-weight: 800; font-size: 18px; color: #1C2340;">Signaller</div>
+      </div>
+    </div>
+  </sc-for>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const stage = (bg) => ({ height: '150px', borderRadius: '4px', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' });
+
+    // A: signal lamp (current)
+    const lampMark = (size, bg) => ({ width: size+'px', height: size+'px', borderRadius: (size*0.22)+'px', background: bg, display:'flex', alignItems:'flex-start', justifyContent:'flex-end', padding:(size*0.16)+'px' });
+    const lampInner = (size, color) => ({ width:(size*0.42)+'px', height:(size*0.42)+'px', borderRadius:'50%', background:color, boxShadow:'inset 0 0 0 '+(size*0.09)+'px rgba(0,0,0,0.15)' });
+
+    // B: diamond waypoint
+    const diaMark = (size, bg) => ({ width:size+'px', height:size+'px', background:bg, transform:'rotate(45deg)', borderRadius:(size*0.12)+'px', display:'flex', alignItems:'center', justifyContent:'center' });
+    const diaInner = (size, color) => ({ width:(size*0.34)+'px', height:(size*0.34)+'px', borderRadius:'50%', background:color, transform:'rotate(-45deg)' });
+
+    // C: semaphore bar across circle
+    const semMark = (size, bg) => ({ width:size+'px', height:size+'px', borderRadius:'50%', background:bg, position:'relative', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center' });
+    const semInner = (size, color) => ({ width:(size*1.3)+'px', height:(size*0.16)+'px', background:color, transform:'rotate(-35deg)' });
+
+    // D: offset beacon ring
+    const beaconMark = (size, bg) => ({ width:size+'px', height:size+'px', borderRadius:'50%', background:'transparent', border:(size*0.09)+'px solid '+bg, display:'flex', alignItems:'center', justifyContent:'center' });
+    const beaconInner = (size, color) => ({ width:(size*0.3)+'px', height:(size*0.3)+'px', borderRadius:'50%', background:color, alignSelf:'flex-end', marginRight:(size*0.08)+'px', marginBottom:(size*0.05)+'px' });
+
+    // E: square node lens
+    const nodeMark = (size, bg) => ({ width:size+'px', height:size+'px', borderRadius:(size*0.18)+'px', background:bg, display:'flex', alignItems:'flex-end', justifyContent:'flex-start', padding:(size*0.14)+'px' });
+    const nodeInner = (size, color) => ({ width:(size*0.36)+'px', height:(size*0.36)+'px', borderRadius:(size*0.08)+'px', background:color });
+
+    // F: twin discs, two circles overlapping (junction/interchange)
+    const twinMark = (size, bg) => ({ width:size+'px', height:size+'px', borderRadius:'50%', background:'transparent', position:'relative' });
+    const twinInner = (size, color) => ({ width:(size*0.62)+'px', height:(size*0.62)+'px', borderRadius:'50%', background:color, position:'absolute', top:0, left:0, boxShadow: (size*0.42)+'px '+(size*0.42)+'px 0 rgba(28,35,64,1)' });
+
+    const R = '#D6352C', N = '#1C2340', W = '#FFFFFF';
+
+    return {
+      concepts: [
+        { id: '1a', name: 'Signal Lamp', desc: 'Lens tucked in the corner of a solid housing, like a real signal head mounted on its post. Current direction.',
+          stageStyle: stage(N), markStyle: lampMark(90, R), innerStyle: lampInner(90, W),
+          smallMarkStyle: lampMark(28, R), smallInnerStyle: lampInner(28, W) },
+        { id: '1b', name: 'Waypoint Diamond', desc: 'A rotated square marks a fixed point on the line, with a lens set inside — reads as a map waypoint or junction marker.',
+          stageStyle: stage(N), markStyle: diaMark(76, R), innerStyle: diaInner(76, W),
+          smallMarkStyle: diaMark(22, R), smallInnerStyle: diaInner(22, W) },
+        { id: '1c', name: 'Semaphore Disc', desc: 'A raised arm crosses a signal disc at the "clear" angle — a direct nod to mechanical rail semaphores.',
+          stageStyle: stage(N), markStyle: semMark(90, R), innerStyle: semInner(90, W),
+          smallMarkStyle: semMark(28, R), smallInnerStyle: semInner(28, W) },
+        { id: '1d', name: 'Beacon Ring', desc: 'An open ring with one lit point — a beacon on the line, always showing where the signal sits.',
+          stageStyle: stage(N), markStyle: beaconMark(90, R), innerStyle: beaconInner(90, W),
+          smallMarkStyle: beaconMark(28, R), smallInnerStyle: beaconInner(28, W) },
+        { id: '1e', name: 'Node Block', desc: 'A squared-off lens in a squared housing — more architectural and modular, closer to a network/interchange node.',
+          stageStyle: stage(N), markStyle: nodeMark(90, R), innerStyle: nodeInner(90, W),
+          smallMarkStyle: nodeMark(28, R), smallInnerStyle: nodeInner(28, W) },
+        { id: '1f', name: 'Interchange Discs', desc: 'Two overlapping discs stand for a change of line or mode — the moment one journey connects to the next.',
+          stageStyle: stage(N), markStyle: twinMark(76, null), innerStyle: twinInner(76, R),
+          smallMarkStyle: twinMark(22, null), smallInnerStyle: twinInner(22, R) }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -5,7 +5,7 @@ import { connect, nrConfig, TOPICS } from "./stomp.js";
  * prints the first few Train Movements and Train Describer messages so we can
  * model the real wire format before building the ingester.
  *
- * Run: NETWORKRAIL_USERNAME=... NETWORKRAIL_PASSWORD=... pnpm --filter @mainline/nr-ingest probe
+ * Run: NETWORKRAIL_USERNAME=... NETWORKRAIL_PASSWORD=... pnpm --filter @signaller/nr-ingest probe
  */
 
 const cfg = nrConfig();

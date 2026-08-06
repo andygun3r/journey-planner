@@ -1,5 +1,5 @@
 {
-  "name": "@mainline/motis-sidecar",
+  "name": "@signaller/motis-sidecar",
   "version": "0.1.0",
   "private": true,
   "type": "module",

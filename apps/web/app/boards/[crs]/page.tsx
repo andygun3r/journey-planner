@@ -353,7 +353,7 @@ export default async function BoardPage({
             </h2>
             <p>
               {outcome.reason === "engine-offline"
-                ? "Mainline couldn’t reach the routing engine to build this board. If you’re running locally, start MOTIS and try again."
+                ? "Signaller couldn’t reach the routing engine to build this board. If you’re running locally, start MOTIS and try again."
                 : "Use a 3-letter station code (CRS), like KGX or EDB."}
             </p>
           </div>

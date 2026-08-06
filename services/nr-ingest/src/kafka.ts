@@ -29,7 +29,7 @@ export function createTdKafka(): Kafka {
   if (brokers.length === 0) throw new Error("NR_TD_KAFKA_BOOTSTRAP_SERVERS contains no brokers");
 
   return new Kafka({
-    clientId: process.env.NR_TD_KAFKA_CLIENT_ID ?? "mainline-nr-td-ingest",
+    clientId: process.env.NR_TD_KAFKA_CLIENT_ID ?? "signaller-nr-td-ingest",
     brokers,
     ssl: true,
     sasl: { mechanism: "plain", username, password },
@@ -43,7 +43,7 @@ export function tdKafkaTopic(): string {
 }
 
 export function tdKafkaGroupId(): string {
-  return process.env.NR_TD_KAFKA_GROUP_ID ?? "mainline-nr-td-ingest";
+  return process.env.NR_TD_KAFKA_GROUP_ID ?? "signaller-nr-td-ingest";
 }
 
 export type TdKafkaConsumer = Consumer;

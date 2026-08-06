@@ -4,7 +4,7 @@ import { magicLink } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { apiKey } from "@better-auth/api-key";
 import { Resend } from "resend";
-import * as schema from "@mainline/db";
+import * as schema from "@signaller/db";
 import { getDb } from "./db";
 
 /**
@@ -52,16 +52,16 @@ export const auth = betterAuth({
           throw new Error("RESEND_API_KEY is not set — cannot send magic link emails");
         }
         await resend.emails.send({
-          from: "Mainline <onboarding@resend.dev>",
+          from: "Signaller <onboarding@resend.dev>",
           to: email,
-          subject: "Sign in to Mainline",
-          text: `Sign in to Mainline by opening this link:\n\n${url}\n\nIf you didn't request this, you can ignore this email.`,
+          subject: "Sign in to Signaller",
+          text: `Sign in to Signaller by opening this link:\n\n${url}\n\nIf you didn't request this, you can ignore this email.`,
         });
       },
     }),
     passkey({
       rpID: appOrigin,
-      rpName: "Mainline",
+      rpName: "Signaller",
       origin: appUrl,
     }),
     apiKey(),

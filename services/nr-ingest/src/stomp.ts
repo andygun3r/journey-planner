@@ -33,7 +33,7 @@ export function nrConfig(): NrConnectConfig {
     login,
     passcode,
     // Durable-subscription client id; keep stable so we resume, not restart.
-    clientId: process.env.NR_CLIENT_ID ?? `mainline-nr-${login}`,
+    clientId: process.env.NR_CLIENT_ID ?? `signaller-nr-${login}`,
   };
 }
 

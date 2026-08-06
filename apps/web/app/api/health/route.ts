@@ -80,7 +80,7 @@ export async function GET() {
       redis,
       schema: postgres ? schema : null,
       timetable,
-      service: "mainline-web",
+      service: "signaller-web",
     },
     { status: ok ? 200 : 503 },
   );

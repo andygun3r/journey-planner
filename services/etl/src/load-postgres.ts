@@ -1,4 +1,4 @@
-import { isCrs } from "@mainline/shared";
+import { isCrs } from "@signaller/shared";
 import { createReadStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import mysql from "mysql2/promise";

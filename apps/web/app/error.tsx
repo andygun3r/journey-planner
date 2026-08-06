@@ -13,7 +13,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
       <div className="notice notice-danger">
         <h2>Something went wrong</h2>
         <p>
-          Mainline hit an unexpected problem loading this page. This is on us, not you.
+          Signaller hit an unexpected problem loading this page. This is on us, not you.
         </p>
         <p>
           <button type="button" className="btn" onClick={reset}>

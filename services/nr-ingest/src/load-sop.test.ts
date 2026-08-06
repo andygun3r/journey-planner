@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { parseSopFile } from "./load-sop.js";
 
 async function tmpFile(name: string, body: string | Buffer): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "mainline-sop-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "signaller-sop-"));
   const file = path.join(dir, name);
   await writeFile(file, body);
   return file;

@@ -16,7 +16,7 @@ export type Db = ReturnType<typeof createDb>;
  * immediately.
  */
 function appName(explicit?: string): string {
-  return explicit ?? process.env.SERVICE_NAME ?? "mainline";
+  return explicit ?? process.env.SERVICE_NAME ?? "signaller";
 }
 
 /**

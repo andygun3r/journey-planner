@@ -65,12 +65,12 @@ interface Source<T> {
 // On globalThis for the same reason live-bus is: Next reloads modules in
 // development, and a plain module variable would leak a timer per reload.
 const globalForSources = globalThis as unknown as {
-  __mainlineLiveSources?: Map<string, Source<unknown>>;
+  __signallerLiveSources?: Map<string, Source<unknown>>;
 };
 
 function sources(): Map<string, Source<unknown>> {
-  globalForSources.__mainlineLiveSources ??= new Map();
-  return globalForSources.__mainlineLiveSources;
+  globalForSources.__signallerLiveSources ??= new Map();
+  return globalForSources.__signallerLiveSources;
 }
 
 async function run<T>(source: Source<T>): Promise<void> {

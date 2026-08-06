@@ -5,7 +5,7 @@
  * instant resolution to time-check a candidate schedule).
  *
  * Kept as a re-export rather than updating every apps/web call site to import
- * from @mainline/shared directly.
+ * from @signaller/shared directly.
  */
 
 export {
@@ -19,4 +19,4 @@ export {
   ukHhmm,
   ukParts,
   type UkParts,
-} from "@mainline/shared";
+} from "@signaller/shared";

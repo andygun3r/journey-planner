@@ -1,4 +1,4 @@
-import { createDb, nrCorpus, nrHeadcode, nrSmart } from "@mainline/db";
+import { createDb, nrCorpus, nrHeadcode, nrSmart } from "@signaller/db";
 import { sql } from "drizzle-orm";
 import { createInterface } from "node:readline";
 import { readFile } from "node:fs/promises";

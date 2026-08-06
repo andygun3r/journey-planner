@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-07-25T14:00:00Z",
-  "title": "Design System: Mainline",
+  "title": "Design System: Signaller",
   "extensions": {
     "colorMeta": {
       "rail-blue": { "role": "primary", "displayName": "Rail Blue", "canonical": "#0033a0", "tonalRamp": ["#000e2e", "#001a4d", "#00227a", "#0033a0", "#2452c2", "#5c7cdb", "#96aeeb", "#ccd8f6"] },

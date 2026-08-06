@@ -1,4 +1,4 @@
-import { etlRun } from "@mainline/db";
+import { etlRun } from "@signaller/db";
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "./db";
 

@@ -1,6 +1,6 @@
-import { createEngine, type RawDeparture } from "@mainline/routing-adapter";
-import { normaliseCrs, operatorFromRouteName } from "@mainline/shared";
-import { darwinStationMessage } from "@mainline/db";
+import { createEngine, type RawDeparture } from "@signaller/routing-adapter";
+import { normaliseCrs, operatorFromRouteName } from "@signaller/shared";
+import { darwinStationMessage } from "@signaller/db";
 import { sql } from "drizzle-orm";
 import { enrichBoardWithDarwin } from "./darwin-board";
 import { enrichBoardWithFormation } from "./darwin-formation";

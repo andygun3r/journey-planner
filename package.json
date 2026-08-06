@@ -1,5 +1,5 @@
 {
-  "name": "mainline",
+  "name": "signaller",
   "private": true,
   "packageManager": "pnpm@11.17.0",
   "engines": {
@@ -13,9 +13,9 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
-    "db:generate": "pnpm --filter @mainline/db generate",
-    "db:migrate": "pnpm --filter @mainline/db migrate",
-    "etl:timetable": "pnpm --filter @mainline/etl timetable"
+    "db:generate": "pnpm --filter @signaller/db generate",
+    "db:migrate": "pnpm --filter @signaller/db migrate",
+    "etl:timetable": "pnpm --filter @signaller/etl timetable"
   },
   "devDependencies": {
     "turbo": "^2.5.0",
