@@ -31,7 +31,7 @@ export async function GET() {
   return NextResponse.json({
     sinceIso: since.toISOString(),
     nowIso: new Date().toISOString(),
-    rawCount: rawCount.rows?.[0] ?? rawCount[0],
+    rawCount: rawCount[0],
     drizzleCountNoJoin: drizzleCountNoJoin[0],
     drizzleCountWithJoin: drizzleCountWithJoin[0],
   });
