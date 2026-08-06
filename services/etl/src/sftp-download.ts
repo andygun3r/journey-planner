@@ -67,9 +67,14 @@ async function downloadIfMatches(
 
   const kind = await classifyZip(dest);
   // "timetable" must actually look like one; "fares" has no reliable content
-  // signature of its own, so anything that isn't recognisably Track Model or
-  // timetable is accepted as fares — see classify-zip.ts.
-  const matches = feed === "timetable" ? kind === "timetable" : kind !== "track-model" && kind !== "timetable";
+  // signature of its own, so anything that isn't recognisably Track Model,
+  // timetable, or unreadable is accepted as fares — see classify-zip.ts.
+  // "unreadable" (corrupted/truncated on the remote server — seen in
+  // practice with a genuinely broken NWR_TrackModel*.zip) never matches
+  // either feed; a broken file must never be fed to dtd2mysql.
+  const matches =
+    kind !== "unreadable" &&
+    (feed === "timetable" ? kind === "timetable" : kind !== "track-model" && kind !== "timetable");
   if (!matches) {
     console.log(`Skipping ${file.name} — looks like ${kind}, not ${feed}`);
     await unlink(dest);
