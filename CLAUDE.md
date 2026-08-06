@@ -147,14 +147,25 @@ Batch bulk data driving the routing engine and fares, **not** RDM APIs. Download
   RJTTF/RJFAF products, on a separate account from `NRDP_USERNAME`/`PASSWORD`. Set
   `DTD_SFTP_HOST` (+ `DTD_SFTP_USERNAME`/`PASSWORD`/`PORT`/`*_DIR` vars) to switch the ETL
   from the NRDP HTTPS download to pulling the newest `.zip` over SFTP — see
-  `services/etl/src/sftp-download.ts`. The `etl-cron` Coolify app (the etl image running
-  in standing-service mode, `ETL_CRON=1`) runs this nightly at 2am via a baked-in crontab
-  (`services/etl/cron/timetable-daily`); the same image also runs as a one-off
-  `docker run --rm etl <command>` for manual invocations.
+  `services/etl/src/sftp-download.ts`.
 - **Track Model SFTP**: `pnpm --filter @mainline/etl exec tsx src/index.ts track-model-sftp`
   pulls `NWR_TrackModel*`, imports it into `track_model_line` /
   `station_track_model_position`, then deletes the remote files after a successful
   load. It uses `NR_SFTP_*` credentials, falling back to `DTD_SFTP_*`.
+- **Nightly cron (2am)**: the `etl-cron` Coolify app (the etl image running in
+  standing-service mode, `ETL_CRON=1`) runs `services/etl/cron/run-and-reload-motis.sh` via a
+  baked-in busybox crontab. One run does four SFTP pulls in sequence, each deleting its
+  remote files after a successful load:
+  1. **Timetable** (`etl timetable`) — DTD RJTTF, through dtd2mysql → GTFS → pushes to the
+     MOTIS sidecar and triggers reimport + restart.
+  2. **Fares** (`etl fares`) — DTD RJFAF, loaded into Postgres.
+  3. **NR reference files** — SMART (`nr_smart`) + TPS data, via a `POST /reference-sftp`
+     call to the `nr-ingest` service (only runs if `NR_INGEST_URL` /
+     `NR_INGEST_INTERNAL_KEY` are set; otherwise this step is skipped).
+  4. **Track Model** (`etl track-model-sftp`) — see above.
+
+  The same etl image also runs as a one-off `docker run --rm etl <command>` for manual
+  invocations of any single step.
 
 ## B. Network Rail Open Data (NROD) feeds
 
