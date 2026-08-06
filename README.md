@@ -118,11 +118,39 @@ openssl rand -base64 32   # MOTIS_REIMPORT_KEY
 openssl rand -base64 32   # BETTER_AUTH_SECRET
 ```
 
-Decide now whether you want the live map (`/map`). If yes, fork
-[hiddewie/OpenRailwayMap-vector](https://github.com/hiddewie/OpenRailwayMap-vector)
-on GitHub and create a **second, separate Coolify project** pointed at your
-fork — the map stack's 5 apps live there, not in this project. If you're
-skipping the map for now, ignore every step below marked **(map only)**.
+Decide now whether you want the live map (`/map`), and if your server has
+capacity to self-host the tile stack (`orm-db`/`orm-import`/`orm-martin`/
+`orm-api`/`orm-proxy` — a full separate Coolify project built from your own
+fork of [hiddewie/OpenRailwayMap-vector](https://github.com/hiddewie/OpenRailwayMap-vector))
+or would rather proxy the hosted instance through `web` itself (no extra
+apps, no fork needed — see step 8 for both options). If you're skipping the
+map for now, ignore every step below marked **(map only)**.
+
+⚠️ **Set a fixed container name on every backend app, before its first
+deploy.** By default, Coolify names each app's container after an ephemeral
+build/instance ID (something like `g3gq4jwibve817jmk934lu34-072451594731`)
+that **changes on every redeploy** — Docker's internal DNS only resolves
+containers by that exact, changing name, with no stable alias registered per
+app. Pointing `web`'s env vars at one of these names works until the next
+redeploy of that backend app, then silently breaks with `fetch failed`
+(Node's `fetch` can't resolve/connect to a hostname that no longer exists).
+Look for a **Container Name** field in each app's settings (General or
+Advanced tab, depending on your Coolify version) and set it to something
+fixed before you deploy that app for the first time:
+
+| App | Fixed container name |
+|---|---|
+| `motis` | `mainline-motis` |
+| `motis-sidecar` | `mainline-motis-sidecar` |
+| `etl-cron` | `mainline-etl` |
+| `nr-ingest` | `mainline-nr-ingest` |
+
+(`postgres`, `redis`, `darwin-ingest`, and `web` don't need this — nothing
+else in this deploy calls them by container name over HTTP. `mariadb` only
+needs it if you'd rather use a name than remember its auto-generated one for
+`ETL_MYSQL_URL`.) Use these fixed names in the `http://<host>:<port>` URLs
+throughout the rest of this guide, instead of anything copied from `docker
+ps`.
 
 ---
 
@@ -161,11 +189,12 @@ Coolify tries to treat the file path as a directory to create.
 
 **Build arg:**
 ```
-NEXT_PUBLIC_TILES_URL=https://<your-eventual-orm-proxy-domain>
+NEXT_PUBLIC_TILES_URL=https://<this-app's-own-domain>/api/map-tiles
 ```
-(Only matters if you're doing `/map`. Baked into the client bundle at build
-time — if you don't have your `orm-proxy` domain yet, leave it blank and
-come back to rebuild once step 8 is done.)
+(Only matters if you're doing `/map` — see step 8 for the self-hosted
+alternative, which uses your `orm-proxy` domain here instead. Baked into the
+client bundle at build time — if you don't have your domain finalized yet,
+leave it blank and rebuild once you do.)
 
 **Runtime env vars:**
 ```
@@ -273,18 +302,51 @@ together, or neither**:
 NETWORKRAIL_USERNAME=...
 NETWORKRAIL_PASSWORD=...
 ```
+Optional overrides for the STOMP broker itself (defaults are correct for
+Network Rail's public feed — only set these if you know you need something
+different):
+```
+NR_STOMP_HOST=publicdatafeeds.networkrail.co.uk
+NR_STOMP_PORT=61618
+```
+⚠️ Bare hostname, no `stomp://` scheme, same rule as `DTD_SFTP_HOST` in step
+6 — the code passes this straight to a `connect({ host, port })` call.
+
 Plus, only if you're using RailData Kafka for Train Describer (optional —
 falls back to STOMP without it) — **set all five together, or none**:
 ```
-NR_TD_KAFKA_BOOTSTRAP_SERVERS=...
+NR_TD_KAFKA_BOOTSTRAP_SERVERS=broker1.example.com:9092
 NR_TD_KAFKA_TOPIC=...
 NR_TD_KAFKA_USERNAME=...
 NR_TD_KAFKA_PASSWORD=...
 NR_TD_KAFKA_GROUP_ID=mainline-nr-td-ingest
 ```
-Same caveat as `RDM_KAFKA_GROUP_ID` above — check RailData's subscription
-docs for whether your broker enforces a specific consumer-group-id pattern
-before assuming the default is fine.
+⚠️ `NR_TD_KAFKA_BOOTSTRAP_SERVERS` (and `RDM_KAFKA_BOOTSTRAP_SERVERS` on
+`darwin-ingest` above) must be **bare `host:port`, comma-separated for
+multiple brokers — no `SASL_SSL://` or any other scheme prefix.** Copying
+the value straight from a Confluent Cloud dashboard sometimes includes a
+scheme; strip it before pasting here, or the client can't parse the broker
+list correctly. Same caveat as `RDM_KAFKA_GROUP_ID` above for the group id —
+check RailData's subscription docs for whether your broker enforces a
+specific consumer-group-id pattern before assuming the default is fine.
+
+`nr-ingest`'s `/reference-sftp` endpoint (used by `web` and `etl-cron`'s
+nightly sweep) needs its own SFTP credentials — falls back to `DTD_SFTP_*`
+(step 6) if unset, so only set these if RDG issued separate SFTP access for
+NR reference files:
+```
+NR_SFTP_HOST=...
+NR_SFTP_PORT=...
+NR_SFTP_USERNAME=...
+NR_SFTP_PASSWORD=...
+NR_SFTP_REFERENCE_DIR=/
+```
+Same bare-host rule as `DTD_SFTP_HOST`. `NR_SFTP_DELETE_PROCESSED` (default:
+deletes remote files after successful processing) and `NR_TPS_DIR` (default
+`/data/tps`, worth mounting a persistent volume if you rely on Track
+Planning Model data surviving a redeploy) are documented alongside the
+Track Model sync in step 6, since the same delete-by-default behavior and
+directory pattern applies here too.
 
 ⚠️ **The "all together, or none" rule matters.** Both services are meant to
 idle harmlessly (not crash) when a whole feed's credentials are unset — but
@@ -384,13 +446,86 @@ NRDP_PASSWORD=...
 ```
 or (RDG's SFTP delivery):
 ```
-DTD_SFTP_HOST=...
+DTD_SFTP_HOST=<bare hostname or IP, e.g. sftp.example.com>
+DTD_SFTP_PORT=<port number, e.g. 2222 — omit for the default, 22>
 DTD_SFTP_USERNAME=...
 DTD_SFTP_PASSWORD=...
 ```
+⚠️ **`DTD_SFTP_HOST` must be a bare hostname or IP — no `sftp://` scheme, no
+port.** The code passes it straight to an SFTP client's `connect({ host,
+port })` call, which only accepts a plain host string. `DTD_SFTP_PORT` is
+the *separate* var for the port. Setting `DTD_SFTP_HOST=sftp://host:2222`
+fails with `getaddrinfo ENOTFOUND sftp://host:2222` — the whole string gets
+treated as one hostname to resolve. This same bare-host-plus-separate-port
+rule applies to every other host/port var pair below and on `nr-ingest`
+(step 4) — none of them accept a URL.
+
+Where SFTP files land on the remote server — the code's built-in defaults
+are `/timetable` and `/fares`, but **RDG's actual delivery folder structure
+varies per account** (some drop everything in the root folder instead).
+Check what your account actually has before assuming the defaults are
+right — an unset/wrong dir fails with `list: no such file <path>`. Set
+explicitly:
+```
+DTD_SFTP_TIMETABLE_DIR=<the real remote path, e.g. / if files are in the root>
+DTD_SFTP_FARES_DIR=<the real remote path, likewise>
+```
+
+⚠️ **If your account uses one shared root folder for everything** (timetable,
+fares, and NR Track Model files all mixed together — not separate
+subfolders), setting both dirs above to `/` means every `.zip` in that
+folder gets picked up for *each* feed, including files that belong to a
+different one entirely. This fails partway through with something like
+`no recognisable DTD timetable files in .../NWR_TrackModel*.zip` — the
+timetable step tried to import a Track Model archive because nothing told
+it the two apart. Filter by filename prefix instead:
+```
+DTD_SFTP_TIMETABLE_PREFIX=timetable
+DTD_SFTP_FARES_PREFIX=fares
+```
+(Case-insensitive, matched against the start of each filename — adjust to
+whatever your account's actual filenames start with, e.g. `timetable_full.zip`
+and `timetable_update.zip` both match `timetable`.) Leave both blank if your
+account already separates feeds into distinct subfolders — the dir vars
+above are enough on their own in that case.
+
 `ETL_CRON=1` starts the nightly 2am sweep as a background job inside this
 same app (see `services/etl/cron/timetable-daily`) — you don't need a
 separate cron app.
+
+**Network Rail Track Model sync** (`track-model-sftp`, part of the nightly
+sweep) uses its own SFTP credentials — falls back to the `DTD_SFTP_*` values
+above if unset, so only set these if RDG issued separate SFTP access for
+Track Model:
+```
+NR_SFTP_HOST=...
+NR_SFTP_PORT=...
+NR_SFTP_USERNAME=...
+NR_SFTP_PASSWORD=...
+NR_SFTP_TRACK_MODEL_DIR=/
+```
+Same bare-host rule as `DTD_SFTP_HOST` above.
+
+⚠️ **`NR_SFTP_DELETE_PROCESSED` defaults to deleting remote files after
+successful processing.** This applies to both the Track Model sync above and
+`nr-ingest`'s reference-file sync (step 4) — set
+`NR_SFTP_DELETE_PROCESSED=false` on whichever app runs the sync if you want
+to keep processed files on the remote server, e.g. for a dry run or if
+another process also needs them.
+
+Two filesystem paths worth setting explicitly if you're mounting a
+persistent volume for them (defaults are container-local and lost on
+redeploy otherwise): `ETL_ARCHIVE_DIR` (default `/data/dtd/archive` —
+downloaded/uploaded timetable zips) and `ETL_GTFS_OUT_DIR` (default
+`/data/gtfs` — the produced GTFS output, pushed to `motis-sidecar` after
+each run so losing this between runs isn't critical, just wasted
+re-download work).
+
+If the timetable import is running out of memory (see "Low-memory server"
+below for the broader workaround), `ETL_DTD2MYSQL_HEAP_MB` (default `6144`)
+is the one lever that directly controls the `dtd2mysql` conversion step's
+heap size — lower it if the container's memory limit is tighter than 6GB,
+though a lower value trades speed/reliability for headroom.
 
 If doing `/map`, add `ORM_DATABASE_URL` pointing at `orm-db` — see step 8
 for why this needs the full external address, not an internal hostname.
@@ -421,68 +556,44 @@ pnpm --filter @mainline/nr-ingest start reference
 
 ### Step 8 — Map stack (map only)
 
-**In your separate Coolify project** (the fork you created in "Before you
-start"), create 5 apps, all **Dockerfile** build type, pointed at your fork:
+Self-hosting `orm-db`/`orm-import`/`orm-martin`/`orm-api`/`orm-proxy` needs
+more server resources than every environment has available. If you can't
+self-host it, `/map` can instead proxy the hosted instance of the same
+project at [openrailwaymap.app](https://openrailwaymap.app) through `web`'s
+own API — see `apps/web/app/api/map-tiles/[...path]/route.ts`.
 
-| App | Base Directory | Dockerfile Location | Public? |
-|---|---|---|---|
-| `orm-db` | `db` | `Dockerfile` | no |
-| `orm-import` | `import` | `Dockerfile` | no (one-off, run once) |
-| `orm-martin` | `/` | `martin.Dockerfile` | no |
-| `orm-api` | `/` | `api.Dockerfile` | no |
-| `orm-proxy` | `/` | `proxy.Dockerfile` | **yes** |
+**Why not point `NEXT_PUBLIC_TILES_URL` straight at `openrailwaymap.app`?**
+Confirmed by testing directly: it sends no CORS headers on any response, so
+a browser `fetch()` from your own domain is blocked outright before your app
+ever sees a response. Its usage policy also requires a valid
+`Referer`/`User-Agent` identifying a real application — generic or missing
+ones get a 403. Routing every style/tile/sprite/glyph request through your
+own server fixes both: the browser only ever talks to your domain, and the
+proxy route controls what's sent upstream.
 
-⚠️ **Base Directory matters, not just Dockerfile Location.** `orm-db` and
-`orm-import`'s Dockerfiles `COPY` files relative to their own folder (e.g.
-`db/Dockerfile` expects `extensions.sql` inside `db/`). If Coolify's build
-context is the repo root while the Dockerfile path is `db/Dockerfile`, the
-build fails with `"/extensions.sql": not found`. Set **Base Directory** to
-`db` (or `import`) and **Dockerfile Location** to just `Dockerfile` — not
-`db/Dockerfile` again, since it's now relative to that base directory.
-
-**`orm-db` env vars** (all three required, or Postgres refuses to start):
+No self-hosted apps to create for this option — just set on `web` (step 2):
 ```
-POSTGRES_HOST_AUTH_METHOD=trust
-PGDATA=/data/postgresql
-POSTGRES_DB=gis
+NEXT_PUBLIC_TILES_URL=https://<your-domain>/api/map-tiles
 ```
-⚠️ **Also turn off Coolify's default healthcheck for `orm-db`.** This image
-has no `curl`/`wget`, so Coolify's default healthcheck always reports
-"unhealthy" and rolls the deploy back, even once Postgres has started fine.
-Disable the healthcheck toggle in this app's settings.
+(Build-time, same as before — still needs a rebuild if you set/change it
+after `web`'s already deployed.) No `ORM_PUBLIC_HOST` needed; that var was
+specific to self-hosting `orm-proxy`.
 
-**`orm-martin` env vars:**
-```
-DATABASE_URL=postgresql://postgres@<orm-db-host>:5432/gis
-```
+⚠️ **openrailwaymap.app is a best-effort, volunteer-run community service —
+expect occasional gaps, not guaranteed uptime.** When testing this, some of
+its own tile sources (e.g. `electrification_railway_line_low`) returned 502
+while others worked fine, independent of anything in this repo — that's
+their upstream having a moment, not a bug in the proxy. `/map` will render
+with whatever layers are currently up and self-heal as their service
+recovers. If you need guaranteed uptime for the map, self-hosting (the
+`orm-*` apps, requires spare server capacity) is the only alternative — see
+this same project's own `SETUP.md` if you go that route later.
 
-**`orm-api` env vars:**
-```
-PORT=5000
-HOST=0.0.0.0
-POSTGRES_USER=postgres
-POSTGRES_HOST=<orm-db-host>
-POSTGRES_DB=gis
-```
-
-**`orm-proxy` env vars:**
-```
-TILES_UPSTREAM=<orm-martin-host>:3000
-API_UPSTREAM=<orm-api-host>:5000
-PUBLIC_PROTOCOL=https
-ORM_PUBLIC_HOST=<orm-proxy's own public domain, no protocol>
-```
-
-Deploy `orm-db` first, wait for it to be healthy, then run `orm-import` once
-(follow that repo's own `SETUP.md` for the GB OSM data download it needs).
-Then deploy `orm-martin`, `orm-api`, `orm-proxy`.
-
-Once `orm-proxy` has a public domain, go back to `web` (step 2) and set/fix
-`NEXT_PUBLIC_TILES_URL` to match, then rebuild.
-
-Also go back to `etl-cron` (step 6) and set `ORM_DATABASE_URL` — since
-`orm-db` lives in a different Coolify project, use whatever external
-address/port that project exposes it on, not an internal-only hostname.
+**One gap either way**: `etl-cron`'s `ORM_DATABASE_URL` (step 6, signal
+position data) has no hosted equivalent — that's a direct PostGIS query, not
+a tile/style request, so it only works against a self-hosted `orm-db`. Using
+the hosted proxy means that one feature (signal positions feeding your own
+database) has no data source; everything else on `/map` is unaffected.
 
 ---
 

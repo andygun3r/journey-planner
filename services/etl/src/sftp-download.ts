@@ -15,6 +15,19 @@ const REMOTE_DIRS: Record<SftpFeedName, string> = {
   fares: process.env.DTD_SFTP_FARES_DIR || "/fares",
 };
 
+// Some RDG SFTP accounts deliver every feed (timetable, fares, NR Track
+// Model, ...) into one shared root folder rather than per-feed
+// subdirectories — in that layout, pointing DTD_SFTP_TIMETABLE_DIR at "/"
+// would otherwise pick up every .zip in the folder, including files that
+// belong to a different feed entirely. Filenames are the only thing that
+// distinguishes them in that case, so filter by a per-feed prefix — set
+// only if your account needs it; unset means "no filtering, take every
+// .zip" (the original per-subfolder assumption).
+const NAME_PREFIXES: Record<SftpFeedName, string | undefined> = {
+  timetable: process.env.DTD_SFTP_TIMETABLE_PREFIX,
+  fares: process.env.DTD_SFTP_FARES_PREFIX,
+};
+
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is not set — required for SFTP feed delivery`);
@@ -22,17 +35,23 @@ function requireEnv(name: string): string {
 }
 
 /** Picks the most recently modified .zip in the remote directory. */
-async function latestZip(sftp: SftpClient, remoteDir: string): Promise<SftpClient.FileInfo> {
-  const zips = await listZips(sftp, remoteDir);
+async function latestZip(sftp: SftpClient, remoteDir: string, feed: SftpFeedName): Promise<SftpClient.FileInfo> {
+  const zips = await listZips(sftp, remoteDir, feed);
   const [latest] = zips;
   if (!latest) throw new Error(`No .zip files found in SFTP dir ${remoteDir}`);
   return latest;
 }
 
-/** All .zip files in the remote directory, oldest first. */
-async function listZips(sftp: SftpClient, remoteDir: string): Promise<SftpClient.FileInfo[]> {
+/** All .zip files in the remote directory matching the feed's name prefix (if set), oldest first. */
+async function listZips(sftp: SftpClient, remoteDir: string, feed: SftpFeedName): Promise<SftpClient.FileInfo[]> {
+  const prefix = NAME_PREFIXES[feed]?.toLowerCase();
   const entries = await sftp.list(remoteDir);
-  const zips = entries.filter((e) => e.type === "-" && e.name.toLowerCase().endsWith(".zip"));
+  const zips = entries.filter(
+    (e) =>
+      e.type === "-" &&
+      e.name.toLowerCase().endsWith(".zip") &&
+      (!prefix || e.name.toLowerCase().startsWith(prefix)),
+  );
   zips.sort((a, b) => a.modifyTime - b.modifyTime);
   return zips;
 }
@@ -55,7 +74,7 @@ async function withSftp<T>(fn: (sftp: SftpClient) => Promise<T>): Promise<T> {
 export async function downloadFeedViaSftp(feed: SftpFeedName, destDir: string): Promise<string> {
   return withSftp(async (sftp) => {
     const remoteDir = REMOTE_DIRS[feed];
-    const file = await latestZip(sftp, remoteDir);
+    const file = await latestZip(sftp, remoteDir, feed);
     await mkdir(destDir, { recursive: true });
     const dest = path.join(destDir, file.name);
     await sftp.fastGet(`${remoteDir}/${file.name}`, dest);
@@ -87,7 +106,7 @@ export async function downloadPendingFeedsViaSftp(
 ): Promise<DownloadedFeedFile[]> {
   return withSftp(async (sftp) => {
     const remoteDir = REMOTE_DIRS[feed];
-    const zips = await listZips(sftp, remoteDir);
+    const zips = await listZips(sftp, remoteDir, feed);
     const pending = zips.filter((z) => z.modifyTime > sinceModifiedAt);
 
     await mkdir(destDir, { recursive: true });
