@@ -15,22 +15,32 @@ export async function pushGtfsAndReimport(gtfsZipPath: string): Promise<void> {
   }
 
   console.log("[etl] uploading GTFS zip to motis sidecar...");
-  const uploadRes = await fetch(new URL("/upload-gtfs", baseUrl), {
-    method: "POST",
-    headers: { "x-internal-key": key, "content-type": "application/octet-stream" },
-    body: createReadStream(gtfsZipPath) as unknown as ReadableStream,
-    duplex: "half",
-  } as RequestInit);
+  let uploadRes: Response;
+  try {
+    uploadRes = await fetch(new URL("/upload-gtfs", baseUrl), {
+      method: "POST",
+      headers: { "x-internal-key": key, "content-type": "application/octet-stream" },
+      body: createReadStream(gtfsZipPath) as unknown as ReadableStream,
+      duplex: "half",
+    } as RequestInit);
+  } catch (err) {
+    throw new Error(`motis upload-gtfs: request to ${baseUrl} failed`, { cause: err });
+  }
   if (!uploadRes.ok) {
     const body = await uploadRes.text().catch(() => "");
     throw new Error(`motis upload-gtfs failed: ${uploadRes.status}${body ? ` ${body}` : ""}`);
   }
 
   console.log("[etl] triggering motis reimport...");
-  const reimportRes = await fetch(new URL("/reimport", baseUrl), {
-    method: "POST",
-    headers: { "x-internal-key": key },
-  });
+  let reimportRes: Response;
+  try {
+    reimportRes = await fetch(new URL("/reimport", baseUrl), {
+      method: "POST",
+      headers: { "x-internal-key": key },
+    });
+  } catch (err) {
+    throw new Error(`motis reimport: request to ${baseUrl} failed`, { cause: err });
+  }
   if (!reimportRes.ok) {
     const body = await reimportRes.text().catch(() => "");
     throw new Error(`motis reimport failed: ${reimportRes.status}${body ? ` ${body}` : ""}`);

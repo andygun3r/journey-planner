@@ -35,6 +35,22 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+/**
+ * Node's fetch() wraps the real network error (DNS failure, connection
+ * refused, timeout, ...) in `.cause`, one or two levels deep — the
+ * top-level message is always just "fetch failed", which is useless on its
+ * own. Unwrap it so logs/responses show what actually went wrong.
+ */
+function describeError(err: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = err;
+  while (current instanceof Error) {
+    parts.push(current.message);
+    current = current.cause;
+  }
+  return parts.join(" -> ");
+}
+
 async function readBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
@@ -106,8 +122,9 @@ export function startServer(port: number): void {
           send(res, 409, { error: err.message });
           return;
         }
-        console.error(`[etl] ${req.url} failed:`, (err as Error).message);
-        send(res, 500, { error: (err as Error).message });
+        const description = describeError(err);
+        console.error(`[etl] ${req.url} failed:`, description);
+        send(res, 500, { error: description });
       }
     })();
   });
