@@ -9,15 +9,16 @@ import { QuickJourneys } from "@/components/quick-journeys";
 import { SearchForm } from "@/components/search-form";
 import { listAlerts } from "@/lib/alerts";
 import { getDashboardData } from "@/lib/commute-dashboard";
+import { listCommutes } from "@/lib/commutes";
+import { serviceIndicatorsForCommutes } from "@/lib/commute-network-log";
 import { getUserId } from "@/lib/current-user";
-import { serviceIndicatorsByRegion } from "@/lib/disruptions";
 import { listFavourites } from "@/lib/favourites";
 import { getStations } from "@/lib/stations";
 import { activeTsrs } from "@/lib/tsr";
 
 export const dynamic = "force-dynamic";
 
-/** The commute status panel: next trains, alerts, and route disruptions. */
+/** The commute status panel: live leg-by-leg walkthrough and alerts. */
 async function CommuteStatus({
   userId,
   commuteId,
@@ -143,33 +144,31 @@ async function CommuteStatus({
           <CommutePanel leg={leg} journeys={state.journeys} />
         )}
       </section>
-
-      {state.disruptions.length > 0 && (
-        <section className="commute-disruptions">
-          <h2 className="editor-subhead">Disruptions on your route</h2>
-          <ul className="commute-disruption-list">
-            {state.disruptions.map((d) => (
-              <li key={d.id} className="commute-disruption">
-                <span className="chip chip-warn">{d.planned ? "Planned" : "Disruption"}</span>
-                <span>{d.summary}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
     </>
   );
 }
 
 /**
- * The network log: regional service status and active speed restrictions
- * read as one shift-log strip beneath the personal commute focus — quiet,
- * tabular, hairline-ruled rows rather than a second bank of cards competing
- * with "your commute" above. Regions with good service collapse to a single
- * line; only trouble earns a second line of detail.
+ * The network log: service status for the operators on the user's own
+ * commute(s) and active speed restrictions, read as one shift-log strip
+ * beneath the personal commute focus — quiet, tabular, hairline-ruled rows
+ * rather than a second bank of cards competing with "your commute" above.
+ * Regions with good service collapse to a single line; only trouble earns a
+ * second line of detail.
+ *
+ * Filtered to the operators actually running the user's commute routes
+ * (see commute-network-log.ts) — this isn't scoped to today's active leg, so
+ * it keeps showing on a rest day, a holiday, or once the user is done for
+ * the day, same as the rest of the "always on" network view. Signed-out
+ * visitors and users with no commutes yet see the unfiltered full network
+ * (nothing to filter down to).
  */
-async function NetworkLog() {
-  const [byRegion, tsrs] = await Promise.all([serviceIndicatorsByRegion(), activeTsrs()]);
+async function NetworkLog({ userId }: { userId: string | null }) {
+  const commutes = userId ? await listCommutes(userId).catch(() => []) : [];
+  const [byRegion, tsrs] = await Promise.all([
+    serviceIndicatorsForCommutes(commutes),
+    activeTsrs(),
+  ]);
   if (byRegion.size === 0 && tsrs.length === 0) return null;
 
   return (
@@ -260,7 +259,7 @@ export default async function Home({
         <QuickJourneys initialFavourites={favourites} />
       </section>
 
-      <NetworkLog />
+      <NetworkLog userId={userId} />
 
       <p className="editor-hint">
         <Link href="/status">Full network status →</Link>

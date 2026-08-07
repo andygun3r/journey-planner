@@ -12,8 +12,8 @@ interface QuickStart {
   workLabel: string;
 }
 
-/** Builds a synthetic ActiveLeg good enough for CommutePanel/CommuteWalkthrough — this
- *  is an ad-hoc journey, not a scheduled one, so window/backup/pin fields don't apply. */
+/** Builds a synthetic ActiveLeg good enough for CommutePanel — this is an
+ *  ad-hoc journey, not a scheduled one, so window/backup/pin fields don't apply. */
 function adHocLeg(direction: "am" | "pm", quickStart: QuickStart): ActiveLeg {
   const { homeCrs, homeLabel, workCrs, workLabel } = quickStart;
   const [originCrs, originLabel, destCrs, destLabel] =
@@ -35,8 +35,8 @@ function adHocLeg(direction: "am" | "pm", quickStart: QuickStart): ActiveLeg {
 /**
  * Quick "go to work" / "go home" actions for when nothing is scheduled right
  * now (rest of day / day off / holiday) — plans live from right now between
- * the commute's usual stations and drops straight into the same
- * walkthrough/departures/backup-routes panel a scheduled leg would show.
+ * the commute's usual stations and drops straight into the same leg-cards/
+ * backup-routes panel a scheduled leg would show.
  */
 export function AdHocCommuteStart({ quickStart }: { quickStart: QuickStart }) {
   const [direction, setDirection] = useState<"am" | "pm" | null>(null);

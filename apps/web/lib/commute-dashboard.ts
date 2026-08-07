@@ -11,6 +11,7 @@ import {
 import { listCommutes } from "./commutes";
 import { type Disruption as BoardDisruption, fetchStationDisruptions } from "./disruptions";
 import { holidayRangesFor } from "./holidays";
+import { enrichJourneyLive } from "./journey-live";
 import { planJourneys, type JourneyView } from "./journeys";
 import { buildPinnedJourney } from "./pinned-journey";
 
@@ -163,6 +164,18 @@ export async function getDashboardData(
     const outcome = await planJourneys(leg.originCrs, leg.destCrs, when);
     journeys = outcome.ok ? outcome.journeys : [];
     engineOffline = !outcome.ok && outcome.reason === "engine-offline";
+  }
+
+  // Live-enrich only the primary journey — the one the leg cards actually
+  // render. The board query this does is a real network+DB round trip per
+  // origin station, so there's no point paying it for backup options nobody
+  // is looking at yet (BackupRoutes enriches its own results on demand).
+  if (journeys[0]) {
+    try {
+      journeys[0] = await enrichJourneyLive(journeys[0]);
+    } catch {
+      /* live enrichment is best-effort; the plain plan still works */
+    }
   }
 
   // Origin-station disruptions (best-effort; never block the dashboard).

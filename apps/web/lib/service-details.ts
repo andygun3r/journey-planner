@@ -654,8 +654,8 @@ export async function fetchServiceDetailsByRid(rid: string): Promise<ServiceDeta
  * A JourneyLegView for one pinned leg's origin->dest span, built from a
  * specific Darwin run's calling pattern (darwin_stop_forecast, joined by
  * rid). Used by apps/web/lib/pinned-journey.ts to turn a pinned commute leg
- * into the same shape planJourneys() produces, so the walkthrough
- * (commute-walkthrough.ts/tsx) can render it unmodified.
+ * into the same shape planJourneys() produces, so the leg cards
+ * (commute-leg-cards.tsx) can render it unmodified.
  *
  * Returns null when the rid's calling pattern doesn't contain both CRS (e.g.
  * Darwin hasn't fully populated this run's stops yet) — the caller falls

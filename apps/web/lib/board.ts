@@ -120,7 +120,14 @@ async function fetchStationMessages(crs: string): Promise<string[]> {
   }
 }
 
-function normaliseOperatorName(name: string): string {
+/**
+ * Loosely-matchable key for an operator display name — strips case, spacing
+ * and punctuation so "South Western Railway" (LDBWS) and the Disruptions
+ * API's own tocName line up even if one has a stray "&"/hyphen the other
+ * doesn't. Exported for the commute network-log filter (commute-network-log.ts),
+ * which does the same RTPPM-style fuzzy join against a different feed.
+ */
+export function normaliseOperatorName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 

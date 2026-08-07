@@ -3593,191 +3593,164 @@ a.map-tip-anchor:hover .map-tip {
   margin: 0 0 0.2rem;
 }
 
-.commute-walkthrough {
+/* The live leg-card walkthrough — one card per train, horizontally
+   scrollable, replacing the old text-only walkthrough plus a separate
+   "next departures" list. Cards sit as bright white insets on the navy
+   status card, matching .commute-dep-next's old "one non-white row"
+   treatment, but each one now carries a real live picture: platform,
+   position, and — the one place this card lets Signal Red fill a whole
+   surface rather than just spot an accent — full-red when disrupted, since
+   the card itself IS the alert at that point. */
+.leg-cards {
   list-style: none;
-  padding: 0;
-  margin: 1.1rem 0;
+  padding: 0.1rem 0.1rem 0.6rem;
+  margin: 1.1rem -0.1rem 0;
   display: flex;
-  flex-direction: column;
-  gap: 0;
-  border-radius: var(--radius-control);
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
-}
-.walkthrough-step {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  align-items: baseline;
-  gap: 0.6rem;
-  padding: 0.55rem 0.8rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 0.88rem;
-}
-.walkthrough-step:last-child {
-  border-bottom: none;
-}
-.walkthrough-kind {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.5);
-}
-.walkthrough-time {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.75);
-}
-.walkthrough-text {
-  color: rgba(255, 255, 255, 0.85);
-}
-.walkthrough-done {
-  opacity: 0.55;
-}
-.walkthrough-current {
-  background: rgba(255, 255, 255, 0.1);
-}
-.walkthrough-current .walkthrough-kind {
-  color: var(--accent);
-}
-.walkthrough-current .walkthrough-text {
-  color: #ffffff;
-  font-weight: 600;
-}
-
-.commute-departures {
-  list-style: none;
-  padding: 0;
-  margin: 1.1rem 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.commute-dep {
-  border-radius: var(--radius-control);
-  background: rgba(255, 255, 255, 0.08);
-}
-.commute-dep-link {
-  display: grid;
-  grid-template-columns: auto auto 1fr auto auto auto;
-  align-items: center;
   gap: 0.7rem;
-  padding: 0.7rem 0.8rem;
-  text-decoration: none;
-  color: #ffffff;
-  border-radius: var(--radius-control);
-  cursor: pointer;
-  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
 }
-/* Hide the native disclosure triangle (we draw our own chevron). */
-.commute-dep-link::-webkit-details-marker {
-  display: none;
-}
-.commute-dep-link:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-.commute-dep-chevron {
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 0.9rem;
-  justify-self: end;
-  transition: transform 150ms ease-out;
-}
-.commute-dep details[open] .commute-dep-chevron,
-.commute-dep[open] .commute-dep-chevron,
-details[open] > .commute-dep-link .commute-dep-chevron {
-  transform: rotate(90deg);
-}
-.commute-legs {
-  padding: 0.2rem 0.8rem 0.8rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  margin-top: 0.1rem;
-  color: rgba(255, 255, 255, 0.85);
-}
-.commute-legs .leg-station {
-  color: #ffffff;
-}
-.commute-legs .leg-operator,
-.commute-legs .leg-calls,
-.commute-legs .change-note {
-  color: rgba(255, 255, 255, 0.62);
-}
-@media (prefers-reduced-motion: reduce) {
-  .commute-dep-chevron {
-    transition: none;
-  }
-}
-/* The next train still expected to run — Display-scale time, white card
-   floating inside the navy status card (the one non-white-on-navy row). */
-.commute-dep-next {
+.leg-card {
+  scroll-snap-align: start;
+  flex: 0 0 auto;
+  width: 15rem;
   background: #ffffff;
-  border-radius: var(--radius-control);
-}
-.commute-dep-next .commute-dep-link {
   color: var(--ink);
-  padding: 0.9rem 1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 0.85rem 0.9rem 0.9rem;
+  border: 2px solid transparent;
 }
-.commute-dep-next .commute-dep-time {
-  font-family: var(--font-display);
-  font-size: 2.25rem;
-  font-weight: 800;
-  color: var(--ink);
+.leg-card-current {
+  border-color: var(--rail-navy);
 }
-.commute-dep-next .commute-dep-arrive,
-.commute-dep-next .commute-dep-meta {
-  color: var(--muted);
+.leg-card-past {
+  opacity: 0.6;
 }
-.commute-dep-next .commute-dep-chevron {
-  color: var(--muted);
+.leg-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
-.commute-dep-cancelled .commute-dep-time,
-.commute-dep-cancelled .commute-dep-arrive {
-  text-decoration: line-through;
-  color: rgba(255, 255, 255, 0.55);
-}
-.commute-dep-time {
-  font-family: var(--font-time);
-  font-size: 1.15rem;
-  font-weight: 680;
-  font-variant-numeric: tabular-nums;
-  color: #ffffff;
-}
-.commute-dep-arrive {
-  font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 0.9rem;
-}
-.commute-dep-meta {
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 0.85rem;
-}
-.commute-dep-catch {
+.leg-card-kind {
   font-size: 0.7rem;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--accent);
+  text-transform: uppercase;
+  color: var(--muted);
 }
-
-.commute-disruptions {
-  margin-bottom: 1.5rem;
+.leg-card-plat,
+.leg-card-plat-link {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--ink);
+  text-decoration: none;
 }
-.commute-disruption-list {
-  list-style: none;
-  padding: 0;
-  margin: 0.5rem 0 0;
-  display: flex;
-  flex-direction: column;
+.leg-card-plat-link:hover {
+  text-decoration: underline;
+}
+.leg-card-plat-label {
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.03em;
+}
+.leg-card-route {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
   gap: 0.4rem;
 }
-.commute-disruption {
+.leg-card-stop {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--surface);
-  font-size: 0.9rem;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.leg-card-stop-end {
+  align-items: flex-end;
+  text-align: right;
+}
+.leg-card-time {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.leg-card-name {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.leg-card-arrow {
+  color: var(--border-strong);
+  font-size: 1.1rem;
+  padding-bottom: 0.3rem;
+}
+.leg-card-meta {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.leg-card-status {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.leg-card-status-live {
+  color: var(--muted);
+  font-weight: 400;
+}
+.leg-card-status-done {
+  color: var(--muted);
+  font-weight: 400;
+}
+.leg-card-status-warn {
+  color: var(--warn);
+}
+.leg-card-status-danger {
+  color: var(--on-red, #ffffff);
+}
+/* The disrupted state: the card itself becomes the alert, full Signal Red —
+   the one place this surface breaks the "red is a spotlight, never a fill"
+   rule, because a cancelled train is exactly the kind of single, screen-
+   worthy alert that rule exists to protect. */
+.leg-card-disrupted {
+  background: var(--signal-red);
+  border-color: var(--signal-red-deep);
+}
+.leg-card-disrupted .leg-card-kind,
+.leg-card-disrupted .leg-card-plat-label,
+.leg-card-disrupted .leg-card-name,
+.leg-card-disrupted .leg-card-meta {
+  color: rgba(255, 255, 255, 0.78);
+}
+.leg-card-disrupted .leg-card-plat,
+.leg-card-disrupted .leg-card-plat-link,
+.leg-card-disrupted .leg-card-time {
+  color: #ffffff;
+}
+.leg-card-disrupted .leg-card-arrow {
+  color: rgba(255, 255, 255, 0.5);
+}
+@media (max-width: 40rem) {
+  .leg-card {
+    width: 82vw;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .leg-cards {
+    scroll-behavior: auto;
+  }
 }
 
 /* ---- Home dashboard: shift strip, plan module, network log ----
@@ -4147,6 +4120,66 @@ details[open] > .commute-dep-link .commute-dep-chevron {
   color: #ffffff;
   font-weight: 700;
   border-bottom-color: var(--accent);
+}
+
+/* ---- Account menu (Settings/Admin — separated from the primary product nav) ---- */
+
+.account-menu {
+  position: relative;
+  margin-left: 0.75rem;
+  padding-left: 1.5rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.account-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.68);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.3rem 0.1rem;
+  border-bottom: 2px solid transparent;
+  transition: color 150ms ease-out;
+}
+.account-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.account-menu > summary:hover,
+.account-menu[open] > summary {
+  color: #ffffff;
+}
+.account-menu > summary.nav-active {
+  color: #ffffff;
+  font-weight: 700;
+  border-bottom-color: var(--accent);
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 9rem;
+  background: var(--surface);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-overlay);
+  padding: 0.35rem;
+}
+
+.account-menu-panel a {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border-radius: var(--radius-control);
+  padding: 0.55rem 0.6rem;
+  border-bottom: none;
+}
+.account-menu-panel a:hover {
+  background: var(--surface-2);
+  color: var(--ink);
 }
 
 /* ---- Network status: one panel, three internally-divided sections ---- */

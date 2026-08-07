@@ -8,10 +8,9 @@ import { stopForecastLegView } from "./service-details";
 
 /**
  * Turns a commute leg's pinned services into a JourneyView-shaped result for
- * TODAY, using live Darwin data where available. The walkthrough
- * (commute-walkthrough.ts/tsx) and CommutePanel consume a plain JourneyView
- * and don't know or care how it was produced — this is the only file that
- * needs to know pins exist.
+ * TODAY, using live Darwin data where available. CommutePanel (and the leg
+ * cards it renders) consume a plain JourneyView and don't know or care how
+ * it was produced — this is the only file that needs to know pins exist.
  */
 
 export type PinnedJourneyOutcome =

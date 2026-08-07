@@ -7,7 +7,6 @@ const TABS = [
   { href: "/", label: "Plan", icon: PlanIcon },
   { href: "/boards", label: "Boards", icon: BoardsIcon },
   { href: "/map", label: "Map", icon: MapIcon },
-  { href: "/commute", label: "Commute", icon: CommuteIcon },
   { href: "/status", label: "Status", icon: StatusIcon },
 ];
 
@@ -77,17 +76,6 @@ function MapIcon() {
         strokeLinejoin="round"
       />
       <path d="M9 4.5v13M15 6.5v13" stroke="currentColor" strokeWidth="2" />
-    </svg>
-  );
-}
-
-function CommuteIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
-      <rect x="5" y="4" width="14" height="16" rx="3" stroke="currentColor" strokeWidth="2" />
-      <path d="M5 9h14M9 4v-1M15 4v-1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="9" cy="14" r="1.3" fill="currentColor" />
-      <circle cx="15" cy="14" r="1.3" fill="currentColor" />
     </svg>
   );
 }
