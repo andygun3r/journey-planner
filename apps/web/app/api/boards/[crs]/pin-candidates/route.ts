@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { gtfsTripIdFromEngine } from "@signaller/routing-adapter";
 import { londonDate, londonWallTimeToIso } from "@signaller/shared";
 import { cachedBoard } from "@/lib/board-cache";
 
@@ -80,7 +81,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ crs:
       destinationName: d.destinationName,
       destinationCrs: d.destinationCrs,
       operator: d.operator,
-      tripId: d.tripId,
+      // On the MOTIS-fallback path (source !== "ldbws"), tripId is the
+      // engine's composite id (date_time_dataset_tag_<gtfsTripId>) — strip it
+      // to the bare GTFS trip id trip_mapping actually stores, exactly as
+      // precompute.ts does before every trip_mapping lookup. On the LDBWS
+      // path tripId is an opaque Darwin serviceID and must NOT be touched.
+      tripId: d.tripId && outcome.board.source !== "ldbws" ? gtfsTripIdFromEngine(d.tripId) : d.tripId,
       rid: d.rid,
       source: outcome.board.source,
     }))
