@@ -29,8 +29,18 @@ export interface GeocodeResult {
   label: string;
 }
 
+/**
+ * `?? "https://api.postcodes.io"` alone doesn't catch an env var set to ""
+ * (nullish coalescing only falls back on null/undefined) — an empty string
+ * is truthy-shaped enough to pass straight through, and `fetch("" + path)`
+ * then throws "Failed to parse URL" for every request, indistinguishable
+ * from a real network failure. A blank POSTCODES_IO_BASE_URL (e.g. a
+ * template line copied from .env.example with nothing filled in) is
+ * "unset," not "use no host at all," so trim and treat blank as absent.
+ */
 function baseUrl(): string {
-  return process.env.POSTCODES_IO_BASE_URL ?? "https://api.postcodes.io";
+  const configured = process.env.POSTCODES_IO_BASE_URL?.trim();
+  return configured || "https://api.postcodes.io";
 }
 
 async function attempt(url: string, timeoutMs: number): Promise<{ ok: true; data: unknown } | { ok: false; reason: string; retryable: boolean }> {

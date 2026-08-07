@@ -79,26 +79,24 @@ async function CommuteStatus({
           ? "No commute scheduled for today."
           : "You're done for today. Nothing more scheduled on this commute.";
     return (
-      <>
-        <section className="commute-focus">
-          <div className="commute-focus-head">
-            <h2>{state.commuteLabel}</h2>
-            <span className="when">
-              <Link href="/commute">details</Link>
-            </span>
-          </div>
-          <CommuteSwitcher
-            activeId={state.commuteId}
-            activeLabel={state.commuteLabel}
-            otherCommutes={state.otherCommutes}
-          />
-          <div className="notice">
-            <h2>Nothing right now</h2>
-            <p>{message}</p>
-          </div>
-        </section>
+      <section className="commute-focus">
+        <div className="commute-focus-head">
+          <h2>{state.commuteLabel}</h2>
+          <span className="when">
+            <Link href="/commute">details</Link>
+          </span>
+        </div>
+        <CommuteSwitcher
+          activeId={state.commuteId}
+          activeLabel={state.commuteLabel}
+          otherCommutes={state.otherCommutes}
+        />
+        <div className="notice">
+          <h2>Nothing right now</h2>
+          <p>{message}</p>
+        </div>
         {state.quickStart && <AdHocCommuteStart quickStart={state.quickStart} />}
-      </>
+      </section>
     );
   }
 

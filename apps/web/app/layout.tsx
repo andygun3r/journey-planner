@@ -87,7 +87,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <div className="shell">
           <div id="main">{children}</div>
         </div>
-        <TabBar />
+        <TabBar isSignedIn={sessionUser != null} isAdmin={isAdmin} />
         <FocusOnNavigate />
         <RegisterSW />
       </body>

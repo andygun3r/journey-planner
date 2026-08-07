@@ -37,6 +37,11 @@ function adHocLeg(direction: "am" | "pm", quickStart: QuickStart): ActiveLeg {
  * now (rest of day / day off / holiday) — plans live from right now between
  * the commute's usual stations and drops straight into the same leg-cards/
  * backup-routes panel a scheduled leg would show.
+ *
+ * Renders inline, not as its own card — the caller (the dashboard's "Nothing
+ * right now" commute-focus section) owns the single surrounding card so the
+ * buttons and whatever they produce read as one place, not a stray second
+ * card sitting under the first.
  */
 export function AdHocCommuteStart({ quickStart }: { quickStart: QuickStart }) {
   const [direction, setDirection] = useState<"am" | "pm" | null>(null);
@@ -74,7 +79,7 @@ export function AdHocCommuteStart({ quickStart }: { quickStart: QuickStart }) {
   if (direction) {
     const leg = adHocLeg(direction, quickStart);
     return (
-      <section className="commute-focus">
+      <div className="ad-hoc-active">
         <div className="commute-focus-head">
           <span className="chip chip-muted">{direction === "am" ? "To work" : "Home"}</span>
           <h2>
@@ -91,7 +96,7 @@ export function AdHocCommuteStart({ quickStart }: { quickStart: QuickStart }) {
           </p>
         )}
         {journeys && <CommutePanel leg={leg} journeys={journeys} />}
-      </section>
+      </div>
     );
   }
 

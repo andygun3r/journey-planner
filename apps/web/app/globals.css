@@ -671,6 +671,14 @@ a {
   gap: 0.6rem;
   margin-top: 1.25rem;
 }
+/* The ad-hoc "go to work/home" result — same divider treatment as
+   .commute-backup so it reads as another section of the one commute-focus
+   card it now lives inside, not a second card of its own. */
+.ad-hoc-active {
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding-top: 1.25rem;
+  margin-top: 1.25rem;
+}
 
 .notice-warn {
   border-color: color-mix(in oklch, var(--warn) 40%, transparent);
@@ -1240,6 +1248,11 @@ a {
   color: var(--muted);
   text-decoration: none;
   transition: color 150ms ease-out;
+  /* .tab is also used on the "More" <button> — reset button chrome so it matches the <Link> tabs. */
+  background: none;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .tab:hover {
@@ -1248,6 +1261,49 @@ a {
 
 .tab-active {
   color: var(--primary);
+}
+
+/* ---- "More" sheet (mobile tab bar) — Settings/Admin, same account-level
+   split as the desktop AccountMenu dropdown, as a sheet instead of a popover
+   since there's no natural anchor above a fixed bottom bar. ---- */
+
+.tab-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 41;
+  background: rgba(20, 22, 31, 0.32);
+  border: none;
+  padding: 0;
+}
+
+.tab-sheet {
+  position: fixed;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom) + 0.6rem);
+  z-index: 42;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-overlay);
+  padding: 0.4rem;
+}
+
+.tab-sheet-item {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 650;
+  font-size: 0.9375rem;
+  border-radius: var(--radius-control);
+  padding: 0.75rem 0.85rem;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.tab-sheet-item:hover {
+  background: var(--surface-2);
 }
 
 .tab-badge {
