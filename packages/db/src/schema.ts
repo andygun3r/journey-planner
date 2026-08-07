@@ -545,6 +545,25 @@ export const kbIncident = pgTable("kb_incident", {
   raw: jsonb("raw"),
 });
 
+/**
+ * Train operator reference data from the RDG Knowledgebase "TOCs" product
+ * (XML 4.0), nightly-synced by services/etl's kb-tocs job. Supplements the
+ * hardcoded ATOC-code lookups in packages/shared/src/toc.ts (name/region)
+ * with richer detail the KB feed carries — website, contact, description —
+ * that hardcoded table has no room for and isn't a good fit to hand-maintain.
+ */
+export const tocOperator = pgTable("toc_operator", {
+  /** ATOC 2-letter code, e.g. "GR" for LNER. */
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  website: text("website"),
+  contactPhone: text("contact_phone"),
+  contactEmail: text("contact_email"),
+  raw: jsonb("raw"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // Fares (loaded from DTD RJFAF)
 // ---------------------------------------------------------------------------

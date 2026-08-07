@@ -176,6 +176,13 @@
       "when": 1786089622893,
       "tag": "0024_hot_scream",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786099606838,
+      "tag": "0025_gorgeous_kitty_pryde",
+      "breakpoints": true
     }
   ]
 }

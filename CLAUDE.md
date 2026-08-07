@@ -124,22 +124,35 @@ service indicators (`/tocs/serviceIndicators`).
 - **Client**: `apps/web/lib/disruptions.ts`.
 - **Env**: `DISRUPTIONS_API_KEY`, `DISRUPTIONS_BASE_URL` (`…/1010-disruptions-experience-api-11_1`).
 
-### 5. Knowledgebase *(RDM REST)*
-Station facilities/accessibility (static, ~daily) plus an incidents feed (mostly
-planned engineering work with date ranges). Exact endpoint paths/response shape are
-unconfirmed until RDM registration — see `services/etl/src/kb-client.ts`.
+### 5. Knowledgebase *(RDM REST — three separate data products)*
+RDG's Knowledgebase is split into several independently-subscribed RDM products
+(raildata.org.uk, search "Knowledgebase"). Signaller uses three; each has its own
+key/base URL, same pattern as LDBWS vs Service Details vs Disruptions. Exact endpoint
+paths/response shape per product are unconfirmed until subscribed — see
+`services/etl/src/kb-client.ts`, the one place that boundary lives.
 
-- **Facilities**: nightly ETL job (`etl kb-facilities`, part of the nightly cron)
-  syncs into `station_facility`, surfaced on `/boards/[crs]` via
-  `apps/web/lib/stations.ts`'s `stationFacilities()`.
-- **Incidents**: `services/etl`'s standing service polls every 5 minutes
-  (`kb-incidents`, only runs when `ETL_CRON=1`) into `kb_incident`, surfaced as
-  "Planned engineering works" on `/status` via `apps/web/lib/kb-incidents.ts`. Kept
-  separate from the Disruptions API (§4) — not merged/deduped — since Disruptions
-  stays the primary live-status source and this is a forward-looking layer.
+- **Stations (JSON 5.0)** — station facilities/accessibility, static (~daily). Nightly
+  ETL job (`etl kb-facilities`, part of the nightly cron) syncs into `station_facility`,
+  surfaced on `/boards/[crs]` via `apps/web/lib/stations.ts`'s `stationFacilities()`.
+  **Env**: `KB_STATIONS_API_KEY`, `KB_STATIONS_BASE_URL`.
+- **Incidents (XML 5.0)** — mostly planned engineering work with date ranges.
+  `services/etl`'s standing service polls every 5 minutes (`kb-incidents`, only runs
+  when `ETL_CRON=1`) into `kb_incident`, surfaced as "Planned engineering works" on
+  `/status` via `apps/web/lib/kb-incidents.ts`. Kept separate from the Disruptions API
+  (§4) — not merged/deduped — since Disruptions stays the primary live-status source
+  and this is a forward-looking layer. **Env**: `KB_INCIDENTS_API_KEY`,
+  `KB_INCIDENTS_BASE_URL`.
+- **TOCs (XML 4.0)** — operator reference data (website, contact, description),
+  static. Nightly ETL job (`etl kb-tocs`) syncs into `toc_operator`, surfaced as an
+  operator website link on `/services/[id]`. Supplements, doesn't replace, the
+  hardcoded ATOC-code → name/region lookups in `packages/shared/src/toc.ts`, which
+  stay the source for name/region joins used throughout routing/live status. **Env**:
+  `KB_TOCS_API_KEY`, `KB_TOCS_BASE_URL`.
+- **Not subscribed**: Ticket Types, Ticket Restrictions, Promotions (ticket/fares
+  reference — DTD RJFAF already covers fares), National Service Indicator (overlaps
+  RTPPM + Disruptions API's `serviceIndicatorsByToc`, both already on `/status`).
 - **Auth**: consumer key in `x-apikey` (same as other RDM REST feeds; adjust
-  `kb-client.ts` if the real product differs).
-- **Env**: `KB_API_KEY`, `KB_BASE_URL`.
+  `kb-client.ts` if any product turns out to differ).
 
 ### 6. DTD static feeds — Timetable & Fares *(NRDP downloads)*
 Batch bulk data driving the routing engine and fares, **not** RDM APIs. Downloaded from
@@ -232,7 +245,7 @@ named signals/aspects.
 | Between-station positioning / moving-train icon | Network Rail TRUST + TD (with CORPUS/SMART) |
 | Disruptions & TOC service status | Disruptions API |
 | Signalling diagram (aspects) | Network Rail TD S-class + SOP maps |
-| Station facilities/accessibility, planned engineering works | Knowledgebase |
+| Station facilities/accessibility, planned engineering works, operator reference detail | Knowledgebase |
 
 ## Licensing
 

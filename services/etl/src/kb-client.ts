@@ -1,23 +1,36 @@
 /**
- * Shared fetch/parse helpers for the RDG Knowledgebase (KB) feed: station
- * facilities/accessibility (nightly, kb-facilities.ts) and the incidents
- * feed (5-min poll, kb-incidents.ts) — see CLAUDE.md §5.
+ * Shared fetch/parse helpers for the RDG Knowledgebase feeds — three separate
+ * RDM data products, each with its own subscription/key like every other RDM
+ * product in this repo (compare LDBWS vs Service Details vs Disruptions,
+ * each with distinct *_API_KEY/*_BASE_URL pairs):
  *
- * Auth shape and exact base path are unconfirmed until RDM registration.
- * This module is the one place that boundary lives — if the real API turns
- * out to need OAuth instead of an x-apikey header, or XML instead of JSON,
- * fix it here; kb-facilities.ts/kb-incidents.ts and everything downstream
- * shouldn't need to change.
+ *   - Stations (JSON 5.0)  — station facilities/accessibility, nightly (kb-facilities.ts)
+ *   - Incidents (XML 5.0)  — planned engineering work, 5-min poll (kb-incidents.ts)
+ *   - TOCs (XML 4.0)       — operator reference data, nightly (kb-tocs.ts)
+ *
+ * Auth is assumed to be x-apikey (the pattern every other RDM REST feed in
+ * this repo uses), and the exact response shape per product is unconfirmed
+ * until subscribed — this module is the one place both boundaries live, so
+ * fixes stay local to it rather than rippling into the three sync jobs.
  */
 
-export function kbConfigured(): boolean {
-  return Boolean(process.env.KB_API_KEY && process.env.KB_BASE_URL);
+import { XMLParser } from "fast-xml-parser";
+
+export type KbProduct = "stations" | "incidents" | "tocs";
+
+function envPrefix(product: KbProduct): string {
+  return `KB_${product.toUpperCase()}`;
 }
 
-/** GET a KB endpoint as JSON. Returns null (never throws) if unconfigured, non-OK, or unreachable. */
-export async function kbGetJson(path: string): Promise<unknown | null> {
-  const key = process.env.KB_API_KEY;
-  const base = process.env.KB_BASE_URL;
+export function kbProductConfigured(product: KbProduct): boolean {
+  const prefix = envPrefix(product);
+  return Boolean(process.env[`${prefix}_API_KEY`] && process.env[`${prefix}_BASE_URL`]);
+}
+
+async function kbFetch(product: KbProduct, path: string): Promise<Response | null> {
+  const prefix = envPrefix(product);
+  const key = process.env[`${prefix}_API_KEY`];
+  const base = process.env[`${prefix}_BASE_URL`];
   if (!key || !base) return null;
   try {
     const res = await fetch(`${base}${path}`, {
@@ -25,7 +38,36 @@ export async function kbGetJson(path: string): Promise<unknown | null> {
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) return null;
+    return res;
+  } catch {
+    return null;
+  }
+}
+
+/** GET a KB endpoint as JSON. Returns null (never throws) if unconfigured, non-OK, or unreachable. */
+export async function kbGetJson(product: KbProduct, path: string): Promise<unknown | null> {
+  const res = await kbFetch(product, path);
+  if (!res) return null;
+  try {
     return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  trimValues: true,
+});
+
+/** GET a KB endpoint as XML, parsed to a plain object. Returns null (never throws) on any failure. */
+export async function kbGetXml(product: KbProduct, path: string): Promise<unknown | null> {
+  const res = await kbFetch(product, path);
+  if (!res) return null;
+  try {
+    const text = await res.text();
+    return xmlParser.parse(text);
   } catch {
     return null;
   }
@@ -58,4 +100,14 @@ export function stripHtml(html: string | undefined): string {
       .replace(/\s+/g, " ")
       .trim(),
   );
+}
+
+/**
+ * XML-parsed collections are inconsistent about arrays: fast-xml-parser
+ * gives you a single object when there's one element, an array when there's
+ * more than one. Every KB XML consumer needs this — normalise once here.
+ */
+export function asArray<T>(value: T | T[] | undefined): T[] {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
 }

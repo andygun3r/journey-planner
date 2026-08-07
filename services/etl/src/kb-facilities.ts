@@ -1,21 +1,21 @@
 /**
  * Nightly sync of station facilities/accessibility from the RDG Knowledgebase
- * feed into station_facility. Static data — the feed itself is documented as
- * refreshing at most every 24h — so a nightly run (see
+ * "Stations (JSON)" product (JSON 5.0 — the enhanced-accessibility stations
+ * feed, distinct from the plain XML 4.0 Stations product this app doesn't
+ * subscribe to) into station_facility. Static data — the feed itself is
+ * documented as refreshing at most every 24h — so a nightly run (see
  * services/etl/cron/run-and-reload-motis.sh) is enough; there's no separate
  * live poller for this half of KB (compare kb-incidents.ts).
  *
- * The exact response shape is unconfirmed until RDM registration (enhanced
- * accessibility is documented as a JSON v5.0 "stations" feed; everything
- * else in KB is XML v4.0). RawFacility below is a best guess, kept
- * deliberately permissive (all fields optional) so a wrong guess fails soft
- * — missing/renamed fields just leave the corresponding column null rather
- * than throwing — while the real payload is always retained in `raw` for
- * inspection and later column backfills.
+ * The exact response shape is unconfirmed until subscribed. RawFacility
+ * below is a best guess, kept deliberately permissive (all fields optional)
+ * so a wrong guess fails soft — missing/renamed fields just leave the
+ * corresponding column null rather than throwing — while the real payload
+ * is always retained in `raw` for inspection and later column backfills.
  */
 
 import { createDb, stationFacility } from "@signaller/db";
-import { kbConfigured, kbGetJson } from "./kb-client.js";
+import { kbGetJson, kbProductConfigured } from "./kb-client.js";
 
 interface RawFacility {
   crsCode?: string;
@@ -55,12 +55,12 @@ function toRow(f: RawFacility): (typeof stationFacility.$inferInsert) | null {
 }
 
 export async function syncStationFacilities(): Promise<void> {
-  if (!kbConfigured()) {
-    console.log("[etl] KB_API_KEY/KB_BASE_URL not set — skipping station facilities sync.");
+  if (!kbProductConfigured("stations")) {
+    console.log("[etl] KB_STATIONS_API_KEY/KB_STATIONS_BASE_URL not set — skipping station facilities sync.");
     return;
   }
 
-  const data = await kbGetJson("/stations");
+  const data = await kbGetJson("stations", "/stations");
   if (!Array.isArray(data)) {
     console.error("[etl] Knowledgebase stations feed returned no usable data — skipping.");
     return;

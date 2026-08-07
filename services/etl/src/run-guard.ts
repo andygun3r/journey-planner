@@ -20,7 +20,12 @@ import { acquireSingletonLock, createDb, etlRun } from "@signaller/db";
  */
 
 /** Lock names. Fares and the timetable don't block each other — different data. */
-export type EtlLock = "etl-timetable" | "etl-fares" | "etl-kb-facilities" | "etl-kb-incidents";
+export type EtlLock =
+  | "etl-timetable"
+  | "etl-fares"
+  | "etl-kb-facilities"
+  | "etl-kb-incidents"
+  | "etl-kb-tocs";
 
 export class EtlBusyError extends Error {
   constructor(message: string) {

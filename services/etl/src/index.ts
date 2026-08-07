@@ -4,6 +4,7 @@ import { guarded } from "./run-guard.js";
 import { importOrmSignals } from "./orm-signals.js";
 import { syncStationFacilities } from "./kb-facilities.js";
 import { syncKbIncidents } from "./kb-incidents.js";
+import { syncTocOperators } from "./kb-tocs.js";
 import { snapStations } from "./snap-stations.js";
 import { trackModel } from "./track-model.js";
 import { syncTrackModelFromSftp } from "./track-model-sftp.js";
@@ -66,14 +67,22 @@ if (httpPort) {
       await syncTrackModelFromSftp();
       break;
     case "kb-facilities":
-      // Nightly sync of RDG Knowledgebase station facilities/accessibility
-      // into station_facility. No-ops if KB_API_KEY/KB_BASE_URL aren't set.
+      // Nightly sync of the RDG Knowledgebase "Stations (JSON)" product
+      // (station facilities/accessibility) into station_facility. No-ops if
+      // KB_STATIONS_API_KEY/KB_STATIONS_BASE_URL aren't set.
       await guarded("etl-kb-facilities", "kb-facilities", () => syncStationFacilities());
       break;
     case "kb-incidents":
-      // One-shot manual run of the KB incidents poll (server.ts runs this on
-      // a 5-min interval in standing-service mode) — for local testing.
+      // One-shot manual run of the KB "Incidents" product poll (server.ts
+      // runs this on a 5-min interval in standing-service mode) — for local
+      // testing. No-ops if KB_INCIDENTS_API_KEY/KB_INCIDENTS_BASE_URL aren't set.
       await guarded("etl-kb-incidents", "kb-incidents", () => syncKbIncidents());
+      break;
+    case "kb-tocs":
+      // Nightly sync of the RDG Knowledgebase "TOCs" product (operator
+      // reference data) into toc_operator. No-ops if
+      // KB_TOCS_API_KEY/KB_TOCS_BASE_URL aren't set.
+      await guarded("etl-kb-tocs", "kb-tocs", () => syncTocOperators());
       break;
     case "load-fares":
       // Re-load fares from the MariaDB scratch DB into Postgres (skips download/import).
@@ -85,7 +94,7 @@ if (httpPort) {
       break;
     default:
       console.error(
-        "Usage: etl <timetable|package|fares|load-fares|postprocess|snap-stations|orm-signals|rail-corridors|track-model|track-model-sftp|kb-facilities|kb-incidents|server>",
+        "Usage: etl <timetable|package|fares|load-fares|postprocess|snap-stations|orm-signals|rail-corridors|track-model|track-model-sftp|kb-facilities|kb-incidents|kb-tocs|server>",
       );
       process.exit(1);
   }

@@ -28,3 +28,6 @@ pnpm tsx src/index.ts track-model-sftp
 
 echo "Syncing National Rail Knowledgebase station facilities…"
 pnpm tsx src/index.ts kb-facilities
+
+echo "Syncing National Rail Knowledgebase TOC reference data…"
+pnpm tsx src/index.ts kb-tocs

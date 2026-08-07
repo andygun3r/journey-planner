@@ -13,6 +13,7 @@
     "@signaller/db": "workspace:*",
     "@signaller/shared": "workspace:*",
     "drizzle-orm": "^0.44.0",
+    "fast-xml-parser": "^5.10.1",
     "mysql2": "^3.11.0",
     "postgres": "^3.4.9",
     "ssh2-sftp-client": "^12.1.1"

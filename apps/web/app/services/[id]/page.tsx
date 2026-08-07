@@ -16,6 +16,7 @@ import {
   type ServicePortion,
   type ServiceProgress,
 } from "@/lib/service-details";
+import { getTocOperator } from "@/lib/toc-operators";
 import { parseHhmm } from "@/lib/uk-time";
 
 export const dynamic = "force-dynamic";
@@ -332,12 +333,24 @@ export default async function ServicePage({
     indicator = map?.get(service.operatorCode) ?? undefined;
   }
 
+  // Operator reference detail (website, contact) from the RDG Knowledgebase
+  // TOCs product — a bonus link, never required for the page to make sense.
+  const tocOperator = service.operatorCode ? await getTocOperator(service.operatorCode) : null;
+
   return (
     <main>
       <div className="results-head">
         <h1>
           {destination}
-          <span className="board-crs">{service.operator}</span>
+          <span className="board-crs">
+            {tocOperator?.website ? (
+              <a href={tocOperator.website} target="_blank" rel="noopener noreferrer">
+                {service.operator}
+              </a>
+            ) : (
+              service.operator
+            )}
+          </span>
         </h1>
         <span className="when">
           {indicator && (

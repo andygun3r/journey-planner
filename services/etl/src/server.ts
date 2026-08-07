@@ -3,9 +3,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { guarded, EtlBusyError } from "./run-guard.js";
-import { kbConfigured } from "./kb-client.js";
+import { kbProductConfigured } from "./kb-client.js";
 import { syncStationFacilities } from "./kb-facilities.js";
 import { syncKbIncidents } from "./kb-incidents.js";
+import { syncTocOperators } from "./kb-tocs.js";
 import { syncTrackModelFromSftp } from "./track-model-sftp.js";
 import { fares, importTimetableZip, timetable } from "./commands.js";
 
@@ -83,6 +84,7 @@ const routes: Record<string, Handler> = {
   "/track-model-sftp": () => syncTrackModelFromSftp(),
   "/kb-facilities": () => guarded("etl-kb-facilities", "kb-facilities", () => syncStationFacilities()),
   "/kb-incidents": () => guarded("etl-kb-incidents", "kb-incidents", () => syncKbIncidents()),
+  "/kb-tocs": () => guarded("etl-kb-tocs", "kb-tocs", () => syncTocOperators()),
   "/upload": (req) => handleUpload(req),
 };
 
@@ -111,12 +113,12 @@ const KB_INCIDENT_POLL_MS = 5 * 60 * 1000;
  * That's too fine-grained for crond's nightly sweep, so it runs as an
  * in-process interval instead — only in the standing-service deployment
  * (ETL_CRON=1), not for one-off `docker run --rm etl <command>` invocations.
- * No-ops entirely if KB_API_KEY/KB_BASE_URL aren't set, so this is inert
- * until the feed is actually configured.
+ * No-ops entirely if KB_INCIDENTS_API_KEY/KB_INCIDENTS_BASE_URL aren't set,
+ * so this is inert until the feed is actually configured.
  */
 function startKbIncidentPollIfConfigured(): void {
   if (process.env.ETL_CRON !== "1") return;
-  if (!kbConfigured()) return;
+  if (!kbProductConfigured("incidents")) return;
   console.log("[etl] starting Knowledgebase incidents poll (every 5 min)");
   const run = () =>
     guarded("etl-kb-incidents", "kb-incidents", () => syncKbIncidents()).catch((err) => {
