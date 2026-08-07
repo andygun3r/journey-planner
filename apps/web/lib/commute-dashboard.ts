@@ -1,6 +1,7 @@
 import {
   type ActiveLeg,
   dayOfWeekForDate,
+  type CommuteLegRecord,
   type CommuteRecord,
   londonDate,
   londonWallTimeToIso,
@@ -41,8 +42,28 @@ export type DashboardState =
       commuteLabel: string;
       reason: "rest-of-day" | "holiday" | "no-leg-today";
       otherCommutes: OtherCommute[];
+      /** Home/work stations for the quick "go home" / "go to work" actions —
+       *  from today's leg if one exists, otherwise the nearest day (forward,
+       *  then back) that has one. Absent only if the commute has no legs at all. */
+      quickStart?: { homeCrs: string; homeLabel: string; workCrs: string; workLabel: string };
     }
   | { kind: "no-commute" };
+
+/**
+ * The work station to offer for ad-hoc "go to work" / "go home" quick actions
+ * when nothing is scheduled right now — today's leg if the commute has one,
+ * otherwise the nearest day-of-week that does (checking forward first, e.g.
+ * Saturday looks at Monday before Friday, since that's the next time the
+ * commute actually runs).
+ */
+function nearestLegForQuickStart(legs: CommuteLegRecord[], todayDow: number): CommuteLegRecord | null {
+  if (legs.length === 0) return null;
+  for (let offset = 0; offset < 7; offset++) {
+    const forward = legs.find((l) => l.dayOfWeek === (todayDow + offset) % 7);
+    if (forward) return forward;
+  }
+  return null;
+}
 
 /**
  * Resolves the single commute leg in play right now and fetches the next real
@@ -88,12 +109,25 @@ export async function getDashboardData(
     const isHoliday = holidays.some((r) => today >= r.startDate && today <= r.endDate);
     const dow = dayOfWeekForDate(today);
     const hasLegToday = commute.legs.some((l) => l.dayOfWeek === dow);
+
+    const quickLeg = nearestLegForQuickStart(commute.legs, dow);
+    const quickStart =
+      quickLeg && commute.homeCrs
+        ? {
+            homeCrs: commute.homeCrs,
+            homeLabel: commute.homeLabel ?? "Home",
+            workCrs: quickLeg.workCrs,
+            workLabel: quickLeg.workLabel,
+          }
+        : undefined;
+
     return {
       kind: "no-active",
       commuteId: commute.id,
       commuteLabel: commute.label,
       reason: isHoliday ? "holiday" : hasLegToday ? "rest-of-day" : "no-leg-today",
       otherCommutes,
+      quickStart,
     };
   }
 

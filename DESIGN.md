@@ -281,6 +281,24 @@ interruption.
   · Map · Commute · Status), icon + label, active tab in Rail Navy, a Signal
   Red dot badge on any tab with a live alert. Safe-area aware.
 
+### The Network Log (home dashboard, signature)
+Regional service status and speed restrictions read as one shift-log strip,
+not a second bank of cards competing with the Journey Status Card above it:
+a tracked-uppercase Archivo label (`## log-head`, matching the card's own
+route-chip register), then hairline-ruled rows (no card shell, no shadow) —
+a 7px status dot (Signal Green/Signal Amber), the region or route in tabular
+type, and its status in words. A region with good service collapses to one
+line; only trouble earns a second, quieter detail line beneath. This is the
+home dashboard's answer to "the network" — deliberately smaller and quieter
+than the personal commute card, never equal to it.
+
+### The Shift Strip (home dashboard, signature)
+The dashboard's opening line: today's date in tracked-uppercase Archivo,
+a hairline rule beneath, the live-refresh indicator at the trailing edge.
+Replaces a page-title `h1` — the commute card immediately below it is the
+real subject of the page, so the strip stays quiet and gets out of the way
+in one glance.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -295,6 +313,9 @@ interruption.
 - **Do** round every corner generously — pill buttons/chips, 18px cards, 10px
   inputs — except the mark itself, which is a true circle.
 - **Do** keep every signal chip paired with text stating the condition.
+- **Do** let the personal (commute) always outweigh the ambient (network) on
+  a dashboard — network-wide status reads as a quiet log beneath the user's
+  own journey, never a second grid of equal-weight cards.
 
 ### Don't:
 - **Don't** reintroduce a second saturated accent — Signal Red does all the

@@ -54,7 +54,12 @@ export const CommuteLegPinInput = z.object({
   destCrs: CRS,
   destLabel: z.string().trim().min(1).max(60),
   schedArr: HHMM,
-  toc: z.string().trim().max(10).nullish(),
+  // Despite the name, this holds the operator's display name
+  // (operatorFromRouteName only returns a bare code when the route name
+  // itself is one — otherwise it's a full name like "South Western
+  // Railway"), so it needs the same length budget as the other display
+  // fields above, not a short-code-sized cap.
+  toc: z.string().trim().max(60).nullish(),
   pickedServiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 export type CommuteLegPinInput = z.infer<typeof CommuteLegPinInput>;
@@ -74,6 +79,20 @@ export const CommuteLegInput = z
     backupWorkCrs: CRS.nullish(),
     backupHomeCrs: CRS.nullish(),
     backupNote: z.string().trim().max(120).nullish(),
+    /**
+     * Per-direction origin/destination override — when set, that direction
+     * runs between these stations instead of the usual home<->work pair
+     * (e.g. a Saturday leg home from somewhere other than work). Null means
+     * "use home<->work as normal" — see resolveActiveLegForCommute.
+     */
+    amOriginCrs: CRS.nullish(),
+    amOriginLabel: z.string().trim().max(60).nullish(),
+    amDestCrs: CRS.nullish(),
+    amDestLabel: z.string().trim().max(60).nullish(),
+    pmOriginCrs: CRS.nullish(),
+    pmOriginLabel: z.string().trim().max(60).nullish(),
+    pmDestCrs: CRS.nullish(),
+    pmDestLabel: z.string().trim().max(60).nullish(),
     /**
      * Real pinned services for this day, primary over the am/pm window when
      * present (the window becomes a fallback — see resolveActiveLegForCommute).
@@ -152,6 +171,15 @@ export interface CommuteLegRecord {
   backupWorkCrs: string | null;
   backupHomeCrs: string | null;
   backupNote: string | null;
+  /** Per-direction origin/destination override — see CommuteLegInput's doc comment. */
+  amOriginCrs: string | null;
+  amOriginLabel: string | null;
+  amDestCrs: string | null;
+  amDestLabel: string | null;
+  pmOriginCrs: string | null;
+  pmOriginLabel: string | null;
+  pmDestCrs: string | null;
+  pmDestLabel: string | null;
   /** Pinned real services for this day, both directions, sequence-ordered. */
   pins: CommuteLegPinRecord[];
 }
@@ -265,9 +293,10 @@ function pinsFor(leg: CommuteLegRecord, dir: Direction): CommuteLegPinRecord[] |
  *
  * Rules (all in UK local time):
  *  - Today must not be a holiday and must have a leg for that day-of-week.
- *  - AM (home→work) is chosen while now is before or within the AM window.
- *  - Otherwise PM (work→home) is chosen while now is before or within the PM
- *    window.
+ *  - AM (home→work, unless overridden — see amOriginCrs/amDestCrs) is chosen
+ *    while now is before or within the AM window.
+ *  - Otherwise PM (work→home, unless overridden) is chosen while now is
+ *    before or within the PM window.
  *  - Once both windows for today have passed (or the day has neither remaining),
  *    returns null — the caller shows a rest-of-day / next-day state.
  *
@@ -298,10 +327,10 @@ export function resolveActiveLegForCommute(
       legId: leg.id,
       dayOfWeek: dow,
       direction: "am",
-      originCrs: homeCrs,
-      originLabel: homeLabel,
-      destCrs: leg.workCrs,
-      destLabel: leg.workLabel,
+      originCrs: leg.amOriginCrs ?? homeCrs,
+      originLabel: leg.amOriginLabel ?? homeLabel,
+      destCrs: leg.amDestCrs ?? leg.workCrs,
+      destLabel: leg.amDestLabel ?? leg.workLabel,
       windowStart: am.start,
       windowEnd: am.end,
       upcoming: nowHm < am.start,
@@ -318,10 +347,10 @@ export function resolveActiveLegForCommute(
       legId: leg.id,
       dayOfWeek: dow,
       direction: "pm",
-      originCrs: leg.workCrs,
-      originLabel: leg.workLabel,
-      destCrs: homeCrs,
-      destLabel: homeLabel,
+      originCrs: leg.pmOriginCrs ?? leg.workCrs,
+      originLabel: leg.pmOriginLabel ?? leg.workLabel,
+      destCrs: leg.pmDestCrs ?? homeCrs,
+      destLabel: leg.pmDestLabel ?? homeLabel,
       windowStart: pm.start,
       windowEnd: pm.end,
       upcoming: nowHm < pm.start,

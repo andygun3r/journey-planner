@@ -10,12 +10,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@better-auth/api-key": "^1.6.25",
-    "@better-auth/passkey": "^1.6.25",
+    "@better-auth/api-key": "1.7.0-rc.4",
+    "@better-auth/expo": "1.7.0-rc.4",
+    "@better-auth/passkey": "1.7.0-rc.4",
     "@signaller/db": "workspace:*",
     "@signaller/routing-adapter": "workspace:*",
     "@signaller/shared": "workspace:*",
-    "better-auth": "^1.6.25",
+    "better-auth": "1.7.0-rc.4",
     "drizzle-orm": "^0.44.7",
     "ioredis": "^5.6.0",
     "maplibre-gl": "^5.0.0",

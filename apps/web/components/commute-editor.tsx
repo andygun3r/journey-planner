@@ -45,6 +45,18 @@ function draftsFrom(commute: CommuteWithLegs | null, stations: StationOption[]):
         ? (byCrs.get(leg.backupHomeCrs) ?? { crs: leg.backupHomeCrs, name: leg.backupHomeCrs })
         : null,
       backupNote: leg.backupNote ?? "",
+      amOrigin: leg.amOriginCrs
+        ? (byCrs.get(leg.amOriginCrs) ?? { crs: leg.amOriginCrs, name: leg.amOriginLabel ?? leg.amOriginCrs })
+        : null,
+      amDest: leg.amDestCrs
+        ? (byCrs.get(leg.amDestCrs) ?? { crs: leg.amDestCrs, name: leg.amDestLabel ?? leg.amDestCrs })
+        : null,
+      pmOrigin: leg.pmOriginCrs
+        ? (byCrs.get(leg.pmOriginCrs) ?? { crs: leg.pmOriginCrs, name: leg.pmOriginLabel ?? leg.pmOriginCrs })
+        : null,
+      pmDest: leg.pmDestCrs
+        ? (byCrs.get(leg.pmDestCrs) ?? { crs: leg.pmDestCrs, name: leg.pmDestLabel ?? leg.pmDestCrs })
+        : null,
       amPins: leg.pins
         .filter((p) => p.direction === "am")
         .sort((a, b) => a.sequence - b.sequence)
@@ -139,6 +151,14 @@ export function CommuteEditor({ stations, commute }: Props) {
         backupWorkCrs: d.backupWork?.crs || null,
         backupHomeCrs: d.backupHome?.crs || null,
         backupNote: d.backupNote.trim() || null,
+        amOriginCrs: d.amOrigin?.crs || null,
+        amOriginLabel: d.amOrigin?.name || null,
+        amDestCrs: d.amDest?.crs || null,
+        amDestLabel: d.amDest?.name || null,
+        pmOriginCrs: d.pmOrigin?.crs || null,
+        pmOriginLabel: d.pmOrigin?.name || null,
+        pmDestCrs: d.pmDest?.crs || null,
+        pmDestLabel: d.pmDest?.name || null,
         pins: [
           ...d.amPins.map((p) => ({ ...p, direction: "am" as const })),
           ...d.pmPins.map((p) => ({ ...p, direction: "pm" as const })),
@@ -196,18 +216,18 @@ export function CommuteEditor({ stations, commute }: Props) {
         return "Set both a From and To for the evening window";
       const amProblem = findChainProblem(
         leg.pins.filter((p) => p.direction === "am"),
-        payload.homeCrs,
-        homeLabel.trim() || "Home",
-        leg.workCrs,
-        leg.workLabel,
+        leg.amOriginCrs ?? payload.homeCrs,
+        leg.amOriginLabel ?? (homeLabel.trim() || "Home"),
+        leg.amDestCrs ?? leg.workCrs,
+        leg.amDestLabel ?? leg.workLabel,
       );
       if (amProblem) return amProblem;
       const pmProblem = findChainProblem(
         leg.pins.filter((p) => p.direction === "pm"),
-        leg.workCrs,
-        leg.workLabel,
-        payload.homeCrs,
-        homeLabel.trim() || "Home",
+        leg.pmOriginCrs ?? leg.workCrs,
+        leg.pmOriginLabel ?? leg.workLabel,
+        leg.pmDestCrs ?? payload.homeCrs,
+        leg.pmDestLabel ?? (homeLabel.trim() || "Home"),
       );
       if (pmProblem) return pmProblem;
     }

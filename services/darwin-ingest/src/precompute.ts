@@ -67,6 +67,11 @@ interface LegRow {
   amWindowEnd: string | null;
   pmWindowStart: string | null;
   pmWindowEnd: string | null;
+  /** Per-direction origin/destination override — see packages/shared/src/commute.ts. */
+  amOriginCrs: string | null;
+  amDestCrs: string | null;
+  pmOriginCrs: string | null;
+  pmDestCrs: string | null;
   pins: PinRow[];
 }
 
@@ -312,8 +317,8 @@ async function resolveCorridor(
   const win = windowFor(leg, dir);
   if (!win) return;
 
-  const originCrs = dir === "am" ? leg.homeCrs : leg.workCrs;
-  const destCrs = dir === "am" ? leg.workCrs : leg.homeCrs;
+  const originCrs = dir === "am" ? (leg.amOriginCrs ?? leg.homeCrs) : (leg.pmOriginCrs ?? leg.workCrs);
+  const destCrs = dir === "am" ? (leg.amDestCrs ?? leg.workCrs) : (leg.pmDestCrs ?? leg.homeCrs);
   const when = londonWallTimeToIso(serviceDate, win.start);
 
   const engine = createEngine();
@@ -525,6 +530,10 @@ export async function precomputeAllCorridors(): Promise<void> {
         amWindowEnd: leg.amWindowEnd,
         pmWindowStart: leg.pmWindowStart,
         pmWindowEnd: leg.pmWindowEnd,
+        amOriginCrs: leg.amOriginCrs,
+        amDestCrs: leg.amDestCrs,
+        pmOriginCrs: leg.pmOriginCrs,
+        pmDestCrs: leg.pmDestCrs,
         pins: (pinsByLeg.get(leg.id) ?? []).sort((a, b) => a.sequence - b.sequence),
       };
       for (const serviceDate of dates) {

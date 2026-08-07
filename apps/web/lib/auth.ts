@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { magicLink } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { apiKey } from "@better-auth/api-key";
+import { expo } from "@better-auth/expo";
 import { Resend } from "resend";
 import * as schema from "@signaller/db";
 import { getDb } from "./db";
@@ -32,6 +33,10 @@ export const auth = betterAuth({
   database: drizzleAdapter(getDb(), { provider: "pg", schema }),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: appUrl,
+  // The Expo app's custom URL scheme (apps/mobile/app.config.ts's `scheme`),
+  // needed so magic-link/passkey redirects back into the native app are
+  // accepted. Web origin behaviour is unchanged.
+  trustedOrigins: ["signaller://"],
   emailAndPassword: { enabled: false },
   user: {
     additionalFields: {
@@ -65,5 +70,9 @@ export const auth = betterAuth({
       origin: appUrl,
     }),
     apiKey(),
+    // Native session support for apps/mobile — adds Expo-scheme redirect
+    // handling on top of the existing cookie-session flow above; the web
+    // app's own auth behaviour is unaffected.
+    expo(),
   ],
 });

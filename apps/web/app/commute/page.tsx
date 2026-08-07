@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AdHocCommuteStart } from "@/components/ad-hoc-commute-start";
 import { AlertFeed } from "@/components/alert-feed";
 import { BoardRefresher } from "@/components/board-refresher";
 import { CommutePanel } from "@/components/commute-panel";
@@ -77,6 +78,7 @@ export default async function CommuteDashboardPage({ searchParams }: Props) {
           <h2>Nothing right now</h2>
           <p>{message}</p>
         </div>
+        {state.quickStart && <AdHocCommuteStart quickStart={state.quickStart} />}
       </main>
     );
   }

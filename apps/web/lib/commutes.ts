@@ -45,6 +45,14 @@ function toLegRecord(row: typeof commuteLeg.$inferSelect, pins: CommuteLegPinRec
     backupWorkCrs: row.backupWorkCrs,
     backupHomeCrs: row.backupHomeCrs,
     backupNote: row.backupNote,
+    amOriginCrs: row.amOriginCrs,
+    amOriginLabel: row.amOriginLabel,
+    amDestCrs: row.amDestCrs,
+    amDestLabel: row.amDestLabel,
+    pmOriginCrs: row.pmOriginCrs,
+    pmOriginLabel: row.pmOriginLabel,
+    pmDestCrs: row.pmDestCrs,
+    pmDestLabel: row.pmDestLabel,
     pins: pins.sort((a, b) => a.sequence - b.sequence),
   };
 }
@@ -134,6 +142,14 @@ function legValues(commuteId: string, input: CommuteInput) {
     backupWorkCrs: l.backupWorkCrs ?? null,
     backupHomeCrs: l.backupHomeCrs ?? null,
     backupNote: l.backupNote ?? null,
+    amOriginCrs: l.amOriginCrs ?? null,
+    amOriginLabel: l.amOriginLabel ?? null,
+    amDestCrs: l.amDestCrs ?? null,
+    amDestLabel: l.amDestLabel ?? null,
+    pmOriginCrs: l.pmOriginCrs ?? null,
+    pmOriginLabel: l.pmOriginLabel ?? null,
+    pmDestCrs: l.pmDestCrs ?? null,
+    pmDestLabel: l.pmDestLabel ?? null,
   }));
 }
 

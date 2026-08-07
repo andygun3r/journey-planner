@@ -42,6 +42,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en-GB" className={`${archivo.variable} ${inter.variable}`}>
       <body>
+        {/*
+          DIRECTION CONTRACT (Impeccable, home dashboard — apps/web/app/page.tsx)
+          THESIS: a signaller's shift sheet, not a card grid — your commute
+          leads at full weight, the network is a quiet log beneath it, never
+          competing for attention.
+          OWN-WORLD: Signaller navy/red/Archivo system, unchanged; new here is
+          the log-strip rhythm (tracked labels, hairline rules, tabular rows)
+          that turns "network status" from stacked cards into one scannable
+          log, echoing the personal commute card's own label above it.
+          STORY: glance in five seconds — is my train running; if not, what
+          else; only then, is anything else on the network worth knowing.
+          FIRST VIEWPORT: shift-date strip, then the full-navy commute card
+          at its existing scale, unshrunk, uncompeted-with.
+          FORM: dashboard-as-shift-report, candidate 7/7, seed c0916f4e.
+          FINISH: unreviewed and undocumented is unfinished; this build ends
+          with the finish review, the verdict, and DESIGN.md.
+        */}
         <a href="#main" className="skip-link">
           Skip to content
         </a>

@@ -17,6 +17,16 @@ export interface DayDraft {
   backupWork: StationOption | null;
   backupHome: StationOption | null;
   backupNote: string;
+  /**
+   * Per-direction origin/destination override — when set, that direction runs
+   * between these stations instead of the usual home<->work pair (e.g. a
+   * Saturday commute home from somewhere other than work). Null/unset means
+   * "use home<->work as normal".
+   */
+  amOrigin: StationOption | null;
+  amDest: StationOption | null;
+  pmOrigin: StationOption | null;
+  pmDest: StationOption | null;
   /** Pinned real services for this day, primary over the am/pm window when set. */
   amPins: PinDraft[];
   pmPins: PinDraft[];
@@ -34,6 +44,10 @@ export function emptyDay(): DayDraft {
     backupWork: null,
     backupHome: null,
     backupNote: "",
+    amOrigin: null,
+    amDest: null,
+    pmOrigin: null,
+    pmDest: null,
     amPins: [],
     pmPins: [],
   };
@@ -115,6 +129,123 @@ function CopyDayControl({ fromDow, days, onCopy }: CopyDayControlProps) {
   );
 }
 
+interface DirectionFieldsetProps {
+  legend: string;
+  hint: string;
+  pins: PinDraft[];
+  onPinsChange: (pins: PinDraft[]) => void;
+  chainOriginCrs: string;
+  chainOriginLabel: string;
+  chainDestCrs: string;
+  chainDestLabel: string;
+  windowStart: string;
+  windowEnd: string;
+  onWindowStartChange: (v: string) => void;
+  onWindowEndChange: (v: string) => void;
+  dayOfWeek: number;
+  stations: StationOption[];
+  origin: StationOption | null;
+  onOriginChange: (s: StationOption | null) => void;
+  dest: StationOption | null;
+  onDestChange: (s: StationOption | null) => void;
+  defaultOriginLabel: string;
+  defaultDestLabel: string;
+  idPrefix: string;
+}
+
+/** One AM or PM leg's full editor: legend, picker, fallback window, and origin/destination override. */
+function DirectionFieldset({
+  legend,
+  hint,
+  pins,
+  onPinsChange,
+  chainOriginCrs,
+  chainOriginLabel,
+  chainDestCrs,
+  chainDestLabel,
+  windowStart,
+  windowEnd,
+  onWindowStartChange,
+  onWindowEndChange,
+  dayOfWeek,
+  stations,
+  origin,
+  onOriginChange,
+  dest,
+  onDestChange,
+  defaultOriginLabel,
+  defaultDestLabel,
+  idPrefix,
+}: DirectionFieldsetProps) {
+  const overridden = Boolean(origin || dest);
+  return (
+    <fieldset className="window">
+      <legend>
+        {overridden ? `${chainOriginLabel} → ${chainDestLabel}` : legend}
+      </legend>
+      <p className="editor-hint">{hint}</p>
+      <PinnedLegPicker
+        pins={pins}
+        onChange={onPinsChange}
+        chainOriginCrs={chainOriginCrs}
+        chainOriginLabel={chainOriginLabel}
+        chainDestCrs={chainDestCrs}
+        chainDestLabel={chainDestLabel}
+        windowStart={windowStart || "00:00"}
+        dayOfWeek={dayOfWeek}
+      />
+      <div className="window-times">
+        <label>
+          From{pins.length > 0 ? " (fallback)" : ""}
+          <input type="time" value={windowStart} onChange={(e) => onWindowStartChange(e.target.value)} />
+        </label>
+        <label>
+          To{pins.length > 0 ? " (fallback)" : ""}
+          <input type="time" value={windowEnd} onChange={(e) => onWindowEndChange(e.target.value)} />
+        </label>
+      </div>
+
+      <details className="day-override">
+        <summary>{overridden ? "Change origin/destination (set)" : "Change origin/destination"}</summary>
+        <p className="editor-hint">
+          Not commuting {defaultOriginLabel} → {defaultDestLabel} this day? Set where this leg
+          actually starts and ends instead — e.g. commuting home from somewhere else.
+        </p>
+        <div className="day-work">
+          <StationInput
+            label="Starts at"
+            name={`${idPrefix}-origin`}
+            stations={stations}
+            value={origin}
+            onChange={onOriginChange}
+            placeholder={defaultOriginLabel}
+          />
+          <StationInput
+            label="Ends at"
+            name={`${idPrefix}-dest`}
+            stations={stations}
+            value={dest}
+            onChange={onDestChange}
+            placeholder={defaultDestLabel}
+          />
+        </div>
+        {overridden && (
+          <button
+            type="button"
+            className="btn-link"
+            onClick={() => {
+              onOriginChange(null);
+              onDestChange(null);
+            }}
+          >
+            Reset to {defaultOriginLabel} → {defaultDestLabel}
+          </button>
+        )}
+      </details>
+    </fieldset>
+  );
+}
+
 interface Props {
   stations: StationOption[];
   days: DayDraft[];
@@ -128,164 +259,153 @@ interface Props {
 export function WeeklyGrid({ stations, days, onChange, homeCrs, homeLabel, onCopyDay }: Props) {
   return (
     <div className="weekly-grid">
-      {days.map((day, i) => (
-        <div key={i} className={`day-row ${day.active ? "day-active" : "day-off"}`}>
-          <div className="day-head">
-            <label className="day-toggle">
-              <input
-                type="checkbox"
-                checked={day.active}
-                onChange={(e) => onChange(i, { active: e.target.checked })}
-                aria-label={`Commute on ${DAY_NAMES[i]}`}
-              />
-              <span className="day-name">
-                <span className="day-name-full">{DAY_NAMES[i]}</span>
-                <span className="day-name-short" aria-hidden="true">
-                  {DAY_SHORT[i]}
-                </span>
-              </span>
-            </label>
-            {day.active && <CopyDayControl fromDow={i} days={days} onCopy={onCopyDay} />}
-          </div>
+      {days.map((day, i) => {
+        const defaultHomeLabel = homeLabel || "Home";
+        const defaultWorkLabel = day.workLabel || day.work?.name || "Work";
+        const amOriginCrs = day.amOrigin?.crs || homeCrs;
+        const amOriginLabel = day.amOrigin?.name || defaultHomeLabel;
+        const amDestCrs = day.amDest?.crs || day.work?.crs || "";
+        const amDestLabel = day.amDest?.name || defaultWorkLabel;
+        const pmOriginCrs = day.pmOrigin?.crs || day.work?.crs || "";
+        const pmOriginLabel = day.pmOrigin?.name || defaultWorkLabel;
+        const pmDestCrs = day.pmDest?.crs || homeCrs;
+        const pmDestLabel = day.pmDest?.name || defaultHomeLabel;
 
-          {day.active && (
-            <div className="day-body">
-              <div className="day-work">
-                <StationInput
-                  label="Work location"
-                  name={`work-${i}`}
-                  stations={stations}
-                  value={day.work}
-                  onChange={(s) => onChange(i, { work: s })}
-                  placeholder="Where do you work this day?"
+        return (
+          <div key={i} className={`day-row ${day.active ? "day-active" : "day-off"}`}>
+            <div className="day-head">
+              <label className="day-toggle">
+                <input
+                  type="checkbox"
+                  checked={day.active}
+                  onChange={(e) => onChange(i, { active: e.target.checked })}
+                  aria-label={`Commute on ${DAY_NAMES[i]}`}
                 />
-                <div className="field">
-                  <label htmlFor={`worklabel-${i}`}>Label</label>
-                  <input
-                    id={`worklabel-${i}`}
-                    type="text"
-                    maxLength={60}
-                    placeholder="Head office"
-                    value={day.workLabel}
-                    onChange={(e) => onChange(i, { workLabel: e.target.value })}
-                  />
-                </div>
-              </div>
+                <span className="day-name">
+                  <span className="day-name-full">{DAY_NAMES[i]}</span>
+                  <span className="day-name-short" aria-hidden="true">
+                    {DAY_SHORT[i]}
+                  </span>
+                </span>
+              </label>
+              {day.active && <CopyDayControl fromDow={i} days={days} onCopy={onCopyDay} />}
+            </div>
 
-              <div className="day-windows">
-                <fieldset className="window">
-                  <legend>Morning · home → work</legend>
-                  <p className="editor-hint">
-                    Pick real trains below, or just set a rough time window — pinned trains take
-                    priority when both are set.
-                  </p>
-                  <PinnedLegPicker
-                    pins={day.amPins}
-                    onChange={(pins) => onChange(i, { amPins: pins })}
-                    chainOriginCrs={homeCrs}
-                    chainOriginLabel={homeLabel || "Home"}
-                    chainDestCrs={day.work?.crs ?? ""}
-                    chainDestLabel={day.workLabel || day.work?.name || "Work"}
-                    windowStart={day.amStart || "00:00"}
-                    dayOfWeek={i}
-                  />
-                  <div className="window-times">
-                    <label>
-                      From{day.amPins.length > 0 ? " (fallback)" : ""}
-                      <input
-                        type="time"
-                        value={day.amStart}
-                        onChange={(e) => onChange(i, { amStart: e.target.value })}
-                      />
-                    </label>
-                    <label>
-                      To{day.amPins.length > 0 ? " (fallback)" : ""}
-                      <input
-                        type="time"
-                        value={day.amEnd}
-                        onChange={(e) => onChange(i, { amEnd: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                </fieldset>
-
-                <fieldset className="window">
-                  <legend>Evening · work → home</legend>
-                  <p className="editor-hint">
-                    Pick real trains below, or just set a rough time window — pinned trains take
-                    priority when both are set.
-                  </p>
-                  <PinnedLegPicker
-                    pins={day.pmPins}
-                    onChange={(pins) => onChange(i, { pmPins: pins })}
-                    chainOriginCrs={day.work?.crs ?? ""}
-                    chainOriginLabel={day.workLabel || day.work?.name || "Work"}
-                    chainDestCrs={homeCrs}
-                    chainDestLabel={homeLabel || "Home"}
-                    windowStart={day.pmStart || "00:00"}
-                    dayOfWeek={i}
-                  />
-                  <div className="window-times">
-                    <label>
-                      From{day.pmPins.length > 0 ? " (fallback)" : ""}
-                      <input
-                        type="time"
-                        value={day.pmStart}
-                        onChange={(e) => onChange(i, { pmStart: e.target.value })}
-                      />
-                    </label>
-                    <label>
-                      To{day.pmPins.length > 0 ? " (fallback)" : ""}
-                      <input
-                        type="time"
-                        value={day.pmEnd}
-                        onChange={(e) => onChange(i, { pmEnd: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                </fieldset>
-              </div>
-
-              <details className="day-backup">
-                <summary>Backup route (optional)</summary>
-                <p className="editor-hint">
-                  If your usual station is disrupted, we&rsquo;ll offer this as a quick alternative —
-                  we still search live for the best train, this just points us where to look.
-                </p>
+            {day.active && (
+              <div className="day-body">
                 <div className="day-work">
                   <StationInput
-                    label="Backup work station"
-                    name={`backup-work-${i}`}
+                    label="Work location"
+                    name={`work-${i}`}
                     stations={stations}
-                    value={day.backupWork}
-                    onChange={(s) => onChange(i, { backupWork: s })}
-                    placeholder="e.g. a nearby station"
+                    value={day.work}
+                    onChange={(s) => onChange(i, { work: s })}
+                    placeholder="Where do you work this day?"
                   />
-                  <StationInput
-                    label="Backup home station"
-                    name={`backup-home-${i}`}
+                  <div className="field">
+                    <label htmlFor={`worklabel-${i}`}>Label</label>
+                    <input
+                      id={`worklabel-${i}`}
+                      type="text"
+                      maxLength={60}
+                      placeholder="Head office"
+                      value={day.workLabel}
+                      onChange={(e) => onChange(i, { workLabel: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="day-windows">
+                  <DirectionFieldset
+                    legend="Morning · home → work"
+                    hint="Pick real trains below, or just set a rough time window — pinned trains take priority when both are set."
+                    pins={day.amPins}
+                    onPinsChange={(pins) => onChange(i, { amPins: pins })}
+                    chainOriginCrs={amOriginCrs}
+                    chainOriginLabel={amOriginLabel}
+                    chainDestCrs={amDestCrs}
+                    chainDestLabel={amDestLabel}
+                    windowStart={day.amStart}
+                    windowEnd={day.amEnd}
+                    onWindowStartChange={(v) => onChange(i, { amStart: v })}
+                    onWindowEndChange={(v) => onChange(i, { amEnd: v })}
+                    dayOfWeek={i}
                     stations={stations}
-                    value={day.backupHome}
-                    onChange={(s) => onChange(i, { backupHome: s })}
-                    placeholder="e.g. a nearby station"
+                    origin={day.amOrigin}
+                    onOriginChange={(s) => onChange(i, { amOrigin: s })}
+                    dest={day.amDest}
+                    onDestChange={(s) => onChange(i, { amDest: s })}
+                    defaultOriginLabel={defaultHomeLabel}
+                    defaultDestLabel={defaultWorkLabel}
+                    idPrefix={`am-override-${i}`}
+                  />
+
+                  <DirectionFieldset
+                    legend="Evening · work → home"
+                    hint="Pick real trains below, or just set a rough time window — pinned trains take priority when both are set."
+                    pins={day.pmPins}
+                    onPinsChange={(pins) => onChange(i, { pmPins: pins })}
+                    chainOriginCrs={pmOriginCrs}
+                    chainOriginLabel={pmOriginLabel}
+                    chainDestCrs={pmDestCrs}
+                    chainDestLabel={pmDestLabel}
+                    windowStart={day.pmStart}
+                    windowEnd={day.pmEnd}
+                    onWindowStartChange={(v) => onChange(i, { pmStart: v })}
+                    onWindowEndChange={(v) => onChange(i, { pmEnd: v })}
+                    dayOfWeek={i}
+                    stations={stations}
+                    origin={day.pmOrigin}
+                    onOriginChange={(s) => onChange(i, { pmOrigin: s })}
+                    dest={day.pmDest}
+                    onDestChange={(s) => onChange(i, { pmDest: s })}
+                    defaultOriginLabel={defaultWorkLabel}
+                    defaultDestLabel={defaultHomeLabel}
+                    idPrefix={`pm-override-${i}`}
                   />
                 </div>
-                <div className="field">
-                  <label htmlFor={`backup-note-${i}`}>Note</label>
-                  <input
-                    id={`backup-note-${i}`}
-                    type="text"
-                    maxLength={120}
-                    placeholder="e.g. via Clapham Junction if Waterloo branch disrupted"
-                    value={day.backupNote}
-                    onChange={(e) => onChange(i, { backupNote: e.target.value })}
-                  />
-                </div>
-              </details>
-            </div>
-          )}
-        </div>
-      ))}
+
+                <details className="day-backup">
+                  <summary>Backup route (optional)</summary>
+                  <p className="editor-hint">
+                    If your usual station is disrupted, we&rsquo;ll offer this as a quick alternative —
+                    we still search live for the best train, this just points us where to look.
+                  </p>
+                  <div className="day-work">
+                    <StationInput
+                      label="Backup work station"
+                      name={`backup-work-${i}`}
+                      stations={stations}
+                      value={day.backupWork}
+                      onChange={(s) => onChange(i, { backupWork: s })}
+                      placeholder="e.g. a nearby station"
+                    />
+                    <StationInput
+                      label="Backup home station"
+                      name={`backup-home-${i}`}
+                      stations={stations}
+                      value={day.backupHome}
+                      onChange={(s) => onChange(i, { backupHome: s })}
+                      placeholder="e.g. a nearby station"
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`backup-note-${i}`}>Note</label>
+                    <input
+                      id={`backup-note-${i}`}
+                      type="text"
+                      maxLength={120}
+                      placeholder="e.g. via Clapham Junction if Waterloo branch disrupted"
+                      value={day.backupNote}
+                      onChange={(e) => onChange(i, { backupNote: e.target.value })}
+                    />
+                  </div>
+                </details>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

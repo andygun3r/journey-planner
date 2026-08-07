@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AdHocCommuteStart } from "@/components/ad-hoc-commute-start";
 import { AlertFeed } from "@/components/alert-feed";
 import { BoardRefresher } from "@/components/board-refresher";
 import { CommutePanel } from "@/components/commute-panel";
@@ -77,23 +78,26 @@ async function CommuteStatus({
           ? "No commute scheduled for today."
           : "You're done for today. Nothing more scheduled on this commute.";
     return (
-      <section className="commute-focus">
-        <div className="commute-focus-head">
-          <h2>{state.commuteLabel}</h2>
-          <span className="when">
-            <Link href="/commute">details</Link>
-          </span>
-        </div>
-        <CommuteSwitcher
-          activeId={state.commuteId}
-          activeLabel={state.commuteLabel}
-          otherCommutes={state.otherCommutes}
-        />
-        <div className="notice">
-          <h2>Nothing right now</h2>
-          <p>{message}</p>
-        </div>
-      </section>
+      <>
+        <section className="commute-focus">
+          <div className="commute-focus-head">
+            <h2>{state.commuteLabel}</h2>
+            <span className="when">
+              <Link href="/commute">details</Link>
+            </span>
+          </div>
+          <CommuteSwitcher
+            activeId={state.commuteId}
+            activeLabel={state.commuteLabel}
+            otherCommutes={state.otherCommutes}
+          />
+          <div className="notice">
+            <h2>Nothing right now</h2>
+            <p>{message}</p>
+          </div>
+        </section>
+        {state.quickStart && <AdHocCommuteStart quickStart={state.quickStart} />}
+      </>
     );
   }
 
@@ -157,54 +161,49 @@ async function CommuteStatus({
   );
 }
 
-/** Per-operator service status, grouped by Network Rail region. */
-async function RegionalDisruptions() {
-  const byRegion = await serviceIndicatorsByRegion();
-  if (byRegion.size === 0) return null;
+/**
+ * The network log: regional service status and active speed restrictions
+ * read as one shift-log strip beneath the personal commute focus — quiet,
+ * tabular, hairline-ruled rows rather than a second bank of cards competing
+ * with "your commute" above. Regions with good service collapse to a single
+ * line; only trouble earns a second line of detail.
+ */
+async function NetworkLog() {
+  const [byRegion, tsrs] = await Promise.all([serviceIndicatorsByRegion(), activeTsrs()]);
+  if (byRegion.size === 0 && tsrs.length === 0) return null;
 
   return (
-    <section className="dashboard-regions">
-      <h2 className="editor-subhead">Service status by region</h2>
-      <ul className="dashboard-region-list">
+    <section className="network-log" aria-labelledby="network-log-heading">
+      <h2 id="network-log-heading" className="log-head">
+        Network log
+      </h2>
+      <ul className="log-list">
         {[...byRegion.entries()].map(([region, indicators]) => {
           const disrupted = indicators.filter((i) => !i.good);
+          const ok = disrupted.length === 0;
           return (
-            <li key={region} className="dashboard-region">
-              <span className={`chip ${disrupted.length === 0 ? "chip-ok" : "chip-warn"}`}>
-                {disrupted.length === 0 ? "Good service" : `${disrupted.length} affected`}
-              </span>
-              <span className="dashboard-region-name">{region}</span>
-              {disrupted.length > 0 && (
-                <span className="dashboard-region-tocs">
-                  {disrupted.map((i) => i.tocName).join(", ")}
+            <li key={region} className={`log-row ${ok ? "" : "log-row-warn"}`}>
+              <span className="log-row-main">
+                <span className={`log-dot ${ok ? "log-dot-ok" : "log-dot-warn"}`} aria-hidden="true" />
+                <span className="log-row-label">{region}</span>
+                <span className="log-row-status">
+                  {ok ? "Good service" : `${disrupted.length} operator${disrupted.length === 1 ? "" : "s"} affected`}
                 </span>
-              )}
+              </span>
+              {!ok && <span className="log-row-detail">{disrupted.map((i) => i.tocName).join(", ")}</span>}
             </li>
           );
         })}
-      </ul>
-    </section>
-  );
-}
-
-/** Active Temporary Speed Restrictions from the NR feed, by route. */
-async function SpeedRestrictions() {
-  const tsrs = await activeTsrs();
-  if (tsrs.length === 0) return null;
-
-  return (
-    <section className="dashboard-regions">
-      <h2 className="editor-subhead">Speed restrictions</h2>
-      <ul className="dashboard-region-list">
         {tsrs.map((tsr) => (
-          <li key={tsr.tsrId} className="dashboard-region">
-            <span className="chip chip-warn">
-              {tsr.passengerSpeedMph !== null ? `${tsr.passengerSpeedMph}mph` : "Restricted"}
+          <li key={tsr.tsrId} className="log-row log-row-warn">
+            <span className="log-row-main">
+              <span className="log-dot log-dot-warn" aria-hidden="true" />
+              <span className="log-row-label">{tsr.lineName ?? tsr.routeGroup ?? "Unnamed route"}</span>
+              <span className="log-row-status">
+                {tsr.passengerSpeedMph !== null ? `${tsr.passengerSpeedMph}mph restriction` : "Speed restriction"}
+              </span>
             </span>
-            <span className="dashboard-region-name">
-              {tsr.lineName ?? tsr.routeGroup ?? "Unnamed route"}
-            </span>
-            <span className="dashboard-region-tocs">
+            <span className="log-row-detail">
               {tsr.fromStanox ?? "?"} → {tsr.toStanox ?? "?"}
               {tsr.reason ? ` · ${tsr.reason}` : ""}
             </span>
@@ -213,6 +212,14 @@ async function SpeedRestrictions() {
       </ul>
     </section>
   );
+}
+
+function todayLabel() {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date());
 }
 
 export default async function Home({
@@ -237,24 +244,23 @@ export default async function Home({
 
   return (
     <main className="commute-page">
-      <div className="results-head">
-        <h1>Dashboard</h1>
-        <span className="when">
-          <BoardRefresher intervalMs={30_000} />
-        </span>
+      <h1 className="sr-only">Dashboard</h1>
+      <div className="shift-strip">
+        <span className="shift-strip-date">{todayLabel()}</span>
+        <BoardRefresher intervalMs={30_000} />
       </div>
 
       <CommuteStatus userId={userId} commuteId={commuteId} shiftMinutes={shiftMinutes} />
 
-      <section>
-        <h2 className="editor-subhead">Plan a journey</h2>
+      <section className="plan-module" aria-labelledby="plan-heading">
+        <h2 id="plan-heading" className="log-head">
+          Plan something else
+        </h2>
         <SearchForm />
         <QuickJourneys initialFavourites={favourites} />
       </section>
 
-      <RegionalDisruptions />
-
-      <SpeedRestrictions />
+      <NetworkLog />
 
       <p className="editor-hint">
         <Link href="/status">Full network status →</Link>

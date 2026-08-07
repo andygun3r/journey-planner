@@ -665,6 +665,13 @@ a {
   border-color: color-mix(in oklch, var(--danger) 40%, transparent);
 }
 
+.ad-hoc-start {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+}
+
 .notice-warn {
   border-color: color-mix(in oklch, var(--warn) 40%, transparent);
 }
@@ -2171,6 +2178,27 @@ a {
 .day-backup .field {
   margin-top: 0.75rem;
 }
+
+.day-override {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-control);
+  padding: 0.6rem 0.7rem;
+  margin-top: 0.75rem;
+}
+.day-override summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.day-override .day-work {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 0.75rem;
+}
+.day-override > .btn-link {
+  margin-top: 0.6rem;
+}
+
 .window-times input[type="time"] {
   font: inherit;
   font-variant-numeric: tabular-nums;
@@ -3752,34 +3780,107 @@ details[open] > .commute-dep-link .commute-dep-chevron {
   font-size: 0.9rem;
 }
 
-.dashboard-regions {
-  margin-bottom: 1.5rem;
+/* ---- Home dashboard: shift strip, plan module, network log ----
+   "A signaller's shift sheet, not a card grid" — the commute card leads at
+   full weight; everything else reads as a quiet log beneath it rather than
+   a second bank of competing cards. */
+
+.shift-strip {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
 }
-.dashboard-region-list {
+.shift-strip-date {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.shift-strip .when {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* Shared log-style section head: tracked uppercase label, no card chrome —
+   the register carries through from the commute card's own label above it. */
+.log-head {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 2rem 0 0.75rem;
+}
+
+/* "Plan something else" — deliberately a lighter module than the commute
+   card above it: no navy fill, no shadow-elevated card shell, just the form
+   and its chips sitting on the page ground. */
+.plan-module {
+  margin-top: 0;
+}
+
+/* Network log — regional service + speed restrictions as one scannable log,
+   hairline-ruled rows rather than stacked cards. Good service collapses to
+   one line; only trouble earns a second line of detail. */
+.network-log {
+  margin: 0;
+}
+.log-list {
   list-style: none;
   padding: 0;
-  margin: 0.5rem 0 0;
+  margin: 0;
+  border-top: 1px solid var(--border);
+}
+.log-row {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.15rem;
+  padding: 0.6rem 0.1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.875rem;
 }
-.dashboard-region {
+.log-row-main {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 0.6rem;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--surface);
-  font-size: 0.9rem;
+  gap: 0.55rem;
 }
-.dashboard-region-name {
-  font-weight: 600;
+.log-dot {
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: none;
 }
-.dashboard-region-tocs {
+.log-dot-ok {
+  background: var(--ok);
+}
+.log-dot-warn {
+  background: var(--warn);
+}
+.log-row-label {
+  font-weight: 650;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.log-row-status {
   color: var(--muted);
-  font-size: 0.85rem;
+}
+.log-row-warn .log-row-status {
+  color: var(--warn);
+  font-weight: 550;
+}
+.log-row-detail {
+  color: var(--muted);
+  font-size: 0.82rem;
+  padding-left: 1.15rem;
 }
 
 .commute-backup {
@@ -4013,6 +4114,18 @@ details[open] > .commute-dep-link .commute-dep-chevron {
 /* ========================================================================== */
 /* Network status (RTPPM) + skip-link + active nav                            */
 /* ========================================================================== */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 .skip-link {
   position: absolute;

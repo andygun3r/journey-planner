@@ -717,6 +717,23 @@ export const commuteLeg = pgTable(
     backupWorkCrs: text("backup_work_crs"),
     backupHomeCrs: text("backup_home_crs"),
     backupNote: text("backup_note"),
+    /**
+     * Per-direction origin/destination override — lets a day's AM and/or PM
+     * leg run somewhere other than the commute's home<->work pair (e.g.
+     * staying overnight elsewhere: no PM leg home on Friday, then an
+     * AM-less Saturday leg from that location back to home). Null means
+     * "use the normal home<->work pairing for this direction" — the common
+     * case, unaffected. See resolveActiveLegForCommute in
+     * packages/shared/src/commute.ts, the single place these are applied.
+     */
+    amOriginCrs: text("am_origin_crs"),
+    amOriginLabel: text("am_origin_label"),
+    amDestCrs: text("am_dest_crs"),
+    amDestLabel: text("am_dest_label"),
+    pmOriginCrs: text("pm_origin_crs"),
+    pmOriginLabel: text("pm_origin_label"),
+    pmDestCrs: text("pm_dest_crs"),
+    pmDestLabel: text("pm_dest_label"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("commute_leg_commute_dow_idx").on(t.commuteId, t.dayOfWeek)],

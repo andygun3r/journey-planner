@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { londonDate, londonDayOfWeek, londonWallTimeToIso } from "@signaller/shared";
 import { StationInput, type StationOption } from "./station-input";
 
@@ -67,6 +67,19 @@ function connectionMinutes(prevArrHhmm: string, serviceDate: string, departsIso:
   return diff;
 }
 
+/** Change-point stations implied by a sequence-ordered list of pins (all but the last leg's destination). */
+function deriveChangesFromPins(pins: PinDraft[]): StationOption[] {
+  return pins
+    .slice()
+    .sort((a, b) => a.sequence - b.sequence)
+    .slice(0, -1)
+    .map((p) => ({ crs: p.destCrs, name: p.destLabel }));
+}
+
+function sameStations(a: StationOption[], b: StationOption[]): boolean {
+  return a.length === b.length && a.every((s, i) => s.crs === b[i]?.crs);
+}
+
 /** One leg slot derived from the chain endpoints + declared change stations. */
 interface Slot {
   index: number;
@@ -126,17 +139,28 @@ export function PinnedLegPicker({
   windowStart,
   dayOfWeek,
 }: Props) {
-  // Seed the change-station list from any pins already saved (editing an
-  // existing commute) — each pin's destCrs, except the very last one, is a
-  // change point. Intentionally only seeded once on mount: after that, the
-  // change list is the source of truth and pins follow it, not the reverse.
-  const [changeStations, setChangeStations] = useState<StationOption[]>(() =>
-    pins
-      .slice()
-      .sort((a, b) => a.sequence - b.sequence)
-      .slice(0, -1)
-      .map((p) => ({ crs: p.destCrs, name: p.destLabel })),
-  );
+  // The change-station list is local (it needs to hold trailing, not-yet-picked
+  // change points that have no pin to derive from yet), but it must re-sync
+  // whenever `pins` changes from OUTSIDE this component — on mount, and
+  // whenever something like "copy this day's plan to other days" replaces
+  // pins wholesale. `lastEmittedPins` tracks the most recent pins array this
+  // component itself produced via `emit()`; if the incoming `pins` prop isn't
+  // that array, the change came from elsewhere and changeStations is
+  // resynced from it. This runs during render (not a useEffect) so there's
+  // no extra render/flash after an external update.
+  const lastEmittedPins = useRef(pins);
+  const [changeStations, setChangeStations] = useState<StationOption[]>(() => deriveChangesFromPins(pins));
+  if (pins !== lastEmittedPins.current) {
+    lastEmittedPins.current = pins;
+    const resynced = deriveChangesFromPins(pins);
+    if (!sameStations(resynced, changeStations)) setChangeStations(resynced);
+  }
+
+  function emit(nextPins: PinDraft[]) {
+    lastEmittedPins.current = nextPins;
+    onChange(nextPins);
+  }
+
   const [newChange, setNewChange] = useState<StationOption | null>(null);
   const [searchDow, setSearchDow] = useState(dayOfWeek);
   /** Departure time to search around — editable, re-seeded per leg (see departAt). */
@@ -194,12 +218,12 @@ export function PinnedLegPicker({
       .filter((p) => p.sequence !== idx && p.sequence !== idx + 1)
       .sort((a, b) => a.sequence - b.sequence)
       .map((p, i) => ({ ...p, sequence: i }));
-    onChange(resequenced);
+    emit(resequenced);
     resetSearch();
   }
 
   function removePin(sequence: number) {
-    onChange(pins.filter((p) => p.sequence !== sequence));
+    emit(pins.filter((p) => p.sequence !== sequence));
     resetSearch();
   }
 
@@ -268,7 +292,7 @@ export function PinnedLegPicker({
         toc: o.operator ?? null,
         pickedServiceDate: searchDate,
       };
-      onChange([...pins.filter((p) => p.sequence !== activeSlot.index), next]);
+      emit([...pins.filter((p) => p.sequence !== activeSlot.index), next]);
       resetSearch();
     } catch {
       setError("Couldn't add that train. Try again.");
