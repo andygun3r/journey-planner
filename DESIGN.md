@@ -1,49 +1,51 @@
 ---
-name: Mainline
-description: A UK rail planner as a bold red/blue duotone native app — the double-arrow spirit of the incoming Great British Railways identity, built for touch.
+name: Signaller
+description: A UK rail planner built around a real banner-repeater signal — Platform White ground, Rail Navy for authority and structure, Signal Red as the one spotlight colour reserved for action and live alert.
 colors:
-  rail-blue: "#0033a0"
-  rail-blue-deep: "#00227a"
-  rail-blue-tint: "#e7edfb"
-  rail-red: "#d4202c"
-  rail-red-deep: "#a91824"
-  rail-red-tint: "#fceaeb"
-  paper: "#ffffff"
-  surface: "#f4f5f8"
-  surface-raised: "#ffffff"
-  ink: "#12141c"
-  ink-muted: "#5c6070"
-  rule: "#e2e4ec"
-  on-blue: "#ffffff"
+  rail-navy: "#1c2340"
+  rail-navy-deep: "#14161f"
+  signal-red: "#d6352c"
+  signal-red-deep: "#b23a2e"
+  platform-white: "#f6f4f0"
+  surface: "#ffffff"
+  ink: "#14161f"
+  ink-muted: "#4a4e5c"
+  rule: "rgba(20,22,31,0.08)"
+  on-navy: "#ffffff"
   on-red: "#ffffff"
-  signal-green: "#076d3a"
+  signal-green: "#2e7d46"
   signal-amber: "#a05500"
-  signal-danger: "#d4202c"
 typography:
   display:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "clamp(1.5rem, 4vw, 2.1rem)"
+    fontFamily: "Archivo, Inter, system-ui, sans-serif"
+    fontSize: "48px"
     fontWeight: 800
-    lineHeight: 1.08
-    letterSpacing: "-0.02em"
+    lineHeight: 1.05
+  h1:
+    fontFamily: "Archivo, Inter, system-ui, sans-serif"
+    fontSize: "32px"
+    fontWeight: 700
+  h2:
+    fontFamily: "Archivo, Inter, system-ui, sans-serif"
+    fontSize: "22px"
+    fontWeight: 700
   body:
     fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "0.9375rem"
+    fontSize: "17px"
     fontWeight: 400
     lineHeight: 1.5
   time:
     fontFamily: "Inter, system-ui, sans-serif"
-    fontWeight: 800
+    fontWeight: 700
     fontFeature: "tnum"
   label:
     fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "0.72rem"
-    fontWeight: 700
-    letterSpacing: "0.04em"
+    fontSize: "13px"
+    fontWeight: 600
+    letterSpacing: "0.1em"
 rounded:
-  sm: "10px"
-  md: "16px"
-  lg: "22px"
+  control: "10px"
+  card: "18px"
   pill: "999px"
 spacing:
   xs: "0.4rem"
@@ -52,153 +54,255 @@ spacing:
   lg: "1.5rem"
 components:
   button-primary:
-    backgroundColor: "{colors.rail-blue}"
-    textColor: "{colors.on-blue}"
+    backgroundColor: "{colors.rail-navy}"
+    textColor: "{colors.on-navy}"
     rounded: "{rounded.pill}"
     padding: "0 1.5rem"
     height: "48px"
-  button-primary-hover:
-    backgroundColor: "{colors.rail-blue-deep}"
-  card:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.md}"
-    padding: "1rem"
-  chip-live:
-    backgroundColor: "{colors.rail-red-tint}"
-    textColor: "{colors.rail-red-deep}"
+  button-live:
+    backgroundColor: "{colors.signal-red}"
+    textColor: "{colors.on-red}"
     rounded: "{rounded.pill}"
-    padding: "0.2rem 0.65rem"
+    padding: "0 1.5rem"
+    height: "48px"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.card}"
+    padding: "1rem"
+  status-card:
+    backgroundColor: "{colors.rail-navy}"
+    textColor: "{colors.on-navy}"
+    rounded: "{rounded.card}"
+    padding: "1.25rem"
+  chip-live:
+    backgroundColor: "rgba(214,53,44,0.08)"
+    textColor: "{colors.signal-red-deep}"
+    rounded: "{rounded.pill}"
+    padding: "0.22rem 0.65rem"
 ---
 
-# Design System: Mainline
+# Design System: Signaller
 
 ## Overview
 
-**Creative North Star: "The Departures App"**
+**Creative North Star: "The Signal, Not the Chevron"**
 
-Mainline now reads as a native transit app — the kind you'd expect preinstalled on a phone for the incoming Great British Railways network — rather than a printed identity manual. It keeps the one piece of heritage worth keeping, the double-arrow, and rebuilds everything else around it: a bold **red/blue duotone** on white, used as two confident equal partners rather than one rare institutional colour; soft rounded cards instead of ruled hairline tables; a bottom tab bar on mobile instead of a text-link header. This is the second visual world this project has worn — the first (a strict British Rail 1965 manual pastiche, square forms, one rare blue) is kept only as evidence of what didn't fit; the user explicitly asked for something louder, warmer and more phone-native.
+Signaller is named for the person who tells trains where to go — calm, precise,
+always in control. The mark follows the name literally: a real UK rail banner
+repeater signal, a white disc rimmed in navy with a solid navy arm fixed at the
+"off"/clear angle. That single honest object — not an abstract logotype, not a
+borrowed heritage symbol — sets the whole register: direct, unambiguous, built
+around signage rather than software chrome.
 
-Blue is the calm, structural colour — navigation, primary actions, "you are here." Red is the live, urgent colour — delays, alerts, the countdown-to-departure state, the tab-bar's live indicator. Together they read instantly as *this network's* colours without literally reproducing GBR's mark. White and a cool light-grey surface keep density legible; cards carry real shadow now (a native app has real elevation, unlike a printed page), and corners are generously rounded throughout.
+This is the second visual world this project has worn. The first (Mainline: a
+red/blue duotone evoking the incoming Great British Railways double-arrow) is
+kept only as evidence of what didn't fit — the user commissioned a fresh,
+independently-designed brand identity (see `data/design/`) and asked for a full
+replacement, not a re-tint. Signaller drops the double-arrow entirely, drops
+Rail Blue for Rail Navy, and drops dark mode altogether: there is exactly one
+theme, designed properly, rather than a light default plus an alternate to
+maintain.
 
 **Key Characteristics:**
-- White ground, light-first; red and blue both carry real UI weight (duotone, not one-accent).
-- Blue = structural/navigational/primary action. Red = live/urgent/alert/countdown.
-- Cards, not hairline tables — the departure board is a stack of rounded rows with real elevation.
-- Bottom tab bar for primary navigation on mobile; the desktop header keeps a slimmer top bar.
-- Generously rounded corners (10–22px) everywhere; pill-shaped primary buttons and status chips.
-- Inter throughout, tabular figures for times; weight and size carry hierarchy.
+- Platform White ground (~70%), Rail Navy for structure and authority (~20%),
+  Signal Red as the one spotlight colour for action/live alert (~10%).
+- The header is a full-bleed Rail Navy band on every screen size — the app's
+  one constant "signal box" surface — carrying the mark, wordmark and desktop
+  nav; a fixed bottom tab bar carries primary nav on mobile.
+- The home dashboard's next-departure card is a signature navy "journey status
+  card": Archivo route label, green status dot, Display-scale time on white,
+  translucent white rows beneath for what's coming after.
+- Archivo (500–800) for headlines, the logotype, section labels and any
+  signage-like UI moment; Inter (400–600) for body copy, timetables and
+  controls, tabular figures for times and codes throughout.
+- Generously rounded: cards 18px, controls/chips 10px, buttons and status
+  chips fully pill-shaped.
+- Light only. No dark theme, no OS-driven switching, no toggle.
 
 ## Colors
 
-A white-and-cool-grey ground with a bold blue/red duotone doing the identity work.
+A white-and-navy ground with Signal Red doing all the pointing.
 
 ### Primary
-- **Rail Blue** (#0033a0): Navigation, primary buttons, links, focus, the "on time / here" state, the double-arrow. The calm, structural colour — always present, never shouting.
-- **Rail Blue Deep** (#00227a): Pressed/hover state of blue actions.
-- **Rail Blue Tint** (#e7edfb): Light wash behind blue chips, selected nav item, "here" row highlight.
+- **Rail Navy** (#1c2340): Authority and structure — the header band, the home
+  dashboard's status card, primary buttons, nav, focus rings, primary text.
+  Calm, always present, never shouting.
+- **Rail Navy Deep** (#14161f): Pressed/hover state of navy actions; also the
+  footer/darkest surface.
+- **Rail Navy Tint** (#e7e8ee): Light wash behind selected nav state.
 
 ### Secondary
-- **Rail Red** (#d4202c): Live/urgent signal — delays, cancellations, the live countdown pill, the tab-bar's live-alert badge, the primary CTA on the live board ("Track this train"). Loud on purpose; it is the network's live nervous system.
-- **Rail Red Deep** (#a91824): Pressed/hover state of red actions.
-- **Rail Red Tint** (#fceaeb): Light wash behind red chips and alert cards.
+- **Signal Red** (#d6352c): The one spotlight colour — live status, delays,
+  cancellations, disruption CTAs, the live countdown, the tab-bar's live-alert
+  dot. Reserved for a single action or alert per screen; never a background
+  fill for a large area.
+- **Signal Red Deep** (#b23a2e): Pressed/hover state of red actions; disruption
+  headline text on light cards.
 
 ### Neutral
-- **Paper** (#ffffff): Page ground.
-- **Surface** (#f4f5f8): Cool light-grey backdrop behind card stacks, distinguishing them from pure-white cards.
-- **Surface Raised** (#ffffff): Card fill — white cards float on the grey surface.
-- **Ink** (#12141c): Primary text.
-- **Ink Muted** (#5c6070): Secondary text, captions, labels (≥4.5:1 on white and on surface).
-- **Rule** (#e2e4ec): Hairlines used sparingly inside cards (list dividers), never as the primary structuring device.
+- **Platform White** (#f6f4f0): Page ground — breathing room, not stark white.
+- **Surface** (#ffffff): Card fill — cards float on Platform White with a soft
+  shadow, or on Rail Navy as bright inset panels.
+- **Ink** (#14161f): Primary text on light surfaces.
+- **Ink Muted** (#4a4e5c): Secondary text, captions, labels (≥4.5:1 on white
+  and on Platform White).
+- **Rule** (rgba(20,22,31,0.08)): Hairline used sparingly inside cards; dashed
+  at 0.2 opacity for editorial rows (voice/story-style sections).
 
 ### Signal (live status)
-- **Signal Green** (#076d3a): On time / good service.
-- **Signal Amber** (#a05500): Minor delay.
-- **Signal Danger** (#d4202c): Cancelled / severe disruption — deliberately the same red as the brand's live colour, so "the app is red here" and "this train is in trouble" reinforce each other.
+- **Signal Green** (#2e7d46): On time / good service.
+- **Signal Amber** (#a05500): Minor delay (under 10 minutes).
+- **Signal Red** (#d6352c): Cancelled / severe disruption — deliberately the
+  same red as the brand's one accent, so "the app is pointing at something
+  here" and "this train is in trouble" reinforce each other.
 
 ### Named Rules
-**The Two-Colour Rule.** Blue and red are the only saturated colours doing brand work. Blue is calm and structural; red is live and urgent. Neither decorates a panel for its own sake — every use is navigation, action, live status, or focus.
+**The Spotlight Rule.** Signal Red is the only saturated accent doing brand
+work, and it lights up at most one thing per screen — an action, an alert, a
+live delta. Rail Navy carries every other coloured surface (header, status
+card, primary buttons); it is structure, not decoration.
 
-**The Signal-Text Rule.** Colour never stands alone on live status: a chip or label always states the condition in words alongside its colour.
+**The Signal-Text Rule.** Colour never stands alone on live status: a chip or
+label always states the condition in words alongside its colour.
+
+**The One-Theme Rule.** There is no dark theme. Signaller is designed once,
+properly, for Platform White — not maintained as two parallel palettes.
 
 ## Typography
 
-**Display / Body Font:** Inter (system-ui, sans-serif fallback)
+**Display / Headline Font:** Archivo (500–800)
+**Body / UI Font:** Inter (400–600)
 **Time / Data:** Inter, `font-variant-numeric: tabular-nums`
 
-**Character:** One grotesque family, used the way a native app's system font is used — utilitarian, extremely legible, hierarchy from weight and size only. Times are always tabular so departure boards align in columns even as cards, not just as ruled tables.
+**Character:** Archivo carries anything that needs to read like signage —
+headlines, the wordmark, section labels, card eyebrows — geometric and
+unmistakable at a glance, in the spirit of transit lettering. Inter carries
+everything meant to be read at length or scanned quickly: body copy, timetable
+rows, controls. Times are always tabular so departure boards align in columns.
 
 ### Hierarchy
-- **Display** (800, clamp(1.5–2.1rem), 1.08, -0.02em): Page titles, station names.
-- **Section title** (700, 1.05–1.3rem): Card-group headers.
-- **Body** (400, 0.9375rem, 1.5): Prose, controls.
-- **Time / data** (800, 1.15–1.4rem, tabular-nums): Departure/arrival times, countdowns — heavier than before, since it now competes with card chrome for attention.
-- **Label** (700, 0.72rem, +0.04em, often uppercase): Chip text, card eyebrows, tab-bar labels.
+- **Display** (Archivo 800, 48px, 1.05): The next-departure time on the home
+  status card — the single largest, boldest number in the app.
+- **H1** (Archivo 700, 32px): Page titles, station names.
+- **H2** (Archivo 700, 22px): Section headers, card-group headers.
+- **Body** (Inter 400, 17px, 1.5): Prose, controls, disruption copy.
+- **Time / data** (Inter 700, tabular-nums): Departure/arrival times,
+  countdowns, platform numbers.
+- **Label** (Inter 600, 13px, +0.1em, often uppercase): Chip text, card
+  eyebrows, tab-bar labels.
 
 ## Layout
 
-A single centred column (max 52rem) on desktop, but the primary interaction model is now **card stacks on a grey surface**, not a ruled table on paper. Each departure/journey is its own rounded card with internal padding and a touch-scaled target (≥48px), with visible gaps between cards (0.65rem) rather than hairline dividers. The live map still breaks out to viewport width. Desktop keeps a slim top bar (wordmark + double-arrow + text nav + theme toggle); **mobile switches to a fixed bottom tab bar** (5 primary destinations, icon + label, the active tab in blue with a red dot badge when there's a live alert). Spacing rhythm: 0.65rem within a card, 1rem between cards, 1.5rem between sections, more space above a heading than below it.
+Mobile-first: every surface is designed at phone width first, then widened to
+a centred column (max 52rem) on desktop. The header is a full-bleed Rail Navy
+band at every width, holding the mark + wordmark and (desktop only) the text
+nav; **the fixed bottom tab bar carries primary navigation on mobile** (Plan ·
+Boards · Map · Commute · Status — icon + label, active tab in Rail Navy, a
+Signal Red dot badge when a tab has a live alert). Cards float on Platform
+White with a soft rest shadow; the home dashboard's status card is the one
+full-navy card, its own rows in translucent white rather than default card
+white. Spacing rhythm: 0.65rem within a card, 1rem between cards, 1.5rem
+between sections, more space above a heading than below it.
 
-**Theme switching is explicit, not OS-driven.** Light is the default regardless of `prefers-color-scheme`; dark is a deliberate visitor choice via the top-bar toggle ([components/theme-toggle.tsx](apps/web/components/theme-toggle.tsx)), persisted in `localStorage` and applied pre-paint to avoid a flash. Dark gets its own vivid red/blue duotone (`#5c86ff` / `#ff4d55` on `#0b0e17`), not a muted/lifted copy of the light palette.
+**There is exactly one theme.** No `prefers-color-scheme` switch, no toggle,
+no `data-theme` attribute — Platform White and Rail Navy are the only ground
+colours the app ever renders, on every device, every time.
 
 ## Elevation & Depth
 
-**Real elevation, native-app style.** Unlike the previous flat-paper doctrine, cards now sit visibly above the grey surface: a soft, cool-toned drop shadow at rest, deepening slightly on hover/press for interactive cards. This is the one deliberate reversal from the prior world — a phone app has depth; a printed manual does not.
+Cards carry a soft, cool-toned rest shadow on Platform White — enough to read
+as "a distinct rounded thing," not a heavy native-app drop shadow. The Rail
+Navy header and the home status card are flush, full-bleed surfaces; nothing
+about them needs elevation, they *are* the ground for that region.
 
 ### Shadow Vocabulary
-- **Card rest** (`box-shadow: 0 1px 3px rgba(18,20,28,0.06), 0 6px 16px rgba(18,20,28,0.08)`): Default elevation for every card (board rows, journey cards, panels).
-- **Card pressed/active** (`box-shadow: 0 1px 2px rgba(18,20,28,0.08)`): Active/pressed state — flattens slightly, like a real button depressing.
-- **Overlay** (`box-shadow: 0 12px 32px rgba(0,0,0,0.18)`): Dropdowns, sheets, modals — floats highest.
-
-### Named Rules
-**The Real-Elevation Rule.** Every card carries the rest shadow; nothing sits flush with the grey surface except the surface itself and true full-bleed sections (the map, the tab bar).
+- **Card rest** (`0 1px 3px rgba(20,22,31,0.06), 0 6px 16px rgba(20,22,31,0.08)`):
+  Default elevation for every white card — board rows, journey cards, panels.
+- **Card pressed** (`0 1px 2px rgba(20,22,31,0.08)`): Active/pressed state.
+- **Overlay** (`0 12px 32px rgba(0,0,0,0.18)`): Dropdowns, sheets, modals.
 
 ## Shapes
 
-Generously rounded, native-app forms. Cards and panels: 16px radius. Small chips and inputs: 10px. Primary buttons and status chips: fully pill-shaped (999px) — the opposite of the previous square-cornered doctrine. The double-arrow is drawn in blue-over-red (the upper arrow blue, the lower red) so the two brand colours meet in the one shared mark.
+Cards and panels: 18px radius. Small chips and inputs: 10px. Primary buttons
+and status chips: fully pill-shaped (999px). The signal mark itself is a
+circle — the one shape in the system with no radius token, because it's a
+literal disc, not a rounded rectangle.
 
 ## Components
 
+### The Signal Mark (signature)
+A real UK rail banner repeater: a white disc, rimmed in navy (5% of diameter),
+with a solid navy arm (13% of diameter thick, 130% of diameter wide) fixed at
+45° — the "off"/clear position, the only angle it is ever shown at. Never
+recoloured, stretched, rotated off-angle, or thinned. Minimum size 24px
+digital; below that, the icon carries alone with no wordmark.
+[components/signal-mark.tsx](apps/web/components/signal-mark.tsx)
+
 ### Buttons
 - **Shape:** Pill (999px radius), 48px min height.
-- **Primary:** Rail Blue fill, white text, weight 700. Hover → Rail Blue Deep. Press → flattens (Real-Elevation Rule).
-- **Live/urgent action** ("Track this train"): Rail Red fill, white text — reserved for genuinely live/urgent actions only.
-- **Secondary:** White fill, ink text, 1.5px ink-10%-tint border.
+- **Primary:** Rail Navy fill, white text, weight 700. Hover → Rail Navy Deep.
+- **Live/urgent action** ("Rebook automatically", "Track this train"): Signal
+  Red fill, white text — reserved for genuinely live/urgent actions only.
+- **Secondary:** White fill, ink text, hairline border.
 
 ### Chips (status)
-- **Style:** Pill, tinted fill in the signal colour (10–14% wash), full-strength text of that colour, no border. Always paired with a word ("On time", "12 min late").
-- **Live badge:** Small red dot + white ring, used on the tab bar and card corners to mark "this journey is live-tracked."
+- **Style:** Pill, tinted fill in the signal colour (~10–14% wash on light
+  cards; a brighter ~12% white wash on the navy status card), full-strength
+  text of that colour, no border. Always paired with a word ("On time", "12
+  min late").
+- **Live badge:** Small Signal Red dot with a white ring, used on the tab bar
+  and card corners to mark "this journey is live-tracked."
 
-### Cards (departure board rows, journey results, panels — signature)
-- **Corner Style:** 16px radius.
-- **Background:** White, floating on the grey Surface.
+### The Journey Status Card (home dashboard, signature)
+Full Rail Navy background, 18px radius, Archivo route label (tracked
+uppercase), a green live-status dot, real elevation. The next train renders
+as a bright white inset row at Display scale (48px/800); trains after it sit
+as translucent white rows (rgba(255,255,255,0.08)) beneath. A disruption
+inside this card is never a full-bleed red banner — it stays information, not
+interruption.
+
+### Departure / Board Cards
+- **Corner Style:** 18px radius.
+- **Background:** White, floating on Platform White.
 - **Shadow Strategy:** Card-rest shadow always on; Card-pressed on `:active`.
-- **Border:** None at rest (shadow does the separating); a 2px Rail-Blue border only on the "next train" / "here" card.
+- **Border:** None at rest; a 2px Rail Navy border only on the "next train" /
+  "here" row.
 - **Internal Padding:** 1rem, 48px+ touch targets for the whole row.
 
 ### Inputs / Fields
-- **Style:** White fill, 10px radius, 1.5px rule border, 48px height.
-- **Focus:** 2px Rail-Blue ring, 2px offset — no longer a hairline outline.
+- **Style:** Off-white fill, 10px radius, 48px height.
+- **Focus:** 2px Rail Navy ring, 2px offset.
 
 ### Navigation
-- **Desktop:** Slim top bar, wordmark + double-arrow left, text links right, active link in Rail Blue with a pill-shaped underline chip.
-- **Mobile (signature):** Fixed bottom tab bar, 5 destinations (Plan · Boards · Map · Commute · Status), icon + label, active tab's icon+label in Rail Blue, a small red dot badge on any tab with a live alert. Safe-area aware.
-
-### Double-arrow mark (signature)
-The British Rail symbol, now two-tone: the upper (right-pointing) arrow in Rail Blue, the lower (left-pointing) arrow in Rail Red — the one place the two brand colours are literally joined.
+- **Header (every width):** Full-bleed Rail Navy band — mark + wordmark left,
+  (desktop) text nav right, active link underlined in Signal Red.
+- **Mobile (signature):** Fixed bottom tab bar, 5 destinations (Plan · Boards
+  · Map · Commute · Status), icon + label, active tab in Rail Navy, a Signal
+  Red dot badge on any tab with a live alert. Safe-area aware.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** use both blue and red as real UI colours — blue for structure/navigation/primary action, red for live/urgent/alerts.
-- **Do** build the departure board and journey results as a card stack with real elevation, not a ruled table.
-- **Do** give mobile a fixed bottom tab bar with icon + label and a red live-alert dot.
-- **Do** round every corner generously — pill buttons/chips, 16px cards, 10px inputs.
+- **Do** treat Signal Red as a spotlight — one action or alert per screen, never
+  a background fill.
+- **Do** keep the header a full-bleed Rail Navy band at every width; it's the
+  app's one constant "signal box" surface.
+- **Do** build the home dashboard's next-departure card as full Rail Navy with
+  a Display-scale white inset row for the train to catch.
+- **Do** give mobile a fixed bottom tab bar with icon + label and a Signal Red
+  live-alert dot.
+- **Do** round every corner generously — pill buttons/chips, 18px cards, 10px
+  inputs — except the mark itself, which is a true circle.
 - **Do** keep every signal chip paired with text stating the condition.
 
 ### Don't:
-- **Don't** reduce back to one rare "institutional" accent colour — this world is a confident duotone.
-- **Don't** flatten cards to hairline-only structure; the Real-Elevation Rule requires a visible rest shadow on every card.
-- **Don't** square off corners again; pill/16px/10px is the form language now.
-- **Don't** literally reproduce the real Great British Railways mark or claim official affiliation — this evokes the family, it is not the identity.
-- **Don't** reintroduce the previous world's violet accent, dark-by-default, or "LLM-generic" gradients/glows-as-decoration.
+- **Don't** reintroduce a second saturated accent — Signal Red does all the
+  pointing; Rail Navy is structure, not decoration.
+- **Don't** ship a dark theme, a `prefers-color-scheme` switch, or a toggle —
+  there is exactly one theme.
+- **Don't** show the signal mark's arm at any angle but 45°, recolour it, or
+  thin its stroke.
+- **Don't** reintroduce the double-arrow mark or Rail Blue from the previous
+  (Mainline) world — this is a full replacement, not a re-tint.
+- **Don't** square off corners; 18px/10px/pill is the form language.

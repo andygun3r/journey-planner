@@ -60,7 +60,7 @@ export function addSignallingLayers(map: maplibregl.Map): void {
       "circle-radius": ["interpolate", ["linear"], ["zoom"], MARKERS_MINZOOM, 5, 18, 9],
       "circle-color": "#05070a",
       "circle-stroke-width": ["case", ["==", ["get", "mapped"], true], 1.5, 1],
-      "circle-stroke-color": ["case", ["==", ["get", "mapped"], true], "#ffffff", "#d4202c"],
+      "circle-stroke-color": ["case", ["==", ["get", "mapped"], true], "#ffffff", "#d6352c"],
       "circle-opacity": ["case", ["==", ["get", "mapped"], true], 0.96, 0.82],
     },
   });
@@ -76,13 +76,13 @@ export function addSignallingLayers(map: maplibregl.Map): void {
         "match",
         ["get", "aspect"],
         "off",
-        "#076d3a",
+        "#2e7d46",
         "red",
-        "#d4202c",
+        "#d6352c",
         /* unknown */ "#8a8fa3",
       ],
       "circle-stroke-width": ["case", ["==", ["get", "aspect"], "unknown"], 1.5, 0],
-      "circle-stroke-color": "#f4f5f8",
+      "circle-stroke-color": "#f6f4f0",
     },
   });
   map.addLayer({

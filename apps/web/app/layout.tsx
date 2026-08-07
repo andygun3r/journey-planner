@@ -1,17 +1,27 @@
 import type { Metadata, Viewport } from "next";
+import { Archivo, Inter } from "next/font/google";
 import Link from "next/link";
 import { FocusOnNavigate } from "@/components/focus-on-navigate";
 import { RegisterSW } from "@/components/register-sw";
 import { TopNav } from "@/components/top-nav";
 import { TabBar } from "@/components/tab-bar";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { DoubleArrow } from "@/components/double-arrow";
+import { SignalMark } from "@/components/signal-mark";
 import "./globals.css";
 
-/* Applies a saved dark-theme choice before first paint, so a returning visitor
-   who picked dark never sees a light flash. Light is the default; this only
-   ever adds data-theme="dark", never removes the (default) light state. */
-const THEME_INIT_SCRIPT = `try{if(localStorage.getItem("signaller-theme")==="dark"){document.documentElement.dataset.theme="dark"}}catch(e){}`;
+// Archivo: headlines, the logotype, section labels — any signage-like UI
+// moment. Inter: body copy, UI labels, timetables, long-form text.
+const archivo = Archivo({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  variable: "--font-archivo",
+  display: "swap",
+});
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Signaller",
@@ -25,32 +35,26 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#ffffff",
+  themeColor: "#1c2340",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-GB" suppressHydrationWarning>
-      <head>
-        {/* Must run before first paint, so it stays an inline blocking script
-            rather than next/script. suppressHydrationWarning: this script
-            mutates documentElement.dataset before React hydrates, which would
-            otherwise read as a server/client attribute mismatch on <html>. */}
-        <script suppressHydrationWarning dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-      </head>
+    <html lang="en-GB" className={`${archivo.variable} ${inter.variable}`}>
       <body>
         <a href="#main" className="skip-link">
           Skip to content
         </a>
-        <div className="shell">
-          <header className="topbar">
+        <header className="topbar">
+          <div className="topbar-inner">
             <Link href="/" className="wordmark" aria-label="Signaller — home">
-              <DoubleArrow className="wordmark-mark" />
+              <SignalMark className="wordmark-mark" />
               <span className="wordmark-text">Signaller</span>
             </Link>
             <TopNav />
-            <ThemeToggle />
-          </header>
+          </div>
+        </header>
+        <div className="shell">
           <div id="main">{children}</div>
         </div>
         <TabBar />

@@ -26,7 +26,7 @@ import {
   BUS_ICON,
   TRAIN_ICON,
 } from "../lib/map-icons";
-import { basemapTileUrl, BASEMAP_SOURCE, isDarkTheme, loadAbsoluteStyle } from "../lib/orm-style";
+import { loadAbsoluteStyle } from "../lib/orm-style";
 
 /**
  * Live GB train map: full-bleed MapLibre canvas over the self-hosted
@@ -446,7 +446,7 @@ export function LiveMap() {
     if (!containerRef.current || mapRef.current) return;
     let cancelled = false;
 
-    loadAbsoluteStyle(isDarkTheme()).then((style) => {
+    loadAbsoluteStyle().then((style) => {
       if (cancelled || !containerRef.current || mapRef.current) return;
 
       const map = new maplibregl.Map({
@@ -470,22 +470,6 @@ export function LiveMap() {
       mapRef.current = null;
       setMapInstance(null);
     };
-  }, []);
-
-  // ThemeToggle flips document.documentElement.dataset.theme directly (no
-  // React state/event to subscribe to), so watch for it and swap just the
-  // basemap's raster tile URL — cheaper and less jarring than reloading the
-  // whole style, which would also re-trigger every source/layer/handler setup.
-  useEffect(() => {
-    const target = document.documentElement;
-    const observer = new MutationObserver(() => {
-      const map = mapRef.current;
-      if (!map) return;
-      const source = map.getSource(BASEMAP_SOURCE) as maplibregl.RasterTileSource | undefined;
-      source?.setTiles([basemapTileUrl(isDarkTheme())]);
-    });
-    observer.observe(target, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
   }, []);
 
   // Everything that used to run inside the old synchronous map-creation
@@ -526,7 +510,7 @@ export function LiveMap() {
         id: `${ROUTE_SOURCE}-line`,
         type: "line",
         source: ROUTE_SOURCE,
-        paint: { "line-color": "#d4202c", "line-width": 2.5 },
+        paint: { "line-color": "#d6352c", "line-width": 2.5 },
       });
       map.addLayer({
         id: `${BUS_ROUTE_SOURCE}-line`,

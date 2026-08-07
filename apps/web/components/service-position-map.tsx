@@ -14,7 +14,7 @@ import {
 } from "./map-types";
 import { useServicePosition } from "./service-live";
 import { addMapIcons, arrowOffsetEms, lateBucketColor, ARROW_ICON, TRAIN_ICON } from "../lib/map-icons";
-import { basemapTileUrl, BASEMAP_SOURCE, isDarkTheme, loadAbsoluteStyle } from "../lib/orm-style";
+import { loadAbsoluteStyle } from "../lib/orm-style";
 
 /**
  * The service-detail page's "current position" view. This used to be an SVG
@@ -182,7 +182,7 @@ export function ServicePositionMap({ rid }: { rid: string }) {
     if (!train || !containerRef.current || mapRef.current) return;
     let cancelled = false;
 
-    loadAbsoluteStyle(isDarkTheme()).then((style) => {
+    loadAbsoluteStyle().then((style) => {
       if (cancelled || !containerRef.current || mapRef.current) return;
 
       const map = new maplibregl.Map({
@@ -209,7 +209,7 @@ export function ServicePositionMap({ rid }: { rid: string }) {
           id: `${ROUTE_SOURCE}-line`,
           type: "line",
           source: ROUTE_SOURCE,
-          paint: { "line-color": "#d4202c", "line-width": 2.5 },
+          paint: { "line-color": "#d6352c", "line-width": 2.5 },
         });
         // Same three-layer vehicle marker as the live map — badge, glyph,
         // bearing arrow — so a train reads identically in both places.
@@ -264,22 +264,6 @@ export function ServicePositionMap({ rid }: { rid: string }) {
     // the data effect below rather than rebuilding the map.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Boolean(train)]);
-
-  // Match the live map: ThemeToggle flips data-theme on <html> directly, so
-  // watch for it and swap just the basemap raster tiles.
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      const source = mapRef.current?.getSource(BASEMAP_SOURCE) as
-        | maplibregl.RasterTileSource
-        | undefined;
-      source?.setTiles([basemapTileUrl(isDarkTheme())]);
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
-    return () => observer.disconnect();
-  }, []);
 
   // The route line, drawn once. It was being redrawn from a fresh download
   // every 25 seconds to produce the identical line.

@@ -1,73 +1,56 @@
-/* Mainline — "The Departures App". A bold red/blue duotone native-app take on
-   the incoming Great British Railways identity: white ground, generously
-   rounded cards with real elevation, a bottom tab bar on mobile. Blue is the
-   calm structural colour (nav, primary action, focus); red is the live/urgent
-   colour (delays, alerts, countdowns). See DESIGN.md for the durable system.
+/* Signaller — a UK rail banner repeater signal as brand: a clear, unambiguous
+   mark for a clear, unambiguous product. Platform White ground, Rail Navy for
+   authority and structure, Signal Red as the one spotlight colour reserved
+   for action and live alert. Archivo carries headlines and any signage-like
+   UI moment; Inter carries body copy, timetables and controls. Light only —
+   there is no dark theme, on purpose (see DESIGN.md). Ratio target across any
+   screen: ~70% white/off-white, ~20% navy, ~10% red.
 
    Tokens keep their historic names (--primary, --accent, --surface…) so the
-   whole component vocabulary re-skins from here. --primary is Rail Blue;
-   --accent/--danger both resolve to Rail Red family (accent = live data,
-   danger = cancelled/severe — deliberately the same red, see DESIGN.md). */
+   whole component vocabulary re-skins from here. --primary now resolves to
+   Rail Navy (structural: nav, primary action, focus); --accent/--danger both
+   resolve to Signal Red (accent = live data, danger = cancelled/severe —
+   deliberately the same red, see DESIGN.md). */
 
 :root {
-  /* Light theme — white + cool grey, the design target */
-  --bg: #f4f5f8; /* cool grey backdrop behind card stacks */
-  --surface: #ffffff; /* card fill — cards float on the grey bg */
-  --surface-2: #eef0f5; /* recessed fills: secondary buttons, skeletons */
-  --border: #e2e4ec; /* light rule, used sparingly inside cards */
-  --border-strong: #c7cad6; /* emphasised hairline */
-  --ink: #12141c; /* primary text */
-  --muted: #5c6070; /* secondary text, labels (>=4.5:1 on white/grey) */
-  --primary: #0033a0; /* Rail Blue — structural: nav, primary action, focus */
-  --primary-strong: #00227a; /* pressed/hover Rail Blue */
-  --primary-tint: #e7edfb; /* light blue wash: selected nav, "here" highlight */
+  /* Raw brand colours, for the handful of places that need the literal brand
+     value rather than a semantic role (the mark, the navy hero/status card). */
+  --rail-navy: #1c2340;
+  --rail-navy-deep: #14161f;
+  --signal-red: #d6352c;
+  --signal-red-deep: #b23a2e;
+  --platform-white: #f6f4f0;
+
+  --bg: #f6f4f0; /* Platform White — page ground */
+  --surface: #ffffff; /* card fill */
+  --surface-2: #fbfaf8; /* recessed fills: secondary buttons, skeletons */
+  --border: rgba(20, 22, 31, 0.08); /* hairline, used sparingly inside cards */
+  --border-strong: rgba(20, 22, 31, 0.16); /* emphasised hairline */
+  --ink: #14161f; /* primary text */
+  --muted: #4a4e5c; /* secondary text, labels (>=4.5:1 on white/platform-white) */
+  --primary: #1c2340; /* Rail Navy — structural: nav, primary action, focus */
+  --primary-strong: #14161f; /* pressed/hover Rail Navy */
+  --primary-tint: #e7e8ee; /* light navy wash: selected nav, "here" highlight */
   --on-primary: #ffffff;
-  --accent: #d4202c; /* Rail Red — live data (countdowns, live badges) */
-  --accent-tint: #fceaeb;
-  --ok: #076d3a; /* signal green — darkened for 4.5:1 on white and its own tint */
+  --accent: #d6352c; /* Signal Red — live data (countdowns, live badges) */
+  --accent-tint: rgba(214, 53, 44, 0.08);
+  --ok: #2e7d46; /* signal green — darkened for 4.5:1 on white and its own tint */
   --warn: #a05500; /* signal amber — darkened for 4.5:1 on white */
-  --danger: #d4202c; /* Rail Red doubles as "cancelled/severe" — see Two-Colour Rule */
-  --ring: #0033a0; /* focus = Rail Blue on light */
-  --shadow-card: 0 1px 3px rgba(18, 20, 28, 0.06), 0 6px 16px rgba(18, 20, 28, 0.08);
-  --shadow-card-pressed: 0 1px 2px rgba(18, 20, 28, 0.08);
+  --danger: #d6352c; /* Signal Red doubles as "cancelled/severe" — see Two-Colour Rule */
+  --ring: #1c2340; /* focus = Rail Navy */
+  --shadow-card: 0 1px 3px rgba(20, 22, 31, 0.06), 0 6px 16px rgba(20, 22, 31, 0.08);
+  --shadow-card-pressed: 0 1px 2px rgba(20, 22, 31, 0.08);
   --shadow-overlay: 0 12px 32px rgba(0, 0, 0, 0.18); /* menus/sheets/modals */
-  /* Generously rounded, native-app forms. */
-  --radius: 16px; /* cards, panels, notices, board rows, map, modal */
+  /* Cards 16-20px, controls/chips 10px, pills fully round. */
+  --radius: 18px; /* cards, panels, notices, board rows, map, modal */
   --radius-control: 10px; /* inputs, small chips, cal cells */
   --radius-pill: 999px; /* primary buttons, status chips */
-  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-time: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-ui: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-time: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-archivo), var(--font-inter), system-ui, sans-serif;
   /* Reserve room for the fixed bottom tab bar on mobile. */
   --tabbar-height: 4rem;
   color-scheme: light;
-}
-
-/* Light is the site's default regardless of OS/browser preference — the user
-   picks dark explicitly (a theme toggle can set data-theme="dark" on <html>).
-   Dark keeps the same Two-Colour duotone at full saturation, not a single
-   washed-out lifted blue: a vivid cobalt and a vivid coral-red, both present. */
-:root[data-theme="dark"] {
-  --bg: #0b0e17;
-  --surface: #141826;
-  --surface-2: #1c2133;
-  --border: #2a2f45;
-  --border-strong: #3b425c;
-  --ink: #eef0f7;
-  --muted: #9aa1b8;
-  --primary: #5c86ff;
-  --primary-strong: #7fa0ff;
-  --primary-tint: #182241;
-  --on-primary: #0b0e17;
-  --accent: #ff4d55;
-  --accent-tint: #34131a;
-  --ok: #3ddc84;
-  --warn: #ffb648;
-  --danger: #ff4d55;
-  --ring: #5c86ff;
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.35), 0 6px 16px rgba(0, 0, 0, 0.4);
-  --shadow-card-pressed: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow-overlay: 0 12px 32px rgba(0, 0, 0, 0.55);
-  color-scheme: dark;
 }
 
 * {
@@ -92,12 +75,13 @@ body {
 h1,
 h2,
 h3 {
+  font-family: var(--font-display);
   text-wrap: balance;
   margin: 0;
 }
 
 a {
-  color: var(--primary-strong);
+  color: var(--primary);
 }
 
 /* ---- App shell ---- */
@@ -115,75 +99,53 @@ a {
   }
 }
 
+/* The header is a full-bleed Rail Navy band — the brand's signature "signal
+   box" register — with the shell's centred column riding inside it. On
+   mobile this is the one full-bleed navy surface on the page; the bottom tab
+   bar carries primary nav there, so the header stays brand + search only. */
 .topbar {
+  background: var(--rail-navy);
+  color: #ffffff;
+}
+
+.topbar-inner {
+  max-width: 52rem;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   gap: 1.25rem;
-  padding: 1.1rem 0 1rem;
-  margin-bottom: 1.75rem;
+  padding: 1.1rem 1rem 1rem;
 }
 
 @media (max-width: 40rem) {
   /* The bottom tab bar carries primary nav on mobile; the top bar is brand-only. */
-  .topbar {
-    padding-bottom: 0.5rem;
+  .topbar-inner {
+    padding: 0.9rem 1rem 0.85rem;
   }
 }
 
 .wordmark {
-  font-size: 1.1rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
   font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--ink);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #ffffff;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .wordmark-mark {
-  width: 1.8rem;
-  height: auto;
+  width: 1.6rem;
+  height: 1.6rem;
   flex: none;
   position: relative;
-  top: 0.05em;
 }
 
 .wordmark-text {
   line-height: 1;
-}
-
-.topbar-note {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 0.8125rem;
-}
-
-/* Light is the default regardless of OS preference; this is the only way to
-   reach the dark alternative (see globals.css :root[data-theme="dark"]). */
-.theme-toggle {
-  margin-left: 0.5rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--surface-2);
-  color: var(--ink);
-  cursor: pointer;
-  transition: background 150ms ease-out;
-}
-
-.theme-toggle:hover {
-  background: var(--border);
-}
-
-@media (max-width: 40rem) {
-  .theme-toggle {
-    margin-left: auto;
-  }
 }
 
 /* ---- Search panel ---- */
@@ -554,6 +516,26 @@ a {
 .chip-muted {
   color: var(--muted);
   border-color: var(--border);
+}
+
+/* Chips inside the navy status card need light-on-dark tints — the default
+   tints are tuned for a white/Platform-White backdrop. */
+.commute-focus .chip-ok {
+  color: #8ddcb4;
+  background: rgba(255, 255, 255, 0.12);
+}
+.commute-focus .chip-warn {
+  color: #f0c88c;
+  background: rgba(255, 255, 255, 0.12);
+}
+.commute-focus .chip-danger {
+  color: #f8ced0;
+  background: rgba(255, 255, 255, 0.14);
+}
+.commute-focus .chip-muted {
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: transparent;
 }
 
 /* ---- Journey detail (expanded legs) ---- */
@@ -1143,20 +1125,22 @@ a {
 .topnav {
   margin-left: auto;
   display: flex;
-  gap: 1.1rem;
-  font-size: 0.875rem;
+  gap: 1.5rem;
+  font-size: 0.8125rem;
 }
 
 .topnav a {
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.68);
   text-decoration: none;
   font-weight: 600;
+  letter-spacing: 0.02em;
   padding: 0.3rem 0.1rem;
+  border-bottom: 2px solid transparent;
   transition: color 150ms ease-out;
 }
 
 .topnav a:hover {
-  color: var(--ink);
+  color: #ffffff;
 }
 
 @media (max-width: 40rem) {
@@ -2891,12 +2875,12 @@ a.map-tip-anchor:hover .map-tip {
   stroke-width: 0.8;
 }
 .sig-berth-occupied {
-  fill: #0033a0;
+  fill: #1c2340;
   stroke: #fff;
   stroke-width: 1;
 }
 .sig-berth-focus {
-  fill: #d4202c;
+  fill: #d6352c;
 }
 .sig-headcode {
   font-family: var(--font-time, monospace);
@@ -3235,11 +3219,11 @@ a.map-tip-anchor:hover .map-tip {
   background: #8a4fd6;
 }
 .map-key-sig-off::before {
-  background: #076d3a;
+  background: #2e7d46;
   border: 2px solid #05070a;
 }
 .map-key-sig-red::before {
-  background: #d4202c;
+  background: #d6352c;
   border: 2px solid #05070a;
 }
 .map-key-sig-unknown::before {
@@ -3286,51 +3270,60 @@ a.map-tip-anchor:hover .map-tip {
   background: var(--border);
 }
 
+/* The signature "journey status card" — full Rail Navy, Archivo route label,
+   a green live-status dot, and (via .commute-dep-next below) a Display-scale
+   time. Brand deck: "Navy background, route label tracked, green status dot,
+   time at Display scale, two pill actions, translucent white fill." */
 .commute-focus {
   border-radius: var(--radius);
   box-shadow: var(--shadow-card);
-  background: var(--surface);
-  padding: 1.1rem 1.15rem 1.25rem;
+  background: var(--rail-navy);
+  color: #ffffff;
+  padding: 1.25rem 1.25rem 1.4rem;
   margin-bottom: 1.5rem;
 }
 .commute-focus-head h2 {
-  font-size: 1.3rem;
-  font-weight: 680;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   margin: 0.5rem 0 0.2rem;
-  color: var(--ink);
+  color: #ffffff;
 }
 .commute-arrow {
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.55);
   font-weight: 400;
 }
 .commute-route-crs {
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.68);
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
   margin: 0;
+}
+.commute-route-crs a {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .commute-departures {
   list-style: none;
   padding: 0;
-  margin: 1rem 0 0;
+  margin: 1.1rem 0 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.5rem;
 }
 .commute-dep {
-  border: 1px solid var(--border);
   border-radius: var(--radius-control);
-  background: var(--bg);
+  background: rgba(255, 255, 255, 0.08);
 }
 .commute-dep-link {
   display: grid;
   grid-template-columns: auto auto 1fr auto auto auto;
   align-items: center;
   gap: 0.7rem;
-  padding: 0.6rem 0.7rem;
+  padding: 0.7rem 0.8rem;
   text-decoration: none;
-  color: inherit;
+  color: #ffffff;
   border-radius: var(--radius-control);
   cursor: pointer;
   list-style: none;
@@ -3340,10 +3333,10 @@ a.map-tip-anchor:hover .map-tip {
   display: none;
 }
 .commute-dep-link:hover {
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, 0.03);
 }
 .commute-dep-chevron {
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.55);
   font-size: 0.9rem;
   justify-self: end;
   transition: transform 150ms ease-out;
@@ -3354,37 +3347,66 @@ details[open] > .commute-dep-link .commute-dep-chevron {
   transform: rotate(90deg);
 }
 .commute-legs {
-  padding: 0.2rem 0.7rem 0.7rem;
-  border-top: 1px solid var(--border);
+  padding: 0.2rem 0.8rem 0.8rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
   margin-top: 0.1rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+.commute-legs .leg-station {
+  color: #ffffff;
+}
+.commute-legs .leg-operator,
+.commute-legs .leg-calls,
+.commute-legs .change-note {
+  color: rgba(255, 255, 255, 0.62);
 }
 @media (prefers-reduced-motion: reduce) {
   .commute-dep-chevron {
     transition: none;
   }
 }
+/* The next train still expected to run — Display-scale time, white card
+   floating inside the navy status card (the one non-white-on-navy row). */
 .commute-dep-next {
-  border-color: var(--primary);
-  box-shadow: inset 0 0 0 1px var(--primary);
+  background: #ffffff;
+  border-radius: var(--radius-control);
+}
+.commute-dep-next .commute-dep-link {
+  color: var(--ink);
+  padding: 0.9rem 1rem;
+}
+.commute-dep-next .commute-dep-time {
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+.commute-dep-next .commute-dep-arrive,
+.commute-dep-next .commute-dep-meta {
+  color: var(--muted);
+}
+.commute-dep-next .commute-dep-chevron {
+  color: var(--muted);
 }
 .commute-dep-cancelled .commute-dep-time,
 .commute-dep-cancelled .commute-dep-arrive {
   text-decoration: line-through;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.55);
 }
 .commute-dep-time {
+  font-family: var(--font-time);
   font-size: 1.15rem;
   font-weight: 680;
   font-variant-numeric: tabular-nums;
-  color: var(--ink);
+  color: #ffffff;
 }
 .commute-dep-arrive {
   font-variant-numeric: tabular-nums;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.62);
   font-size: 0.9rem;
 }
 .commute-dep-meta {
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.62);
   font-size: 0.85rem;
 }
 .commute-dep-catch {
@@ -3392,7 +3414,7 @@ details[open] > .commute-dep-link .commute-dep-chevron {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--primary);
+  color: var(--accent);
 }
 
 .commute-disruptions {
@@ -3679,9 +3701,9 @@ details[open] > .commute-dep-link .commute-dep-chevron {
 }
 
 .topnav a.nav-active {
-  color: var(--ink);
-  font-weight: 650;
-  border-bottom: 2px solid var(--primary);
+  color: #ffffff;
+  font-weight: 700;
+  border-bottom-color: var(--accent);
 }
 
 /* ---- Network status: one panel, three internally-divided sections ---- */

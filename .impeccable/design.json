@@ -1,29 +1,28 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-25T14:00:00Z",
+  "generatedAt": "2026-08-07T00:00:00Z",
   "title": "Design System: Signaller",
   "extensions": {
     "colorMeta": {
-      "rail-blue": { "role": "primary", "displayName": "Rail Blue", "canonical": "#0033a0", "tonalRamp": ["#000e2e", "#001a4d", "#00227a", "#0033a0", "#2452c2", "#5c7cdb", "#96aeeb", "#ccd8f6"] },
-      "rail-red": { "role": "secondary", "displayName": "Rail Red", "canonical": "#d4202c", "tonalRamp": ["#3d0a0d", "#611116", "#8c1a20", "#a91824", "#d4202c", "#e65a63", "#f0949a", "#f8ced0"] },
-      "surface": { "role": "neutral", "displayName": "Surface Grey", "canonical": "#f4f5f8", "tonalRamp": ["#1c1e26", "#3a3d4a", "#585c6e", "#787c90", "#9a9db0", "#c0c2d0", "#e2e4ec", "#f4f5f8"] },
-      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#12141c", "tonalRamp": ["#0a0b10", "#12141c", "#24272f", "#3a3d47", "#5c6070", "#82869a", "#aeb1c0", "#dcdde4"] },
-      "signal-green": { "role": "tertiary", "displayName": "Signal Green", "canonical": "#076d3a", "tonalRamp": ["#04301b", "#08421f", "#0c5e35", "#076d3a", "#17a75f", "#4fc389", "#8ddcb4", "#c9f0dc"] },
+      "rail-navy": { "role": "primary", "displayName": "Rail Navy", "canonical": "#1c2340", "tonalRamp": ["#0a0b10", "#14161f", "#1c2340", "#2a2f52", "#3d436e", "#5a6089", "#8388a8", "#c2c5d6"] },
+      "signal-red": { "role": "secondary", "displayName": "Signal Red", "canonical": "#d6352c", "tonalRamp": ["#3d0a0d", "#611116", "#8c1a20", "#b23a2e", "#d6352c", "#e6685f", "#f0989a", "#f8ced0"] },
+      "platform-white": { "role": "neutral", "displayName": "Platform White", "canonical": "#f6f4f0", "tonalRamp": ["#1c1e26", "#3a3d4a", "#585c6e", "#787c90", "#9a9db0", "#c0c2d0", "#e2e4ec", "#f6f4f0"] },
+      "ink": { "role": "neutral", "displayName": "Ink", "canonical": "#14161f", "tonalRamp": ["#0a0b10", "#14161f", "#24272f", "#3a3d47", "#4a4e5c", "#82869a", "#aeb1c0", "#dcdde4"] },
+      "signal-green": { "role": "tertiary", "displayName": "Signal Green", "canonical": "#2e7d46", "tonalRamp": ["#04301b", "#08421f", "#0c5e35", "#2e7d46", "#3fa060", "#4fc389", "#8ddcb4", "#c9f0dc"] },
       "signal-amber": { "role": "tertiary", "displayName": "Signal Amber", "canonical": "#a05500", "tonalRamp": ["#3f2200", "#5f3400", "#804600", "#a05500", "#e8880a", "#f0a94d", "#f6c88c", "#fbe3c3"] }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "Page titles and station names; heavy tight-tracked Inter." },
-      "time": { "displayName": "Time / Data", "purpose": "Departure/arrival times and countdowns; Inter 800, tabular figures." },
-      "label": { "displayName": "Label", "purpose": "Chip text, card eyebrows, tab-bar labels; small, tracked." }
+      "display": { "displayName": "Display", "purpose": "The next-departure time on the home status card; Archivo 800." },
+      "time": { "displayName": "Time / Data", "purpose": "Departure/arrival times and countdowns; Inter 700, tabular figures." },
+      "label": { "displayName": "Label", "purpose": "Chip text, card eyebrows, tab-bar labels; small, tracked, often uppercase." }
     },
     "shadows": [
-      { "name": "card-rest", "value": "0 1px 3px rgba(18,20,28,0.06), 0 6px 16px rgba(18,20,28,0.08)", "purpose": "Default elevation for every card — board rows, journey cards, panels." },
-      { "name": "card-pressed", "value": "0 1px 2px rgba(18,20,28,0.08)", "purpose": "Active/pressed state on interactive cards." },
+      { "name": "card-rest", "value": "0 1px 3px rgba(20,22,31,0.06), 0 6px 16px rgba(20,22,31,0.08)", "purpose": "Default elevation for every white card — board rows, journey cards, panels." },
+      { "name": "card-pressed", "value": "0 1px 2px rgba(20,22,31,0.08)", "purpose": "Active/pressed state on interactive cards." },
       { "name": "overlay", "value": "0 12px 32px rgba(0,0,0,0.18)", "purpose": "Dropdowns, sheets, modals." }
     ],
     "motion": [
-      { "name": "ease-standard", "value": "ease-out", "duration": "150ms", "purpose": "State transitions on controls and links." },
-      { "name": "position-pulse", "value": "2.4s ease-out infinite", "purpose": "Live-position dot pulse (reduced-motion disables it)." }
+      { "name": "ease-standard", "value": "ease-out", "duration": "150ms", "purpose": "State transitions on controls and links." }
     ],
     "breakpoints": [
       { "name": "board", "value": "34rem" },
@@ -33,10 +32,18 @@
   },
   "components": [
     {
+      "name": "Signal Mark",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "A real UK rail banner repeater signal: white disc, navy rim (5% of diameter), navy arm (13% thick, 130% wide) fixed at 45° — the 'off'/clear position. The one shape in the system that stays a true circle.",
+      "html": "<svg viewBox=\"0 0 100 100\" role=\"img\" aria-label=\"Signaller\"><circle cx=\"50\" cy=\"50\" r=\"47.5\" fill=\"#FFFFFF\" stroke=\"#1C2340\" stroke-width=\"5\"/><rect x=\"-15\" y=\"-3.25\" width=\"130\" height=\"6.5\" fill=\"#1C2340\" transform=\"translate(50 50) rotate(-45)\"/></svg>",
+      "css": ""
+    },
+    {
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Rail Blue pill action.",
+      "description": "Rail Navy pill action.",
       "html": "<button class=\"ds-btn-primary\">Find trains</button>",
       "css": ".ds-btn-primary { background: var(--primary); color: var(--on-primary); font-weight: 700; min-height: 48px; padding: 0 1.5rem; border: none; border-radius: 999px; cursor: pointer; transition: background 150ms ease-out, box-shadow 150ms ease-out; } .ds-btn-primary:hover { background: var(--primary-strong); } .ds-btn-primary:active { box-shadow: var(--shadow-card-pressed); }"
     },
@@ -44,17 +51,25 @@
       "name": "Live Action Button",
       "kind": "button",
       "refersTo": null,
-      "description": "Rail Red pill for genuinely live/urgent actions (track a train, view alert).",
-      "html": "<button class=\"ds-btn-live\">Track this train</button>",
-      "css": ".ds-btn-live { background: var(--danger); color: #fff; font-weight: 700; min-height: 48px; padding: 0 1.5rem; border: none; border-radius: 999px; cursor: pointer; } .ds-btn-live:hover { filter: brightness(0.9); }"
+      "description": "Signal Red pill for genuinely live/urgent actions (track a train, rebook automatically).",
+      "html": "<button class=\"ds-btn-live\">Rebook automatically</button>",
+      "css": ".ds-btn-live { background: var(--danger); color: #fff; font-weight: 700; min-height: 48px; padding: 0 1.5rem; border: none; border-radius: 999px; cursor: pointer; } .ds-btn-live:hover { filter: brightness(0.92); }"
+    },
+    {
+      "name": "Journey Status Card",
+      "kind": "card",
+      "refersTo": null,
+      "description": "The signature home-dashboard card: full Rail Navy, Archivo tracked route label, green status dot, Display-scale time in a white inset row for the next train, translucent white rows beneath.",
+      "html": "<section class=\"commute-focus\"><div class=\"commute-focus-head\"><h2>PADDINGTON → READING</h2></div><div class=\"commute-dep commute-dep-next\"><div class=\"commute-dep-link\"><span class=\"commute-dep-time\">08:24</span></div></div></section>",
+      "css": ".commute-focus { background: var(--rail-navy); color: #fff; border-radius: 18px; padding: 1.25rem; } .commute-dep-next { background: #fff; border-radius: 10px; } .commute-dep-next .commute-dep-time { font-family: var(--font-display); font-size: 2.25rem; font-weight: 800; color: var(--ink); }"
     },
     {
       "name": "Departure Card",
       "kind": "card",
       "refersTo": "card",
-      "description": "The signature artifact: a rounded, elevated card replacing the old ruled table row.",
+      "description": "A rounded, elevated white card replacing a ruled table row.",
       "html": "<a class=\"ds-board-card\"><span class=\"ds-board-time\">07:42</span><span class=\"ds-board-dest\">London Waterloo<small>Plat 2</small></span><span class=\"ds-chip ds-chip-ok\">On time</span></a>",
-      "css": ".ds-board-card { display:flex; align-items:center; gap:1rem; padding:1rem; border-radius:16px; background:#fff; box-shadow: 0 1px 3px rgba(18,20,28,0.06), 0 6px 16px rgba(18,20,28,0.08); text-decoration:none; color:inherit; } .ds-board-time { font-weight:800; font-variant-numeric:tabular-nums; font-size:1.3rem; } .ds-board-dest { flex:1; font-weight:600; display:flex; flex-direction:column; } .ds-board-dest small { color:var(--muted); font-weight:400; }"
+      "css": ".ds-board-card { display:flex; align-items:center; gap:1rem; padding:1rem; border-radius:18px; background:#fff; box-shadow: 0 1px 3px rgba(20,22,31,0.06), 0 6px 16px rgba(20,22,31,0.08); text-decoration:none; color:inherit; } .ds-board-time { font-weight:700; font-variant-numeric:tabular-nums; font-size:1.3rem; } .ds-board-dest { flex:1; font-weight:600; display:flex; flex-direction:column; } .ds-board-dest small { color:var(--muted); font-weight:400; }"
     },
     {
       "name": "Status Chip",
@@ -62,54 +77,47 @@
       "refersTo": "chip-live",
       "description": "Pill status chip, tinted fill, text always states the condition.",
       "html": "<span class=\"ds-chip ds-chip-ok\">On time</span>",
-      "css": ".ds-chip { display:inline-flex; align-items:center; gap:0.3rem; font-size:0.78rem; font-weight:700; padding:0.2rem 0.65rem; border-radius:999px; } .ds-chip-ok { color:#076d3a; background:#e6f6ee; } .ds-chip-live { color:#a91824; background:#fceaeb; }"
+      "css": ".ds-chip { display:inline-flex; align-items:center; gap:0.3rem; font-size:0.78rem; font-weight:700; padding:0.22rem 0.65rem; border-radius:999px; } .ds-chip-ok { color:#2e7d46; background:rgba(46,125,70,0.14); } .ds-chip-danger { color:#b23a2e; background:rgba(214,53,44,0.08); }"
     },
     {
       "name": "Bottom Tab Bar",
       "kind": "nav",
       "refersTo": null,
-      "description": "Signature mobile navigation: fixed bottom bar, 5 destinations, icon+label, red live-alert dot badge.",
+      "description": "Signature mobile navigation: fixed bottom bar, 5 destinations, icon+label, Signal Red live-alert dot badge.",
       "html": "<nav class=\"ds-tabbar\"><a class=\"ds-tab ds-tab-active\">Plan</a><a class=\"ds-tab\">Boards<span class=\"ds-tab-badge\"></span></a><a class=\"ds-tab\">Map</a></nav>",
-      "css": ".ds-tabbar { position:fixed; bottom:0; left:0; right:0; display:flex; background:#fff; box-shadow:0 -1px 0 var(--border), 0 -8px 24px rgba(18,20,28,0.06); padding-bottom:env(safe-area-inset-bottom); } .ds-tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:0.15rem; padding:0.5rem 0; font-size:0.68rem; font-weight:600; color:var(--muted); text-decoration:none; position:relative; min-height:48px; } .ds-tab-active { color:var(--primary); } .ds-tab-badge { position:absolute; top:0.35rem; right:calc(50% - 1.1rem); width:0.45rem; height:0.45rem; border-radius:50%; background:var(--danger); border:1.5px solid #fff; }"
-    },
-    {
-      "name": "Double-Arrow Mark",
-      "kind": "custom",
-      "refersTo": null,
-      "description": "The British Rail symbol, two-tone: upper arrow Rail Blue, lower arrow Rail Red — the one place the duotone literally joins.",
-      "html": "<span class=\"ds-wordmark\"><svg class=\"ds-glyph\" viewBox=\"0 0 64 22\"><path fill=\"#0033a0\" d=\"M0 3 L44 3 L44 1 L62 5 L44 9 L44 7 L0 7 Z\"/><path fill=\"#d4202c\" d=\"M64 19 L20 19 L20 21 L2 17 L20 13 L20 15 L64 15 Z\"/></svg>Mainline</span>",
-      "css": ".ds-wordmark { font-size:1.05rem; font-weight:800; display:inline-flex; align-items:center; gap:0.5rem; } .ds-glyph { width:1.7rem; height:auto; }"
+      "css": ".ds-tabbar { position:fixed; bottom:0; left:0; right:0; display:flex; background:#fff; box-shadow:0 -1px 0 var(--border), 0 -8px 24px rgba(20,22,31,0.06); padding-bottom:env(safe-area-inset-bottom); } .ds-tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:0.15rem; padding:0.5rem 0; font-size:0.68rem; font-weight:650; color:var(--muted); text-decoration:none; position:relative; min-height:48px; } .ds-tab-active { color:var(--primary); } .ds-tab-badge { position:absolute; top:0.35rem; right:calc(50% - 1.1rem); width:0.45rem; height:0.45rem; border-radius:50%; background:var(--danger); border:1.5px solid #fff; }"
     }
   ],
   "narrative": {
-    "northStar": "The Departures App",
-    "overview": "Mainline reads as a native transit app rather than a printed identity manual: a bold red/blue duotone on white, used as two confident equal partners, with soft rounded cards and real elevation replacing the previous ruled hairline tables, and a bottom tab bar on mobile. Blue is calm and structural (navigation, primary action, focus). Red is live and urgent (delays, alerts, countdowns). The double-arrow carries forward as the one piece of heritage, now drawn two-tone where blue and red literally meet.",
+    "northStar": "The Signal, Not the Chevron",
+    "overview": "Signaller replaces Mainline's red/blue GBR-evoking duotone with an independently-designed identity built around a real UK rail banner repeater signal. Platform White is the ground (~70%), Rail Navy carries structure and authority (~20% — the full-bleed header, the home status card, primary buttons), and Signal Red is the one spotlight colour reserved for a single live action or alert per screen (~10%). Archivo carries headlines and signage-like UI moments; Inter carries body copy and tabular data. There is exactly one theme — dark mode was dropped entirely, not redesigned.",
     "keyCharacteristics": [
-      "White ground, light-first; red and blue both carry real UI weight (duotone, not one-accent).",
-      "Blue = structural/navigational/primary action. Red = live/urgent/alert/countdown.",
-      "Cards, not hairline tables — the departure board is a stack of rounded rows with real elevation.",
-      "Bottom tab bar for primary navigation on mobile; the desktop header keeps a slimmer top bar.",
-      "Generously rounded corners (10-22px) everywhere; pill-shaped primary buttons and status chips.",
-      "Inter throughout, tabular figures for times; weight and size carry hierarchy."
+      "Platform White ground, Rail Navy for structure/authority, Signal Red as the one spotlight accent.",
+      "Full-bleed Rail Navy header at every width; fixed bottom tab bar carries primary nav on mobile.",
+      "The home dashboard's next-departure card is a signature full-navy 'journey status card' with a Display-scale white inset row.",
+      "Archivo (500-800) for headlines/signage moments; Inter (400-600) for body/UI/tabular data.",
+      "Generously rounded: 18px cards, 10px controls, pill buttons/chips — except the signal mark, a true circle.",
+      "Light only. No dark theme, no OS-driven switching, no toggle."
     ],
     "rules": [
-      { "name": "The Two-Colour Rule", "body": "Blue and red are the only saturated colours doing brand work. Blue is calm and structural; red is live and urgent. Neither decorates a panel for its own sake.", "section": "colors" },
+      { "name": "The Spotlight Rule", "body": "Signal Red is the only saturated accent and lights up at most one thing per screen. Rail Navy is structure, not decoration.", "section": "colors" },
       { "name": "The Signal-Text Rule", "body": "Colour never stands alone on live status: a chip or label always states the condition in words alongside its colour.", "section": "colors" },
-      { "name": "The Real-Elevation Rule", "body": "Every card carries the rest shadow; nothing sits flush with the grey surface except the surface itself and true full-bleed sections.", "section": "elevation" }
+      { "name": "The One-Theme Rule", "body": "There is no dark theme, no prefers-color-scheme switch, no toggle. Signaller is designed once for Platform White.", "section": "layout" }
     ],
     "dos": [
-      "Do use both blue and red as real UI colours — blue for structure/navigation/primary action, red for live/urgent/alerts.",
-      "Do build the departure board and journey results as a card stack with real elevation, not a ruled table.",
-      "Do give mobile a fixed bottom tab bar with icon + label and a red live-alert dot.",
-      "Do round every corner generously — pill buttons/chips, 16px cards, 10px inputs.",
+      "Do treat Signal Red as a spotlight — one action or alert per screen, never a background fill.",
+      "Do keep the header a full-bleed Rail Navy band at every width.",
+      "Do build the home dashboard's next-departure card as full Rail Navy with a Display-scale white inset row.",
+      "Do give mobile a fixed bottom tab bar with icon + label and a Signal Red live-alert dot.",
+      "Do round every corner generously — pill buttons/chips, 18px cards, 10px inputs — except the mark, a true circle.",
       "Do keep every signal chip paired with text stating the condition."
     ],
     "donts": [
-      "Don't reduce back to one rare institutional accent colour — this world is a confident duotone.",
-      "Don't flatten cards to hairline-only structure; every card needs a visible rest shadow.",
-      "Don't square off corners again; pill/16px/10px is the form language now.",
-      "Don't literally reproduce the real Great British Railways mark or claim official affiliation.",
-      "Don't reintroduce the previous world's violet accent, dark-by-default, or decorative gradients/glows."
+      "Don't reintroduce a second saturated accent — Signal Red does all the pointing.",
+      "Don't ship a dark theme, a prefers-color-scheme switch, or a toggle.",
+      "Don't show the signal mark's arm at any angle but 45°, recolour it, or thin its stroke.",
+      "Don't reintroduce the double-arrow mark or Rail Blue from the previous (Mainline) world.",
+      "Don't square off corners; 18px/10px/pill is the form language."
     ]
   }
 }

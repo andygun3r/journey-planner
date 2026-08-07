@@ -50,25 +50,20 @@ function absolutize(path: string): string {
 export const BASEMAP_SOURCE = "carto-basemap";
 const BASEMAP_LAYER = "carto-basemap-layer";
 
-export function basemapTileUrl(dark: boolean): string {
-  return `https://basemaps.cartocdn.com/${dark ? "dark_all" : "light_all"}/{z}/{x}/{y}.png`;
+// Signaller has no dark theme (light/Platform White is the only surface —
+// see DESIGN.md), so the basemap is always the light CARTO tile set.
+export function basemapTileUrl(): string {
+  return "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png";
 }
 
-export function isDarkTheme(): boolean {
-  return typeof document !== "undefined" && document.documentElement.dataset.theme === "dark";
-}
-
-function withBasemap(
-  style: maplibregl.StyleSpecification,
-  dark: boolean,
-): maplibregl.StyleSpecification {
+function withBasemap(style: maplibregl.StyleSpecification): maplibregl.StyleSpecification {
   return {
     ...style,
     sources: {
       ...style.sources,
       [BASEMAP_SOURCE]: {
         type: "raster",
-        tiles: [basemapTileUrl(dark)],
+        tiles: [basemapTileUrl()],
         tileSize: 256,
         maxzoom: 20,
         attribution:
@@ -80,7 +75,7 @@ function withBasemap(
   };
 }
 
-export async function loadAbsoluteStyle(dark: boolean): Promise<maplibregl.StyleSpecification> {
+export async function loadAbsoluteStyle(): Promise<maplibregl.StyleSpecification> {
   const res = await fetch(STYLE_URL);
   const style = (await res.json()) as maplibregl.StyleSpecification;
 
@@ -100,5 +95,5 @@ export async function loadAbsoluteStyle(dark: boolean): Promise<maplibregl.Style
     style.glyphs = absolutize(style.glyphs);
   }
 
-  return withBasemap(style, dark);
+  return withBasemap(style);
 }

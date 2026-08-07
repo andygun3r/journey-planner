@@ -37,17 +37,18 @@ A planner that *computes* rather than *proxies*: it runs its own MOTIS routing e
 
 - **Name / wordmark:** "Signaller."
 - **Voice:** precise, operational, unflappable — professional rail kit, departure-board energy, tabular clarity, high information density with zero fluff. Reads like equipment used by someone who runs the railway, not marketing aimed at a ticket buyer.
-- **Visual direction (user-volunteered, binding — superseded 2026-07-25, to be developed in new-work, not here):**
-  - Anchor world: **bold red/blue duotone on white, evoking the incoming Great British Railways identity** without copying it — the double-arrow carries forward, but blue and red are used as equal partners (not one rare institutional colour), confidently across buttons, headers and status.
-  - **Native app register, not printed manual**: rounded shapes (not square/hairline BR forms), card-based screens for the departure board and journey results, a bottom tab bar on mobile. Reads as a modern transit app, not a corporate identity document.
-  - **Light-first, and light by default regardless of OS preference**: the app does not auto-switch to dark based on `prefers-color-scheme` (an earlier OS-driven build was mistaken for a bug by the user). Dark is reachable only via an explicit in-app toggle, persisted per visitor, and gets its own full red/blue duotone treatment rather than a muted/lifted version of the light palette.
-  - **Typography:** Inter for body/UI (with tabular figures for times and codes).
-  - Superseded: the previous British-Rail-1965-manual anchor (square forms, hairline rules, one rare Rail Blue, ruled-timetable grammar) — kept only as evidence of what was tried, not a base to polish forward.
+- **Visual direction (current, shipped 2026-08-07 — see DESIGN.md for the full system):**
+  - Anchor world: a real UK rail **banner repeater signal** as the brand mark — white disc, navy rim, navy arm fixed at the "off"/clear 45° angle. Platform White ground (~70%), Rail Navy for structure/authority (~20% — full-bleed header, primary buttons, the home status card), Signal Red as the one spotlight accent for live status/action (~10%).
+  - **Mobile-first, native app register**: designed at phone width first, then widened. Generously rounded shapes (18px cards, 10px controls, pill buttons/chips — the mark itself stays a true circle), a fixed bottom tab bar on mobile, a full-bleed Rail Navy header at every width.
+  - **Light only.** No dark theme, no `prefers-color-scheme` switching, no toggle — the previous world's explicit dark alternative was dropped entirely rather than redesigned.
+  - **Typography:** Archivo (500–800) for headlines, the wordmark and any signage-like UI moment; Inter (400–600) for body/UI/timetables, with tabular figures for times and codes.
+  - Superseded: the Mainline red/blue GBR-evoking duotone (double-arrow mark, Rail Blue/Rail Red, dark-mode toggle) — kept only as evidence of what was tried, not a base to polish forward. Before that, an even earlier British-Rail-1965-manual anchor (square forms, hairline rules) — also superseded.
 - **Anti-references:**
   - Trainline / corporate rail retail — this is a planner, not a shop; no upsell energy, no promotional colour.
   - "LLM-designed" default dark/violet/system-font look — treated as evidence and anti-reference, not a base to polish.
-  - Retro pastiche / nostalgia theme park — heritage cues (the double-arrow) inform, but the result stays modern and app-native.
-  - A generic SaaS dashboard of same-size icon+heading+text cards is still out — cards here are earned by the mobile-app brief and carry real timetable content, not filler tiles.
+  - Retro pastiche / nostalgia theme park — the signal mark is a real, working piece of rail equipment rendered honestly, not vintage decoration.
+  - A generic SaaS dashboard of same-size icon+heading+text cards is still out — cards here carry real timetable content, not filler tiles.
+  - The previous Mainline double-arrow/red-blue duotone world and its dark theme — fully retired, not a fallback.
 
 ## Design Principles
 
@@ -59,4 +60,4 @@ A planner that *computes* rather than *proxies*: it runs its own MOTIS routing e
 
 ## Accessibility & Inclusion
 
-WCAG 2.2 AA. **Light theme designed first** (ink-on-paper, British Rail heritage) with a proper dark theme as a first-class alternative; both meeting ≥4.5:1 body contrast. Status never conveyed by colour alone (icons/text deltas accompany red/amber/green). Reduced-motion alternatives for all live-update animation. Touch targets ≥44px for platform use with gloves/one hand.
+WCAG 2.2 AA. **One theme, designed properly**: ink-on-Platform-White, ≥4.5:1 body contrast — there is no dark alternative to maintain in parallel. Status never conveyed by colour alone (icons/text deltas accompany red/amber/green). Reduced-motion alternatives for all live-update animation. Touch targets ≥44px for platform use with gloves/one hand.
