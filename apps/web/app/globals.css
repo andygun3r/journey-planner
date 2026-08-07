@@ -2041,6 +2041,20 @@ a {
   flex-direction: column;
   gap: 0.5rem;
 }
+.pin-search-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem;
+  align-items: end;
+}
+.pin-search-row select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 0.4rem 0.5rem;
+}
 
 .day-backup {
   border: 1px dashed var(--border);

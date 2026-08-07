@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { londonDate, londonDayOfWeek } from "@signaller/shared";
 import { StationInput, type StationOption } from "./station-input";
 
 /** Draft shape for one pinned leg — matches CommuteLegPinInput minus `direction`. */
@@ -37,8 +38,16 @@ const timeFmt = new Intl.DateTimeFormat("en-GB", {
 });
 const t = (iso: string) => timeFmt.format(new Date(iso));
 
-function todayYmd(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date());
+const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+/** The nearest date (today or later) that falls on the given day-of-week (0=Mon..6=Sun). */
+function nearestDateForDayOfWeek(dow: number): string {
+  const today = londonDate();
+  const todayDow = londonDayOfWeek();
+  const diff = (dow - todayDow + 7) % 7;
+  if (diff === 0) return today;
+  const base = new Date(`${today}T12:00:00Z`);
+  return londonDate(new Date(base.getTime() + diff * 86_400_000));
 }
 
 interface Props {
@@ -47,22 +56,35 @@ interface Props {
   /** Where the chain starts: home or work CRS for the first leg. */
   chainOriginCrs: string;
   chainOriginLabel: string;
-  /** The direction's window start — default "after" bound for the first leg. */
+  /** The direction's window start — default search anchor for the first leg. */
   windowStart: string;
+  /** The commute leg's own day-of-week (0=Mon..6=Sun) — defaults the day selector. */
+  dayOfWeek: number;
 }
 
-export function PinnedLegPicker({ pins, onChange, chainOriginCrs, chainOriginLabel, windowStart }: Props) {
+export function PinnedLegPicker({
+  pins,
+  onChange,
+  chainOriginCrs,
+  chainOriginLabel,
+  windowStart,
+  dayOfWeek,
+}: Props) {
   const [searching, setSearching] = useState(false);
   const [station, setStation] = useState<StationOption | null>(null);
+  const [searchDow, setSearchDow] = useState(dayOfWeek);
   const [candidates, setCandidates] = useState<PinCandidate[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [addingCrs, setAddingCrs] = useState<string | null>(null);
+  const [addingKey, setAddingKey] = useState<string | null>(null);
 
   const previous = pins[pins.length - 1];
   const searchOriginCrs = previous?.destCrs ?? chainOriginCrs;
   const searchOriginLabel = previous?.destLabel ?? chainOriginLabel;
-  const afterHhmm = previous?.schedArr ?? windowStart;
+  const anchorHhmm = previous?.schedArr ?? (windowStart || "08:00");
+
+  const searchDate = useMemo(() => nearestDateForDayOfWeek(searchDow), [searchDow]);
+  const isToday = searchDate === londonDate();
 
   function removePin(sequence: number) {
     const next = pins
@@ -79,11 +101,13 @@ export function PinnedLegPicker({ pins, onChange, chainOriginCrs, chainOriginLab
     setError(null);
     setCandidates(null);
     try {
-      const today = todayYmd();
-      const when = `${today}T${afterHhmm || "00:00"}:00`;
-      const res = await fetch(
-        `/api/boards/${encodeURIComponent(crs)}/pin-candidates?after=${encodeURIComponent(when)}`,
-      );
+      const params = new URLSearchParams({
+        date: searchDate,
+        around: anchorHhmm,
+        beforeMinutes: "30",
+        afterMinutes: "90",
+      });
+      const res = await fetch(`/api/boards/${encodeURIComponent(crs)}/pin-candidates?${params}`);
       const data = await res.json();
       if (data.ok) setCandidates(data.candidates);
       else setError("Couldn't load departures for that station.");
@@ -95,7 +119,8 @@ export function PinnedLegPicker({ pins, onChange, chainOriginCrs, chainOriginLab
   }
 
   async function addCandidate(c: PinCandidate) {
-    setAddingCrs(c.crs + c.scheduled);
+    const key = c.crs + c.scheduled;
+    setAddingKey(key);
     setError(null);
     try {
       const res = await fetch("/api/commute/resolve-pin", {
@@ -108,11 +133,16 @@ export function PinnedLegPicker({ pins, onChange, chainOriginCrs, chainOriginLab
           crs: c.crs,
           scheduledHhmm: t(c.scheduled),
           destCrs: c.destinationCrs,
+          targetDate: searchDate,
         }),
       });
       const data = await res.json();
       if (!data.ok) {
-        setError("Not confirmed yet — try again closer to departure.");
+        setError(
+          isToday
+            ? "Not confirmed yet — try again closer to departure."
+            : "Couldn't match that service to the timetable. Try a different one.",
+        );
         return;
       }
       const next: PinDraft = {
@@ -129,7 +159,7 @@ export function PinnedLegPicker({ pins, onChange, chainOriginCrs, chainOriginLab
         // window (still saved alongside) covers the gap.
         schedArr: data.schedArr ?? t(c.scheduled),
         toc: c.operator ?? null,
-        pickedServiceDate: todayYmd(),
+        pickedServiceDate: searchDate,
       };
       onChange([...pins, next]);
       setCandidates(null);
@@ -138,7 +168,7 @@ export function PinnedLegPicker({ pins, onChange, chainOriginCrs, chainOriginLab
     } catch {
       setError("Couldn't add that service. Try again.");
     } finally {
-      setAddingCrs(null);
+      setAddingKey(null);
     }
   }
 
@@ -172,16 +202,31 @@ export function PinnedLegPicker({ pins, onChange, chainOriginCrs, chainOriginLab
       ) : (
         <div className="pinned-leg-search">
           <p className="editor-hint">
-            Search from {searchOriginLabel} — you&rsquo;re picking today&rsquo;s running of a
-            timetabled service; we&rsquo;ll check it still runs each day automatically.
+            Search from {searchOriginLabel} — you&rsquo;re picking a timetabled service; we&rsquo;ll
+            check it still runs each day automatically.
           </p>
-          <StationInput
-            label="Search from"
-            name="pin-search-station"
-            value={station}
-            onChange={setStation}
-            placeholder={searchOriginLabel}
-          />
+          <div className="pin-search-row">
+            <label className="field">
+              <span>Day</span>
+              <select value={searchDow} onChange={(e) => setSearchDow(Number(e.target.value))}>
+                {DAY_NAMES.map((name, i) => (
+                  <option key={name} value={i}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <StationInput
+              label="Search from"
+              name="pin-search-station"
+              value={station}
+              onChange={setStation}
+              placeholder={searchOriginLabel}
+            />
+          </div>
+          <p className="editor-hint">
+            Showing departures around {anchorHhmm} on {DAY_NAMES[searchDow]} ({searchDate}).
+          </p>
           <button type="button" className="btn btn-secondary" onClick={search} disabled={loading}>
             {loading ? "Searching…" : "Search departures"}
           </button>
@@ -196,26 +241,29 @@ export function PinnedLegPicker({ pins, onChange, chainOriginCrs, chainOriginLab
           )}
 
           {candidates && candidates.length === 0 && (
-            <p className="editor-hint">No upcoming departures found.</p>
+            <p className="editor-hint">No departures found in that window — try a wider search.</p>
           )}
           {candidates && candidates.length > 0 && (
             <ol className="pin-candidate-list">
-              {candidates.map((c) => (
-                <li key={c.crs + c.scheduled} className="pin-candidate-row">
-                  <span className="pinned-leg-times">
-                    {t(c.scheduled)} to {c.destinationName}
-                  </span>
-                  {c.operator && <span className="editor-hint">{c.operator}</span>}
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => addCandidate(c)}
-                    disabled={addingCrs === c.crs + c.scheduled}
-                  >
-                    {addingCrs === c.crs + c.scheduled ? "Adding…" : "Add"}
-                  </button>
-                </li>
-              ))}
+              {candidates.map((c) => {
+                const key = c.crs + c.scheduled;
+                return (
+                  <li key={key} className="pin-candidate-row">
+                    <span className="pinned-leg-times">
+                      {t(c.scheduled)} to {c.destinationName}
+                    </span>
+                    {c.operator && <span className="editor-hint">{c.operator}</span>}
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => addCandidate(c)}
+                      disabled={addingKey === key}
+                    >
+                      {addingKey === key ? "Adding…" : "Add"}
+                    </button>
+                  </li>
+                );
+              })}
             </ol>
           )}
         </div>

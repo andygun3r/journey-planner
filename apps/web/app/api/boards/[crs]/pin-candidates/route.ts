@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { londonDate, londonWallTimeToIso } from "@signaller/shared";
 import { cachedBoard } from "@/lib/board-cache";
 
 export const dynamic = "force-dynamic";
@@ -23,25 +24,55 @@ export interface PinCandidate {
  * only one row of a ~20-row board will ever actually get picked. Resolution
  * happens once, lazily, only for the row the user clicks — see
  * /api/commute/resolve-pin.
+ *
+ * `date` (YYYY-MM-DD) picks which day's timetable to search — a commute leg
+ * is day-of-week recurring, so this lets the picker search e.g. "next
+ * Wednesday" rather than only ever today. Passing a non-today date always
+ * routes getBoard() to its MOTIS/GTFS-timetable path (the live LDBWS/Darwin
+ * board only ever knows "now") — that's the intended, proven path (see
+ * board.ts: LDBWS is skipped whenever a `when` is supplied).
+ *
+ * `around` (HH:MM) + `windowMinutes` bound the search loosely — by default
+ * -30/+90 minutes either side of the leg's window start (or the previous
+ * pinned leg's arrival), so the user can browse nearby options rather than
+ * only exact-or-later matches.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ crs: string }> }) {
   const { crs } = await params;
-  const when = req.nextUrl.searchParams.get("when") ?? undefined;
-  // The previous leg's arrival (or the direction's window start for the first
-  // leg) — rows departing before this aren't offered, since they can't be
-  // caught after the leg before them.
-  const after = req.nextUrl.searchParams.get("after") ?? undefined;
+  const date = req.nextUrl.searchParams.get("date") || londonDate();
+  const around = req.nextUrl.searchParams.get("around") ?? undefined;
+  const beforeMinutes = Number(req.nextUrl.searchParams.get("beforeMinutes") ?? "30");
+  const afterMinutes = Number(req.nextUrl.searchParams.get("afterMinutes") ?? "90");
 
-  const outcome = await cachedBoard(crs, when, 20);
+  const today = londonDate();
+  // Only pass `when` to getBoard() when it's needed to pick a different day —
+  // today's default (no `when`) keeps the live LDBWS/Darwin board as the
+  // primary source, matching every other board on the site.
+  const when = date === today ? undefined : londonWallTimeToIso(date, "00:00");
+
+  const outcome = await cachedBoard(crs, when, 40);
   if (!outcome.ok) {
     const status = outcome.reason === "bad-request" || outcome.reason === "unknown-station" ? 400 : 503;
     return NextResponse.json(outcome, { status });
   }
 
-  const afterMs = after ? Date.parse(after) : undefined;
+  let windowStartMs: number | undefined;
+  let windowEndMs: number | undefined;
+  if (around) {
+    const anchor = Date.parse(londonWallTimeToIso(date, around));
+    if (!Number.isNaN(anchor)) {
+      windowStartMs = anchor - Math.max(beforeMinutes, 0) * 60_000;
+      windowEndMs = anchor + Math.max(afterMinutes, 0) * 60_000;
+    }
+  }
+
   const candidates: PinCandidate[] = outcome.board.departures
     .filter((d) => d.status !== "cancelled")
-    .filter((d) => (afterMs === undefined ? true : Date.parse(d.scheduled) >= afterMs))
+    .filter((d) => {
+      if (windowStartMs === undefined || windowEndMs === undefined) return true;
+      const ms = Date.parse(d.scheduled);
+      return ms >= windowStartMs && ms <= windowEndMs;
+    })
     .map((d) => ({
       crs: outcome.board.crs,
       name: outcome.board.stationName,
@@ -52,7 +83,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ crs:
       tripId: d.tripId,
       rid: d.rid,
       source: outcome.board.source,
-    }));
+    }))
+    .sort((a, b) => Date.parse(a.scheduled) - Date.parse(b.scheduled));
 
   return NextResponse.json({ ok: true, candidates });
 }

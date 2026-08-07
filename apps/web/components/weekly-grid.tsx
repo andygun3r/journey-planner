@@ -109,6 +109,7 @@ export function WeeklyGrid({ stations, days, onChange, homeCrs, homeLabel }: Pro
                     chainOriginCrs={homeCrs}
                     chainOriginLabel={homeLabel || "Home"}
                     windowStart={day.amStart || "00:00"}
+                    dayOfWeek={i}
                   />
                   <div className="window-times">
                     <label>
@@ -142,6 +143,7 @@ export function WeeklyGrid({ stations, days, onChange, homeCrs, homeLabel }: Pro
                     chainOriginCrs={day.work?.crs ?? ""}
                     chainOriginLabel={day.workLabel || day.work?.name || "Work"}
                     windowStart={day.pmStart || "00:00"}
+                    dayOfWeek={i}
                   />
                   <div className="window-times">
                     <label>
