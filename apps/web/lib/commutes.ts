@@ -17,10 +17,13 @@ function toLegRecord(row: typeof commuteLeg.$inferSelect): CommuteLegRecord {
     amWindowEnd: row.amWindowEnd,
     pmWindowStart: row.pmWindowStart,
     pmWindowEnd: row.pmWindowEnd,
+    backupWorkCrs: row.backupWorkCrs,
+    backupHomeCrs: row.backupHomeCrs,
+    backupNote: row.backupNote,
   };
 }
 
-/** All of a device's commutes with their per-day legs, ordered by day. */
+/** All of a user's commutes with their per-day legs, ordered by day. */
 export async function listCommutes(userId: string): Promise<CommuteWithLegs[]> {
   const db = getDb();
   const commutes = await db.select().from(commute).where(eq(commute.userId, userId));
@@ -41,6 +44,8 @@ export async function listCommutes(userId: string): Promise<CommuteWithLegs[]> {
     label: c.label,
     homeCrs: c.homeCrs,
     homeLabel: c.homeLabel,
+    priority: c.priority,
+    createdAt: c.createdAt.toISOString(),
     legs: (legsByCommute.get(c.id) ?? []).sort((a, b) => a.dayOfWeek - b.dayOfWeek),
   }));
 }
@@ -64,6 +69,8 @@ export async function getCommute(
     label: c.label,
     homeCrs: c.homeCrs,
     homeLabel: c.homeLabel,
+    priority: c.priority,
+    createdAt: c.createdAt.toISOString(),
     legs: legs.map(toLegRecord).sort((a, b) => a.dayOfWeek - b.dayOfWeek),
   };
 }
@@ -79,6 +86,9 @@ function legValues(commuteId: string, input: CommuteInput) {
     amWindowEnd: l.am.end ?? null,
     pmWindowStart: l.pm.start ?? null,
     pmWindowEnd: l.pm.end ?? null,
+    backupWorkCrs: l.backupWorkCrs ?? null,
+    backupHomeCrs: l.backupHomeCrs ?? null,
+    backupNote: l.backupNote ?? null,
   }));
 }
 
@@ -101,6 +111,7 @@ export async function createCommute(userId: string, input: CommuteInput): Promis
       label: input.label,
       homeCrs: input.homeCrs,
       homeLabel: input.homeLabel,
+      priority: input.priority,
       // legacy (unused by new code):
       originCrs: input.homeCrs,
       destCrs: first.workCrs,
@@ -131,7 +142,7 @@ export async function updateCommute(
 
   await db
     .update(commute)
-    .set({ label: input.label, homeCrs: input.homeCrs, homeLabel: input.homeLabel })
+    .set({ label: input.label, homeCrs: input.homeCrs, homeLabel: input.homeLabel, priority: input.priority })
     .where(eq(commute.id, id));
 
   // Replace-all semantics for the weekly grid.

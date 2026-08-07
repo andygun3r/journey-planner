@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { AlertFeed } from "@/components/alert-feed";
 import { BoardRefresher } from "@/components/board-refresher";
-import { Departures } from "@/components/commute-departures";
+import { CommutePanel } from "@/components/commute-panel";
+import { CommuteSwitcher } from "@/components/commute-switcher";
+import { DailyFlex } from "@/components/daily-flex";
 import { QuickJourneys } from "@/components/quick-journeys";
 import { SearchForm } from "@/components/search-form";
 import { listAlerts } from "@/lib/alerts";
@@ -15,7 +17,15 @@ import { activeTsrs } from "@/lib/tsr";
 export const dynamic = "force-dynamic";
 
 /** The commute status panel: next trains, alerts, and route disruptions. */
-async function CommuteStatus({ userId }: { userId: string | null }) {
+async function CommuteStatus({
+  userId,
+  commuteId,
+  shiftMinutes,
+}: {
+  userId: string | null;
+  commuteId?: string;
+  shiftMinutes: number;
+}) {
   if (!userId) {
     return (
       <section className="commute-focus">
@@ -36,7 +46,7 @@ async function CommuteStatus({ userId }: { userId: string | null }) {
   }
 
   const [state, alerts] = await Promise.all([
-    getDashboardData(userId),
+    getDashboardData(userId, new Date(), commuteId, shiftMinutes),
     listAlerts(userId, { limit: 20 }),
   ]);
 
@@ -74,6 +84,11 @@ async function CommuteStatus({ userId }: { userId: string | null }) {
             <Link href="/commute">details</Link>
           </span>
         </div>
+        <CommuteSwitcher
+          activeId={state.commuteId}
+          activeLabel={state.commuteLabel}
+          otherCommutes={state.otherCommutes}
+        />
         <div className="notice">
           <h2>Nothing right now</h2>
           <p>{message}</p>
@@ -98,13 +113,21 @@ async function CommuteStatus({ userId }: { userId: string | null }) {
           </p>
         </div>
 
+        <CommuteSwitcher
+          activeId={state.commuteId}
+          activeLabel={state.commuteLabel}
+          otherCommutes={state.otherCommutes}
+        />
+
+        {leg.upcoming && <DailyFlex shiftMinutes={shiftMinutes} />}
+
         {state.engineOffline ? (
           <div className="notice notice-danger">
             <h2>Live routing is offline</h2>
             <p>Signaller couldn&rsquo;t reach the routing engine to show your next trains.</p>
           </div>
         ) : (
-          <Departures journeys={state.journeys} />
+          <CommutePanel leg={leg} journeys={state.journeys} />
         )}
       </section>
 
@@ -183,7 +206,11 @@ async function SpeedRestrictions() {
   );
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ commute?: string; shift?: string }>;
+}) {
   // Stations power the empty-state check only; the typeahead fetches from
   // /api/stations on demand, so we don't embed the full list in the client.
   let stationCount = 0;
@@ -196,6 +223,8 @@ export default async function Home() {
 
   const userId = await getUserId();
   const favourites = userId ? await listFavourites(userId).catch(() => []) : [];
+  const { commute: commuteId, shift } = await searchParams;
+  const shiftMinutes = shift ? Number(shift) || 0 : 0;
 
   return (
     <main className="commute-page">
@@ -206,7 +235,7 @@ export default async function Home() {
         </span>
       </div>
 
-      <CommuteStatus userId={userId} />
+      <CommuteStatus userId={userId} commuteId={commuteId} shiftMinutes={shiftMinutes} />
 
       <section>
         <h2 className="editor-subhead">Plan a journey</h2>

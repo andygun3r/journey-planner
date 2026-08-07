@@ -4,16 +4,24 @@ import {
   dayOfWeekForDate,
   londonDate,
   londonWallTimeToIso,
-  resolveActiveLeg,
+  pickDefaultCommute,
+  resolveActiveLegForCommute,
 } from "@signaller/shared";
 import { listCommutes } from "./commutes";
 import { type Disruption as BoardDisruption, fetchStationDisruptions } from "./disruptions";
 import { holidayRangesFor } from "./holidays";
 import { planJourneys, type JourneyView } from "./journeys";
 
+/** Other commutes the user has, for a switcher UI — excludes the one in play. */
+export interface OtherCommute {
+  id: string;
+  label: string;
+}
+
 export type DashboardState =
   | {
       kind: "active";
+      commuteId: string;
       commuteLabel: string;
       leg: ActiveLeg;
       journeys: JourneyView[];
@@ -21,8 +29,15 @@ export type DashboardState =
       disruptions: BoardDisruption[];
       /** True when the routing engine couldn't be reached. */
       engineOffline: boolean;
+      otherCommutes: OtherCommute[];
     }
-  | { kind: "no-active"; commuteLabel: string; reason: "rest-of-day" | "holiday" | "no-leg-today" }
+  | {
+      kind: "no-active";
+      commuteId: string;
+      commuteLabel: string;
+      reason: "rest-of-day" | "holiday" | "no-leg-today";
+      otherCommutes: OtherCommute[];
+    }
   | { kind: "no-commute" };
 
 /**
@@ -31,22 +46,38 @@ export type DashboardState =
  * actually calls at the destination — the departure board only exposes each
  * train's final destination. Live disruption context comes straight from the
  * disruptions API.
+ *
+ * `commuteId` picks a specific commute (from the switcher); when omitted, the
+ * highest-priority commute with an active/relevant leg today is used — see
+ * `pickDefaultCommute`. `shiftMinutes` offsets the query time for a same-day
+ * "running late / leaving early" nudge — it never touches the saved schedule.
  */
-export async function getDashboardData(userId: string, now = new Date()): Promise<DashboardState> {
+export async function getDashboardData(
+  userId: string,
+  now = new Date(),
+  commuteId?: string,
+  shiftMinutes = 0,
+): Promise<DashboardState> {
   const commutes = await listCommutes(userId);
   if (commutes.length === 0) return { kind: "no-commute" };
 
-  // v1: focus on the first commute. (Multiple commutes can be surfaced later.)
-  const commute = commutes[0]!;
   const holidays = await holidayRangesFor(userId);
+
+  const commute =
+    (commuteId ? commutes.find((c) => c.id === commuteId) : null) ??
+    pickDefaultCommute(commutes, holidays, now);
+  if (!commute) return { kind: "no-commute" };
+
+  const otherCommutes = commutes.filter((c) => c.id !== commute.id).map((c) => ({ id: c.id, label: c.label }));
 
   const record: CommuteRecord = {
     id: commute.id,
     label: commute.label,
     homeCrs: commute.homeCrs,
     homeLabel: commute.homeLabel,
+    priority: commute.priority,
   };
-  const leg = resolveActiveLeg(record, commute.legs, holidays, now);
+  const leg = resolveActiveLegForCommute(record, commute.legs, holidays, now);
 
   if (!leg) {
     const today = londonDate(now);
@@ -55,15 +86,19 @@ export async function getDashboardData(userId: string, now = new Date()): Promis
     const hasLegToday = commute.legs.some((l) => l.dayOfWeek === dow);
     return {
       kind: "no-active",
+      commuteId: commute.id,
       commuteLabel: commute.label,
       reason: isHoliday ? "holiday" : hasLegToday ? "rest-of-day" : "no-leg-today",
+      otherCommutes,
     };
   }
 
-  // Seed the plan at the window start (or now, if we're already inside it).
+  // Seed the plan at the window start (or now, if we're already inside it),
+  // then apply the daily-flex shift on top.
   const today = londonDate(now);
   const windowStartIso = londonWallTimeToIso(today, leg.windowStart);
-  const when = Date.parse(windowStartIso) > now.getTime() ? windowStartIso : now.toISOString();
+  const base = Date.parse(windowStartIso) > now.getTime() ? windowStartIso : now.toISOString();
+  const when = new Date(Date.parse(base) + shiftMinutes * 60_000).toISOString();
 
   const outcome = await planJourneys(leg.originCrs, leg.destCrs, when);
   const journeys = outcome.ok ? outcome.journeys : [];
@@ -86,10 +121,12 @@ export async function getDashboardData(userId: string, now = new Date()): Promis
 
   return {
     kind: "active",
+    commuteId: commute.id,
     commuteLabel: commute.label,
     leg,
     journeys,
     disruptions,
     engineOffline,
+    otherCommutes,
   };
 }

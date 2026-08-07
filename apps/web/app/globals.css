@@ -538,6 +538,38 @@ a {
   border-color: transparent;
 }
 
+.daily-flex {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.9rem 0;
+}
+.daily-flex-label {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.68);
+}
+.daily-flex-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.chip-toggle {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  font: inherit;
+  min-height: 32px;
+}
+.chip-toggle:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.chip-toggle-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
 /* ---- Journey detail (expanded legs) ---- */
 
 .journey-detail {
@@ -1952,6 +1984,24 @@ a {
   color: var(--muted);
   flex: 1;
 }
+.day-backup {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-control);
+  padding: 0.6rem 0.7rem;
+}
+.day-backup summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.day-backup .day-work {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 0.75rem;
+}
+.day-backup .field {
+  margin-top: 0.75rem;
+}
 .window-times input[type="time"] {
   font: inherit;
   font-variant-numeric: tabular-nums;
@@ -3304,6 +3354,100 @@ a.map-tip-anchor:hover .map-tip {
   color: rgba(255, 255, 255, 0.85);
 }
 
+.commute-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+.commute-switcher-label {
+  color: rgba(255, 255, 255, 0.68);
+}
+.commute-switcher select {
+  font: inherit;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-control);
+  padding: 0.3rem 0.5rem;
+}
+
+.commute-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.commute-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  background: var(--surface);
+  padding: 0.75rem 0.9rem;
+}
+.commute-list-name {
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 0.2rem;
+}
+
+.commute-walkthrough {
+  list-style: none;
+  padding: 0;
+  margin: 1.1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: var(--radius-control);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+.walkthrough-step {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.88rem;
+}
+.walkthrough-step:last-child {
+  border-bottom: none;
+}
+.walkthrough-kind {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+.walkthrough-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+}
+.walkthrough-text {
+  color: rgba(255, 255, 255, 0.85);
+}
+.walkthrough-done {
+  opacity: 0.55;
+}
+.walkthrough-current {
+  background: rgba(255, 255, 255, 0.1);
+}
+.walkthrough-current .walkthrough-kind {
+  color: var(--accent);
+}
+.walkthrough-current .walkthrough-text {
+  color: #ffffff;
+  font-weight: 600;
+}
+
 .commute-departures {
   list-style: none;
   padding: 0;
@@ -3470,8 +3614,22 @@ details[open] > .commute-dep-link .commute-dep-chevron {
 }
 
 .commute-backup {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
   padding-top: 1.25rem;
+  margin-top: 1.1rem;
+}
+.commute-focus .btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.commute-focus .btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 .backup-list {
   list-style: none;
@@ -3486,19 +3644,22 @@ details[open] > .commute-dep-link .commute-dep-chevron {
   align-items: center;
   gap: 0.7rem;
   padding: 0.5rem 0.7rem;
-  border: 1px solid var(--border);
   border-radius: var(--radius-control);
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.08);
 }
 .backup-times {
   font-weight: 620;
   font-variant-numeric: tabular-nums;
-  color: var(--ink);
+  color: #ffffff;
 }
 .backup-meta {
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.68);
   font-size: 0.85rem;
   margin-right: auto;
+}
+.backup-switch-active {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 @media (max-width: 40rem) {

@@ -24,6 +24,13 @@ function draftsFrom(commute: CommuteWithLegs | null, stations: StationOption[]):
       amEnd: leg.amWindowEnd?.slice(0, 5) ?? "",
       pmStart: leg.pmWindowStart?.slice(0, 5) ?? "",
       pmEnd: leg.pmWindowEnd?.slice(0, 5) ?? "",
+      backupWork: leg.backupWorkCrs
+        ? (byCrs.get(leg.backupWorkCrs) ?? { crs: leg.backupWorkCrs, name: leg.backupWorkCrs })
+        : null,
+      backupHome: leg.backupHomeCrs
+        ? (byCrs.get(leg.backupHomeCrs) ?? { crs: leg.backupHomeCrs, name: leg.backupHomeCrs })
+        : null,
+      backupNote: leg.backupNote ?? "",
     };
   }
   return days;
@@ -36,6 +43,7 @@ export function CommuteEditor({ stations, commute }: Props) {
     commute?.homeCrs ? (stationByCrs.get(commute.homeCrs) ?? null) : null,
   );
   const [homeLabel, setHomeLabel] = useState(commute?.homeLabel ?? "Home");
+  const [priority, setPriority] = useState(commute?.priority ?? 0);
   const [days, setDays] = useState<DayDraft[]>(() => draftsFrom(commute, stations));
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -54,11 +62,15 @@ export function CommuteEditor({ stations, commute }: Props) {
         workLabel: d.workLabel.trim() || d.work?.name || "Work",
         am: { start: d.amStart || null, end: d.amEnd || null },
         pm: { start: d.pmStart || null, end: d.pmEnd || null },
+        backupWorkCrs: d.backupWork?.crs || null,
+        backupHomeCrs: d.backupHome?.crs || null,
+        backupNote: d.backupNote.trim() || null,
       }));
     return {
       label: label.trim(),
       homeCrs: home?.crs ?? "",
       homeLabel: homeLabel.trim() || "Home",
+      priority,
       legs,
     };
   }
@@ -133,6 +145,21 @@ export function CommuteEditor({ stations, commute }: Props) {
             onChange={(e) => setHomeLabel(e.target.value)}
             placeholder="Home"
           />
+        </div>
+        <div className="field">
+          <label htmlFor="commute-priority">Default order</label>
+          <input
+            id="commute-priority"
+            type="number"
+            min={0}
+            max={10}
+            value={priority}
+            onChange={(e) => setPriority(Number(e.target.value) || 0)}
+          />
+          <p className="editor-hint">
+            If two commutes run on the same day, the higher number shows on your dashboard by
+            default. You can always switch to the other one.
+          </p>
         </div>
       </div>
 

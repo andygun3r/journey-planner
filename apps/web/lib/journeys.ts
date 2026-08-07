@@ -24,6 +24,8 @@ export interface JourneyLegView {
   staySeated: boolean;
   cancelled: boolean;
   callCount: number;
+  /** Name of the first intermediate stop, when there is one — for "next stop" copy. */
+  nextCallName?: string;
 }
 
 export interface JourneyView {
@@ -65,6 +67,7 @@ async function toLegView(leg: RawLeg): Promise<JourneyLegView> {
     staySeated: leg.staySeated,
     cancelled: leg.cancelled,
     callCount: leg.intermediateCalls.length,
+    nextCallName: leg.intermediateCalls[0]?.name,
   };
 }
 

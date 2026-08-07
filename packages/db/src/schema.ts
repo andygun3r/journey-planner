@@ -663,6 +663,13 @@ export const commute = pgTable(
     /** Home location: the shared origin/destination across every day of this commute. */
     homeCrs: text("home_crs"),
     homeLabel: text("home_label"),
+    /**
+     * When more than one of a user's commutes has an active leg for today's
+     * day-of-week, the highest priority wins as the dashboard default (ties
+     * break on createdAt). Lets "Office" (priority 1) win over an occasional
+     * "Client visit" (priority 0) commute that also happens to run Mondays.
+     */
+    priority: smallint("priority").notNull().default(0),
     // ---- LEGACY (pre per-day model) — kept for the additive 0002 migration, never
     // read or written by new code; the authoritative schedule lives in commute_leg.
     // A later migration can drop these columns.
@@ -702,6 +709,14 @@ export const commuteLeg = pgTable(
     /** PM = work→home departure window (nullable: a day can be AM-only). */
     pmWindowStart: time("pm_window_start"),
     pmWindowEnd: time("pm_window_end"),
+    /**
+     * Optional backup station(s) for this day, offered as a quick "your usual
+     * backup" option (still live-replanned, never a stored itinerary) when the
+     * usual route is disrupted. Both nullable; unset means no configured backup.
+     */
+    backupWorkCrs: text("backup_work_crs"),
+    backupHomeCrs: text("backup_home_crs"),
+    backupNote: text("backup_note"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("commute_leg_commute_dow_idx").on(t.commuteId, t.dayOfWeek)],

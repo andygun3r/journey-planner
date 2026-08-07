@@ -183,6 +183,13 @@
       "when": 1786099606838,
       "tag": "0025_gorgeous_kitty_pryde",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1786103068068,
+      "tag": "0026_abnormal_husk",
+      "breakpoints": true
     }
   ]
 }

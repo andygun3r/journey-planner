@@ -11,10 +11,25 @@ export interface DayDraft {
   amEnd: string;
   pmStart: string;
   pmEnd: string;
+  /** Optional backup station(s) for this day, offered when the usual route is disrupted. */
+  backupWork: StationOption | null;
+  backupHome: StationOption | null;
+  backupNote: string;
 }
 
 export function emptyDay(): DayDraft {
-  return { active: false, work: null, workLabel: "", amStart: "", amEnd: "", pmStart: "", pmEnd: "" };
+  return {
+    active: false,
+    work: null,
+    workLabel: "",
+    amStart: "",
+    amEnd: "",
+    pmStart: "",
+    pmEnd: "",
+    backupWork: null,
+    backupHome: null,
+    backupNote: "",
+  };
 }
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -117,6 +132,43 @@ export function WeeklyGrid({ stations, days, onChange }: Props) {
                   </div>
                 </fieldset>
               </div>
+
+              <details className="day-backup">
+                <summary>Backup route (optional)</summary>
+                <p className="editor-hint">
+                  If your usual station is disrupted, we&rsquo;ll offer this as a quick alternative —
+                  we still search live for the best train, this just points us where to look.
+                </p>
+                <div className="day-work">
+                  <StationInput
+                    label="Backup work station"
+                    name={`backup-work-${i}`}
+                    stations={stations}
+                    value={day.backupWork}
+                    onChange={(s) => onChange(i, { backupWork: s })}
+                    placeholder="e.g. a nearby station"
+                  />
+                  <StationInput
+                    label="Backup home station"
+                    name={`backup-home-${i}`}
+                    stations={stations}
+                    value={day.backupHome}
+                    onChange={(s) => onChange(i, { backupHome: s })}
+                    placeholder="e.g. a nearby station"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor={`backup-note-${i}`}>Note</label>
+                  <input
+                    id={`backup-note-${i}`}
+                    type="text"
+                    maxLength={120}
+                    placeholder="e.g. via Clapham Junction if Waterloo branch disrupted"
+                    value={day.backupNote}
+                    onChange={(e) => onChange(i, { backupNote: e.target.value })}
+                  />
+                </div>
+              </details>
             </div>
           )}
         </div>

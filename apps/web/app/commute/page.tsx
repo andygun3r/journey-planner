@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertFeed } from "@/components/alert-feed";
-import { BackupRoutes } from "@/components/backup-routes";
 import { BoardRefresher } from "@/components/board-refresher";
-import { Departures } from "@/components/commute-departures";
+import { CommutePanel } from "@/components/commute-panel";
+import { CommuteSwitcher } from "@/components/commute-switcher";
+import { DailyFlex } from "@/components/daily-flex";
 import { PushToggle } from "@/components/push-toggle";
 import { listAlerts } from "@/lib/alerts";
 import { getDashboardData } from "@/lib/commute-dashboard";
@@ -12,11 +13,18 @@ import { hasPushSubscription, vapidPublicKey } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
-export default async function CommuteDashboardPage() {
+interface Props {
+  searchParams: Promise<{ commute?: string; shift?: string }>;
+}
+
+export default async function CommuteDashboardPage({ searchParams }: Props) {
   const userId = await getUserId();
   if (!userId) redirect("/login");
+  const { commute: commuteId, shift } = await searchParams;
+  const shiftMinutes = shift ? Number(shift) || 0 : 0;
+
   const [state, alerts, pushOn] = await Promise.all([
-    getDashboardData(userId),
+    getDashboardData(userId, new Date(), commuteId, shiftMinutes),
     listAlerts(userId, { limit: 20 }),
     hasPushSubscription(userId),
   ]);
@@ -56,9 +64,15 @@ export default async function CommuteDashboardPage() {
         <div className="results-head">
           <h1>{state.commuteLabel}</h1>
           <span className="when">
-            <Link href="/commute/edit">edit</Link> · <Link href="/commute/holidays">holidays</Link>
+            <Link href="/commute/edit">edit</Link> · <Link href="/commute/list">manage</Link> ·{" "}
+            <Link href="/commute/holidays">holidays</Link>
           </span>
         </div>
+        <CommuteSwitcher
+          activeId={state.commuteId}
+          activeLabel={state.commuteLabel}
+          otherCommutes={state.otherCommutes}
+        />
         <div className="notice">
           <h2>Nothing right now</h2>
           <p>{message}</p>
@@ -74,9 +88,15 @@ export default async function CommuteDashboardPage() {
         <h1>{state.commuteLabel}</h1>
         <span className="when">
           <BoardRefresher intervalMs={30_000} /> · <Link href="/commute/edit">edit</Link> ·{" "}
-          <Link href="/commute/holidays">holidays</Link>
+          <Link href="/commute/list">manage</Link> · <Link href="/commute/holidays">holidays</Link>
         </span>
       </div>
+
+      <CommuteSwitcher
+        activeId={state.commuteId}
+        activeLabel={state.commuteLabel}
+        otherCommutes={state.otherCommutes}
+      />
 
       <AlertFeed initialAlerts={alerts} />
 
@@ -93,13 +113,15 @@ export default async function CommuteDashboardPage() {
           </p>
         </div>
 
+        {leg.upcoming && <DailyFlex shiftMinutes={shiftMinutes} />}
+
         {state.engineOffline ? (
           <div className="notice notice-danger">
             <h2>Live routing is offline</h2>
             <p>Signaller couldn&rsquo;t reach the routing engine to show your next trains.</p>
           </div>
         ) : (
-          <Departures journeys={state.journeys} />
+          <CommutePanel leg={leg} journeys={state.journeys} />
         )}
       </section>
 
@@ -117,20 +139,11 @@ export default async function CommuteDashboardPage() {
         </section>
       )}
 
-      <section className="commute-backup">
-        <p className="editor-hint">Train cancelled or delayed? See other ways to get there.</p>
-        <BackupRoutes
-          originCrs={leg.originCrs}
-          destCrs={leg.destCrs}
-          originLabel={leg.originLabel}
-          destLabel={leg.destLabel}
-        />
-        {vapid && (
-          <div className="commute-push">
-            <PushToggle vapidPublicKey={vapid} initiallySubscribed={pushOn} />
-          </div>
-        )}
-      </section>
+      {vapid && (
+        <div className="commute-push">
+          <PushToggle vapidPublicKey={vapid} initiallySubscribed={pushOn} />
+        </div>
+      )}
     </main>
   );
 }

@@ -43,6 +43,14 @@ export const CommuteLegInput = z
     workLabel: z.string().trim().min(1).max(60),
     am: Window,
     pm: Window,
+    /**
+     * Optional backup station(s) for this day — a quick "your usual backup"
+     * hint offered alongside a live re-plan when the usual route is
+     * disrupted. Never a stored itinerary; re-routing is always live.
+     */
+    backupWorkCrs: CRS.nullish(),
+    backupHomeCrs: CRS.nullish(),
+    backupNote: z.string().trim().max(120).nullish(),
   })
   .refine((l) => l.am.start != null || l.pm.start != null, {
     message: "A day needs at least an AM or a PM window",
@@ -53,6 +61,11 @@ export const CommuteInput = z.object({
   label: z.string().trim().min(1).max(60),
   homeCrs: CRS,
   homeLabel: z.string().trim().min(1).max(60),
+  /**
+   * When more than one of a user's commutes has an active leg for today,
+   * the highest priority wins as the dashboard default. 0 = lowest.
+   */
+  priority: z.number().int().min(0).max(10).default(0),
   legs: z.array(CommuteLegInput).min(1).max(7),
 });
 export type CommuteInput = z.infer<typeof CommuteInput>;
@@ -79,6 +92,8 @@ export interface CommuteRecord {
   label: string;
   homeCrs: string | null;
   homeLabel: string | null;
+  priority: number;
+  createdAt?: string;
 }
 
 export interface CommuteLegRecord {
@@ -90,6 +105,9 @@ export interface CommuteLegRecord {
   amWindowEnd: string | null;
   pmWindowStart: string | null;
   pmWindowEnd: string | null;
+  backupWorkCrs: string | null;
+  backupHomeCrs: string | null;
+  backupNote: string | null;
 }
 
 export interface HolidayRange {
@@ -111,6 +129,10 @@ export interface ActiveLeg {
   windowEnd: string;
   /** True when the window has not started yet (upcoming), false when in it. */
   upcoming: boolean;
+  /** Optional backup station for this direction, set from the leg's config. */
+  backupOriginCrs?: string;
+  backupDestCrs?: string;
+  backupNote?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +215,7 @@ function windowFor(leg: CommuteLegRecord, dir: Direction): { start: string; end:
  *
  * Returns the active leg, or null when nothing is in play right now.
  */
-export function resolveActiveLeg(
+export function resolveActiveLegForCommute(
   commute: CommuteRecord,
   legs: CommuteLegRecord[],
   holidays: HolidayRange[],
@@ -225,6 +247,9 @@ export function resolveActiveLeg(
       windowStart: am.start,
       windowEnd: am.end,
       upcoming: nowHm < am.start,
+      backupOriginCrs: leg.backupHomeCrs ?? undefined,
+      backupDestCrs: leg.backupWorkCrs ?? undefined,
+      backupNote: leg.backupNote ?? undefined,
     };
   }
 
@@ -241,10 +266,48 @@ export function resolveActiveLeg(
       windowStart: pm.start,
       windowEnd: pm.end,
       upcoming: nowHm < pm.start,
+      backupOriginCrs: leg.backupWorkCrs ?? undefined,
+      backupDestCrs: leg.backupHomeCrs ?? undefined,
+      backupNote: leg.backupNote ?? undefined,
     };
   }
 
   return null;
+}
+
+/** @deprecated use resolveActiveLegForCommute — kept as an alias during the multi-commute rollout. */
+export const resolveActiveLeg = resolveActiveLegForCommute;
+
+/**
+ * Given all of a user's commutes, pick which one the dashboard should default
+ * to today. Highest `priority` among commutes with an active leg for today's
+ * day-of-week wins (ties break on earliest `createdAt`). Falls back to the
+ * highest-priority commute that has ANY leg configured for today (so a
+ * "done for today" / "rest of day" state still points at the right commute),
+ * then to the very first commute if nothing matches today at all.
+ */
+export function pickDefaultCommute<T extends CommuteRecord & { legs: CommuteLegRecord[] }>(
+  commutes: T[],
+  holidays: HolidayRange[],
+  now: Date = new Date(),
+): T | null {
+  if (commutes.length === 0) return null;
+
+  const byPriorityThenAge = (a: T, b: T) =>
+    b.priority - a.priority || (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
+
+  const withActiveLeg = commutes
+    .filter((c) => resolveActiveLegForCommute(c, c.legs, holidays, now) !== null)
+    .sort(byPriorityThenAge);
+  if (withActiveLeg.length > 0) return withActiveLeg[0]!;
+
+  const dow = londonDayOfWeek(now);
+  const withLegToday = commutes
+    .filter((c) => c.legs.some((l) => l.dayOfWeek === dow))
+    .sort(byPriorityThenAge);
+  if (withLegToday.length > 0) return withLegToday[0]!;
+
+  return [...commutes].sort(byPriorityThenAge)[0]!;
 }
 
 /**
