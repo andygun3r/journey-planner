@@ -8,3 +8,4 @@ export * from "./uk-time.js";
 export * from "./service-match.js";
 export * from "./shapefile.js";
 export * from "./bng.js";
+export * from "./accessibility.js";

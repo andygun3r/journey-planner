@@ -4398,3 +4398,51 @@ details[open] > .commute-dep-link .commute-dep-chevron {
   padding: 0.15rem 0.5rem;
   vertical-align: middle;
 }
+
+/* ---- Accessibility preferences (/settings) ----
+   Opt-in only: every rule below is gated on a data-* attribute the root
+   layout sets from a signed-in user's saved preferences (lib/accessibility-
+   prefs.ts). No attribute present (signed out, or opted out) means none of
+   this applies — the default look is untouched. See PRODUCT.md's
+   Accessibility & Inclusion addendum. */
+
+html[data-reduced-motion="true"] * {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+html[data-text-size="large"] {
+  font-size: 112.5%;
+}
+html[data-text-size="larger"] {
+  font-size: 125%;
+}
+
+html[data-strengthen-cues="true"] a {
+  text-decoration: underline;
+}
+
+/* High-contrast theme: redefines the same semantic tokens every component
+   already consumes, scoped to this opt-in attribute rather than :root or
+   prefers-color-scheme — the app never switches itself, a user switches it. */
+html[data-high-contrast="true"] {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f0f0f0;
+  --border: #000000;
+  --border-strong: #000000;
+  --ink: #000000;
+  --muted: #1a1a1a;
+  --primary: #0b0b3b;
+  --primary-strong: #000000;
+  --primary-tint: #d6d6f5;
+  --on-primary: #ffffff;
+  --accent: #b0001c;
+  --accent-tint: #ffd9dd;
+  --ok: #0a6b2e;
+  --warn: #7a4b00;
+  --danger: #b0001c;
+  --ring: #0b0b3b;
+}

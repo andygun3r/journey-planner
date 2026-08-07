@@ -6,6 +6,8 @@ import { RegisterSW } from "@/components/register-sw";
 import { TopNav } from "@/components/top-nav";
 import { TabBar } from "@/components/tab-bar";
 import { SignalMark } from "@/components/signal-mark";
+import { getSessionUser } from "@/lib/current-user";
+import { getAccessibilityPrefs } from "@/lib/accessibility-prefs";
 import "./globals.css";
 
 // Archivo: headlines, the logotype, section labels — any signage-like UI
@@ -38,9 +40,20 @@ export const viewport: Viewport = {
   themeColor: "#1c2340",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const sessionUser = await getSessionUser();
+  const prefs = sessionUser ? await getAccessibilityPrefs(sessionUser.id) : null;
+  const isAdmin = sessionUser?.role === "admin";
+
   return (
-    <html lang="en-GB" className={`${archivo.variable} ${inter.variable}`}>
+    <html
+      lang="en-GB"
+      className={`${archivo.variable} ${inter.variable}`}
+      data-reduced-motion={prefs?.reducedMotion ? "true" : undefined}
+      data-text-size={prefs && prefs.textSize !== "normal" ? prefs.textSize : undefined}
+      data-high-contrast={prefs?.highContrast ? "true" : undefined}
+      data-strengthen-cues={prefs?.strengthenCues ? "true" : undefined}
+    >
       <body>
         {/*
           DIRECTION CONTRACT (Impeccable, home dashboard — apps/web/app/page.tsx)
@@ -68,7 +81,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <SignalMark className="wordmark-mark" />
               <span className="wordmark-text">Signaller</span>
             </Link>
-            <TopNav />
+            <TopNav isSignedIn={sessionUser != null} isAdmin={isAdmin} />
           </div>
         </header>
         <div className="shell">

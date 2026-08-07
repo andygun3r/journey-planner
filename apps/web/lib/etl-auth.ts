@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "./auth";
+import { isAdminUser } from "./require-admin";
 
 /**
  * Guards the ETL upload/sftp-sync routes. Allows a request through if EITHER:
@@ -14,7 +15,7 @@ import { auth } from "./auth";
  */
 export async function checkEtlAuth(req: Request): Promise<NextResponse | null> {
   const session = await auth.api.getSession({ headers: req.headers });
-  if (session?.user && (session.user as { role?: string }).role === "admin") {
+  if (isAdminUser(session?.user as { role?: string } | undefined)) {
     return null;
   }
 

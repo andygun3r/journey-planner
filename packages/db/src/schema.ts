@@ -1039,6 +1039,17 @@ export const user = pgTable("user", {
   image: text("image"),
   role: text("role").notNull().default("user"),
   pushSubscription: jsonb("push_subscription"),
+  /**
+   * Accessibility preferences (v1, /settings) — an opt-in layer on top of the
+   * single default theme (see PRODUCT.md's Accessibility & Inclusion
+   * addendum). All default to the unchanged look; nothing here affects a
+   * signed-out visitor or a user who hasn't opted in.
+   */
+  reducedMotion: boolean("reduced_motion").notNull().default(false),
+  /** "normal" | "large" | "larger" */
+  textSize: text("text_size").notNull().default("normal"),
+  highContrast: boolean("high_contrast").notNull().default(false),
+  strengthenCues: boolean("strengthen_cues").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

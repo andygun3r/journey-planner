@@ -16,11 +16,23 @@ function isActive(pathname: string, href: string): boolean {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function TopNav() {
+interface Props {
+  /** Signed-in user — adds a "Settings" link. Signed out: neither link shows. */
+  isSignedIn: boolean;
+  /** Signed-in admin — adds an "Admin" link alongside Settings. */
+  isAdmin: boolean;
+}
+
+export function TopNav({ isSignedIn, isAdmin }: Props) {
   const pathname = usePathname();
+  const links = [
+    ...LINKS,
+    ...(isSignedIn ? [{ href: "/settings", label: "Settings" }] : []),
+    ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
+  ];
   return (
     <nav className="topnav" aria-label="Primary">
-      {LINKS.map((link) => {
+      {links.map((link) => {
         const active = isActive(pathname, link.href);
         return (
           <Link

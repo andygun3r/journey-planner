@@ -61,3 +61,5 @@ A planner that *computes* rather than *proxies*: it runs its own MOTIS routing e
 ## Accessibility & Inclusion
 
 WCAG 2.2 AA. **One theme, designed properly**: ink-on-Platform-White, ≥4.5:1 body contrast — there is no dark alternative to maintain in parallel. Status never conveyed by colour alone (icons/text deltas accompany red/amber/green). Reduced-motion alternatives for all live-update animation. Touch targets ≥44px for platform use with gloves/one hand.
+
+**Opt-in exception:** signed-in users can enable an alternate high-contrast theme plus reduced motion, larger text and strengthened non-colour cues from `/settings` — for accessibility need, not preference browsing. This does not reinstate the retired dark theme or any `prefers-color-scheme` auto-switching: the one-theme default is unchanged for every signed-out visitor and every signed-in user who doesn't opt in.
