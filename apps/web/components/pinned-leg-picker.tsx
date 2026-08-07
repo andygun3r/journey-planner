@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { londonDate, londonDayOfWeek } from "@signaller/shared";
+import { londonDate, londonDayOfWeek, londonWallTimeToIso } from "@signaller/shared";
 import { StationInput, type StationOption } from "./station-input";
 
 /** Draft shape for one pinned leg — matches CommuteLegPinInput minus `direction`. */
@@ -19,24 +19,21 @@ export interface PinDraft {
   pickedServiceDate: string;
 }
 
-interface PinCandidate {
-  crs: string;
-  name: string;
-  scheduled: string;
-  destinationName: string;
-  destinationCrs?: string;
+/** A pickable train for one leg, from /api/commute/leg-options. */
+interface LegOption {
+  gtfsTripId: string;
+  originCrs: string;
+  originName: string;
+  destCrs: string;
+  destName: string;
+  departs: string;
+  arrives: string;
+  departsHhmm: string;
+  arrivesHhmm: string;
+  durationMinutes: number;
   operator?: string;
-  tripId?: string;
-  rid?: string;
-  source: "ldbws" | "darwin" | "timetable";
+  callCount: number;
 }
-
-const timeFmt = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/London",
-});
-const t = (iso: string) => timeFmt.format(new Date(iso));
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -50,18 +47,25 @@ export function nearestDateForDayOfWeek(dow: number): string {
   return londonDate(new Date(base.getTime() + diff * 86_400_000));
 }
 
-/** Minutes between an arrival HH:MM and a candidate's scheduled instant, same day. */
-function connectionMinutes(prevSchedArr: string, candidateScheduled: string): number | null {
-  const [h, m] = prevSchedArr.split(":").map(Number);
-  if (h === undefined || m === undefined) return null;
-  const candidate = new Date(candidateScheduled);
-  const arrival = new Date(candidate);
-  arrival.setHours(h, m, 0, 0);
-  const diffMin = Math.round((candidate.getTime() - arrival.getTime()) / 60_000);
-  return diffMin;
-}
-
 const TIGHT_CONNECTION_MIN = 5;
+
+/**
+ * Minutes between the previous leg's arrival (HH:MM UK local on `serviceDate`)
+ * and a candidate departure instant.
+ *
+ * Resolves the HH:MM through the shared UK-timezone helper rather than a local
+ * `setHours`, which would be wrong whenever the browser isn't on UK time. If
+ * the result is strongly negative the connection runs past midnight, so the
+ * arrival belongs to the previous day — add a day back.
+ */
+function connectionMinutes(prevArrHhmm: string, serviceDate: string, departsIso: string): number | null {
+  const arrivalMs = Date.parse(londonWallTimeToIso(serviceDate, prevArrHhmm));
+  const departMs = Date.parse(departsIso);
+  if (Number.isNaN(arrivalMs) || Number.isNaN(departMs)) return null;
+  let diff = Math.round((departMs - arrivalMs) / 60_000);
+  if (diff < -720) diff += 1440;
+  return diff;
+}
 
 /** One leg slot derived from the chain endpoints + declared change stations. */
 interface Slot {
@@ -103,10 +107,10 @@ interface Props {
   /** Where the chain starts: home or work CRS for the first leg. */
   chainOriginCrs: string;
   chainOriginLabel: string;
-  /** Where the chain ends — needed up front now the whole leg structure is declared before searching. */
+  /** Where the chain ends — the whole leg structure is declared before searching. */
   chainDestCrs: string;
   chainDestLabel: string;
-  /** The direction's window start — default search anchor for the first leg. */
+  /** The direction's window start — seeds the first leg's departure time. */
   windowStart: string;
   /** The commute leg's own day-of-week (0=Mon..6=Sun) — defaults the day selector. */
   dayOfWeek: number;
@@ -135,10 +139,12 @@ export function PinnedLegPicker({
   );
   const [newChange, setNewChange] = useState<StationOption | null>(null);
   const [searchDow, setSearchDow] = useState(dayOfWeek);
-  const [candidates, setCandidates] = useState<PinCandidate[] | null>(null);
+  /** Departure time to search around — editable, re-seeded per leg (see departAt). */
+  const [departOverride, setDepartOverride] = useState<string | null>(null);
+  const [options, setOptions] = useState<LegOption[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [addingKey, setAddingKey] = useState<string | null>(null);
+  const [addingId, setAddingId] = useState<string | null>(null);
 
   const canDeclareStructure = Boolean(chainOriginCrs && chainDestCrs);
   const slots = useMemo(
@@ -146,92 +152,97 @@ export function PinnedLegPicker({
     [chainOriginCrs, chainOriginLabel, changeStations, chainDestCrs, chainDestLabel],
   );
 
-  // The first slot with no pin yet — slots fill strictly in order, since a later
-  // slot's search anchor only makes sense once the one before it is picked.
+  // Slots fill strictly in order — a later leg's departure time only makes
+  // sense once the one before it has an arrival to follow on from.
   const activeSlotIndex = slots.findIndex((s) => !pins.some((p) => p.sequence === s.index));
   const activeSlot = activeSlotIndex >= 0 ? slots[activeSlotIndex] : undefined;
   const previousPin = activeSlotIndex > 0 ? pins.find((p) => p.sequence === activeSlotIndex - 1) : undefined;
-  const anchorHhmm = previousPin?.schedArr ?? (windowStart || "08:00");
+
+  // Suggested departure for this leg: right after the previous leg lands, or
+  // the direction's window start for the first leg. Always editable.
+  const suggestedDepart = previousPin?.schedArr ?? (windowStart || "08:00");
+  const departAt = departOverride ?? suggestedDepart;
 
   const searchDate = useMemo(() => nearestDateForDayOfWeek(searchDow), [searchDow]);
   const isToday = searchDate === londonDate();
+
+  /** Reset the per-leg search state — called whenever which-leg-is-active changes. */
+  function resetSearch() {
+    setOptions(null);
+    setDepartOverride(null);
+    setError(null);
+  }
 
   function addChangeStation() {
     if (!newChange) return;
     setChangeStations((prev) => [...prev, newChange]);
     setNewChange(null);
+    resetSearch();
   }
 
   function removeChangeStation(idx: number) {
     // Removing a change station collapses the two slots either side of it back
-    // into one — any pins already picked for those two slots (idx and idx+1)
-    // no longer correspond to a real slot, so they're discarded. Pins for
-    // slots entirely before or after the removed change point just shift
-    // index and are re-sequenced below.
-    if (pins.length > 0) {
-      const affectsPickedLegs = pins.some((p) => p.sequence === idx || p.sequence === idx + 1);
-      if (affectsPickedLegs && !confirm("Removing this change will discard the leg(s) picked either side of it. Continue?")) {
+    // into one — pins picked for those slots no longer describe a real leg, so
+    // they go. Everything else keeps its relative order and is re-sequenced.
+    if (pins.some((p) => p.sequence === idx || p.sequence === idx + 1)) {
+      if (!confirm("Removing this change will discard the leg(s) picked either side of it. Continue?")) {
         return;
       }
     }
     setChangeStations((prev) => prev.filter((_, i) => i !== idx));
-    // Drop pins for the two slots that collapse, re-sequence the rest against
-    // the new (one-shorter) slot list.
-    const kept = pins.filter((p) => p.sequence !== idx && p.sequence !== idx + 1);
-    const resequenced = kept
+    const resequenced = pins
+      .filter((p) => p.sequence !== idx && p.sequence !== idx + 1)
       .sort((a, b) => a.sequence - b.sequence)
       .map((p, i) => ({ ...p, sequence: i }));
     onChange(resequenced);
-    setCandidates(null);
+    resetSearch();
   }
 
   function removePin(sequence: number) {
-    const next = pins.filter((p) => p.sequence !== sequence);
-    onChange(next);
-    setCandidates(null);
+    onChange(pins.filter((p) => p.sequence !== sequence));
+    resetSearch();
   }
 
   async function search() {
     if (!activeSlot) return;
     setLoading(true);
     setError(null);
-    setCandidates(null);
+    setOptions(null);
     try {
       const params = new URLSearchParams({
+        from: activeSlot.originCrs,
+        to: activeSlot.destCrs,
         date: searchDate,
-        around: anchorHhmm,
-        beforeMinutes: "30",
-        afterMinutes: "90",
+        around: departAt,
       });
-      const res = await fetch(
-        `/api/boards/${encodeURIComponent(activeSlot.originCrs)}/pin-candidates?${params}`,
-      );
+      const res = await fetch(`/api/commute/leg-options?${params}`);
       const data = await res.json();
-      if (data.ok) setCandidates(data.candidates);
-      else setError("Couldn't load departures for that station.");
+      if (data.ok) setOptions(data.options);
+      else if (data.reason === "engine-offline") setError("Routing engine is offline right now.");
+      else setError("Couldn't search that leg. Check both stations are right.");
     } catch {
-      setError("Couldn't load departures. Try again.");
+      setError("Couldn't search that leg. Try again.");
     } finally {
       setLoading(false);
     }
   }
 
-  async function addCandidate(c: PinCandidate) {
+  async function addOption(o: LegOption) {
     if (!activeSlot) return;
-    const key = c.crs + c.scheduled;
-    setAddingKey(key);
+    setAddingId(o.gtfsTripId);
     setError(null);
     try {
+      // Resolve the engine's trip to its Network Rail train_uid — the stable
+      // identity a pin is stored under. Times/stations come from the option
+      // itself, which already knows this leg's real arrival.
       const res = await fetch("/api/commute/resolve-pin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          rid: c.rid,
-          serviceId: c.tripId,
-          gtfsTripId: c.tripId,
-          crs: c.crs,
-          scheduledHhmm: t(c.scheduled),
-          destCrs: activeSlot.destCrs,
+          gtfsTripId: o.gtfsTripId,
+          crs: o.originCrs,
+          scheduledHhmm: o.departsHhmm,
+          destCrs: o.destCrs,
           targetDate: searchDate,
         }),
       });
@@ -239,7 +250,7 @@ export function PinnedLegPicker({
       if (!data.ok) {
         setError(
           isToday
-            ? "Not confirmed yet — try again closer to departure."
+            ? "Couldn't confirm that train against the timetable. Try another."
             : "Couldn't match that service to the timetable. Try a different one.",
         );
         return;
@@ -247,25 +258,22 @@ export function PinnedLegPicker({
       const next: PinDraft = {
         sequence: activeSlot.index,
         trainUid: data.trainUid,
-        gtfsTripId: data.gtfsTripId ?? null,
+        gtfsTripId: o.gtfsTripId,
         originCrs: activeSlot.originCrs,
         originLabel: activeSlot.originLabel,
-        schedDep: t(c.scheduled),
+        schedDep: o.departsHhmm,
         destCrs: activeSlot.destCrs,
         destLabel: activeSlot.destLabel,
-        // Fall back to the departure time if we couldn't resolve a real
-        // arrival — better than blocking the pick outright; the fallback
-        // window (still saved alongside) covers the gap.
-        schedArr: data.schedArr ?? t(c.scheduled),
-        toc: c.operator ?? null,
+        schedArr: o.arrivesHhmm,
+        toc: o.operator ?? null,
         pickedServiceDate: searchDate,
       };
       onChange([...pins.filter((p) => p.sequence !== activeSlot.index), next]);
-      setCandidates(null);
+      resetSearch();
     } catch {
-      setError("Couldn't add that service. Try again.");
+      setError("Couldn't add that train. Try again.");
     } finally {
-      setAddingKey(null);
+      setAddingId(null);
     }
   }
 
@@ -293,7 +301,7 @@ export function PinnedLegPicker({
             ))}
           </ol>
         )}
-        {canDeclareStructure && (
+        {canDeclareStructure ? (
           <div className="pinned-changes-add">
             <StationInput
               label="Add a change at"
@@ -306,8 +314,7 @@ export function PinnedLegPicker({
               Add change
             </button>
           </div>
-        )}
-        {!canDeclareStructure && (
+        ) : (
           <p className="editor-hint">Set both ends of this direction first.</p>
         )}
       </div>
@@ -344,7 +351,7 @@ export function PinnedLegPicker({
                   {slot.originLabel} → {slot.destLabel}
                 </span>
                 <span className="editor-hint">
-                  {isActive ? "Search below" : "Pick the previous leg first"}
+                  {isActive ? "Pick a train below" : "Pick the previous leg first"}
                 </span>
               </li>
             );
@@ -355,13 +362,18 @@ export function PinnedLegPicker({
       {activeSlot && (
         <div className="pinned-leg-search">
           <p className="editor-hint">
-            Searching {activeSlot.originLabel} → {activeSlot.destLabel} — you&rsquo;re picking a
-            timetabled service; we&rsquo;ll check it still runs each day automatically.
+            Leg {activeSlot.index + 1}: {activeSlot.originLabel} → {activeSlot.destLabel}
           </p>
           <div className="pin-search-row">
             <label className="field">
               <span>Day</span>
-              <select value={searchDow} onChange={(e) => setSearchDow(Number(e.target.value))}>
+              <select
+                value={searchDow}
+                onChange={(e) => {
+                  setSearchDow(Number(e.target.value));
+                  setOptions(null);
+                }}
+              >
                 {DAY_NAMES.map((name, i) => (
                   <option key={name} value={i}>
                     {name}
@@ -369,13 +381,26 @@ export function PinnedLegPicker({
                 ))}
               </select>
             </label>
+            <label className="field">
+              <span>Departing around</span>
+              <input
+                type="time"
+                value={departAt}
+                onChange={(e) => {
+                  setDepartOverride(e.target.value);
+                  setOptions(null);
+                }}
+              />
+            </label>
+            <button type="button" className="btn btn-secondary" onClick={search} disabled={loading}>
+              {loading ? "Searching…" : "Find trains"}
+            </button>
           </div>
-          <p className="editor-hint">
-            Showing departures around {anchorHhmm} on {DAY_NAMES[searchDow]} ({searchDate}).
-          </p>
-          <button type="button" className="btn btn-secondary" onClick={search} disabled={loading}>
-            {loading ? "Searching…" : "Search departures"}
-          </button>
+          {previousPin && (
+            <p className="editor-hint">
+              Previous leg arrives {previousPin.schedArr} at {previousPin.destLabel}.
+            </p>
+          )}
 
           {error && (
             <p className="form-error" role="alert">
@@ -383,29 +408,35 @@ export function PinnedLegPicker({
             </p>
           )}
 
-          {candidates && candidates.length === 0 && (
-            <p className="editor-hint">No departures found in that window — try a wider search.</p>
+          {options && options.length === 0 && (
+            <p className="editor-hint">
+              No direct trains found around then. Try another time, or add a change station if this
+              leg needs one.
+            </p>
           )}
-          {candidates && candidates.length > 0 && (
+          {options && options.length > 0 && (
             <ol className="pin-candidate-list">
-              {candidates.map((c) => {
-                const key = c.crs + c.scheduled;
-                const connMin = previousPin ? connectionMinutes(previousPin.schedArr, c.scheduled) : null;
+              {options.map((o) => {
+                const connMin = previousPin ? connectionMinutes(previousPin.schedArr, searchDate, o.departs) : null;
                 const tight = connMin !== null && connMin >= 0 && connMin < TIGHT_CONNECTION_MIN;
                 return (
-                  <li key={key} className="pin-candidate-row">
+                  <li key={o.gtfsTripId} className="pin-candidate-row">
                     <span className="pinned-leg-times">
-                      {t(c.scheduled)} to {c.destinationName}
+                      {o.departsHhmm} → {o.arrivesHhmm}
                     </span>
-                    {c.operator && <span className="editor-hint">{c.operator}</span>}
-                    {tight && <span className="chip chip-warn">Tight connection — {connMin}min</span>}
+                    <span className="editor-hint">
+                      {o.durationMinutes}m
+                      {o.callCount === 0 ? " · non-stop" : ` · ${o.callCount} stop${o.callCount === 1 ? "" : "s"}`}
+                      {o.operator ? ` · ${o.operator}` : ""}
+                    </span>
+                    {tight && <span className="chip chip-warn">Tight — {connMin}min</span>}
                     <button
                       type="button"
                       className="btn btn-secondary"
-                      onClick={() => addCandidate(c)}
-                      disabled={addingKey === key}
+                      onClick={() => addOption(o)}
+                      disabled={addingId === o.gtfsTripId}
                     >
-                      {addingKey === key ? "Adding…" : "Add"}
+                      {addingId === o.gtfsTripId ? "Adding…" : "Add"}
                     </button>
                   </li>
                 );

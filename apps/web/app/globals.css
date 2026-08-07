@@ -2047,13 +2047,24 @@ a {
   gap: 0.5rem;
 }
 .pin-search-row {
-  display: grid;
-  grid-template-columns: auto 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.6rem;
   align-items: end;
 }
-.pin-search-row select {
+.pin-search-row .field {
+  flex: 0 0 auto;
+}
+.pin-search-row .field > span {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+.pin-search-row select,
+.pin-search-row input[type="time"] {
   font: inherit;
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
   background: var(--bg);
   border: 1px solid var(--border);

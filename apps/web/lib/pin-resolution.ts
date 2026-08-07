@@ -13,16 +13,18 @@ import { fetchServiceDetails, isRidServiceId, ridFromServiceId, trainByRid } fro
  * artifact remapped across timetable versions — see commute_leg_pin's doc
  * comment in packages/db/src/schema.ts).
  *
- * Board rows carry different identity depending on source (apps/web/lib/board.ts):
+ * The commute leg picker resolves a routed leg (from /api/commute/leg-options,
+ * which plans origin → destination through the engine) and so supplies a bare
+ * GTFS trip id. Other callers may instead hold a departure-board row's
+ * identity, which differs by source (apps/web/lib/board.ts):
  *  - LDBWS-primary: tripId = LDBWS serviceID, rid usually absent.
  *  - MOTIS-fallback: tripId = GTFS trip id, rid present only if
  *    enrichBoardWithDarwin correlated it.
+ * All of these are accepted; the paths below try them cheapest-first.
  *
- * Because Postgres holds no GTFS stop_times, the picker can only ever browse
- * today's (or the nearest future occurrence's) board. Picking for a
- * day-of-week that isn't today means Darwin has nothing to correlate — that
- * case always resolves via trip_mapping keyed on the board row's GTFS trip
- * id instead (path 4 below), never via a Darwin lookup.
+ * Picking for a day-of-week that isn't today means Darwin has nothing to
+ * correlate — that case always resolves via trip_mapping keyed on the GTFS
+ * trip id (path 4 below), never via a Darwin lookup.
  */
 
 export interface ResolvedPinCandidate {
