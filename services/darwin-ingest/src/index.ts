@@ -5,7 +5,9 @@ import { invalidateTrackedUids, matchCancellation, matchDelay } from "./alerts.j
 import { beat } from "./heartbeat.js";
 import { createKafka, kafkaTopic } from "./kafka.js";
 import { pruneExpiredData } from "./maintenance.js";
+import { pollNetworkDisruptions } from "./network-disruptions.js";
 import { corridorsEmptyForToday, precomputeAllCorridors } from "./precompute.js";
+import { runPreDepartureDigest } from "./pre-departure.js";
 import { parseMessage } from "./pushport.js";
 import {
   applyDeactivation,
@@ -140,9 +142,39 @@ function scheduleCorridorPrecompute(): void {
   })();
 }
 
+/**
+ * Poll the RDG Disruptions API every 5 minutes and push category-3 alerts
+ * (network disruptions relevant to a user's commute) — see
+ * network-disruptions.ts. Own try/catch, same isolation as every other
+ * scheduled job here: a Disruptions API outage must never touch live
+ * ingestion.
+ */
+function scheduleNetworkDisruptionPoll(): void {
+  cron.schedule("*/5 * * * *", () => {
+    void pollNetworkDisruptions(redis).catch((err) =>
+      console.error("[network-disruptions] poll failed:", (err as Error).message),
+    );
+  });
+}
+
+/**
+ * Every 2 minutes, check for commute legs whose AM/PM window opens in the
+ * next 30-45 minutes and push a "how's my train looking" digest — see
+ * pre-departure.ts. Same isolation pattern as the jobs above.
+ */
+function schedulePreDepartureDigest(): void {
+  cron.schedule("*/2 * * * *", () => {
+    void runPreDepartureDigest(redis).catch((err) =>
+      console.error("[pre-departure] digest run failed:", (err as Error).message),
+    );
+  });
+}
+
 async function main(): Promise<void> {
   scheduleCorridorPrecompute();
   scheduleMaintenance();
+  scheduleNetworkDisruptionPoll();
+  schedulePreDepartureDigest();
 
   consumer = createKafka().consumer({ groupId });
 

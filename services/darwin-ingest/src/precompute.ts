@@ -249,7 +249,12 @@ async function raisePinStaleAlerts(
   staleUids: string[],
 ): Promise<void> {
   const owner = await db
-    .select({ userId: commute.userId, label: commute.label, pushSubscription: user.pushSubscription })
+    .select({
+      userId: commute.userId,
+      label: commute.label,
+      pushSubscription: user.pushSubscription,
+      pushCommuteDisruptions: user.pushCommuteDisruptions,
+    })
     .from(commute)
     .innerJoin(user, eq(user.id, commute.userId))
     .where(eq(commute.id, leg.commuteId))
@@ -292,6 +297,10 @@ async function raisePinStaleAlerts(
       direction: dir,
       serviceDate,
       pushSubscription: who.pushSubscription,
+      // A broken pin is a disruption to this commute, same category as
+      // cancellation/delay for opt-in purposes.
+      category: "commute",
+      categoryEnabled: who.pushCommuteDisruptions,
       redis: null, // precompute has no live SSE connection to publish to; Web Push still fires
     });
   }

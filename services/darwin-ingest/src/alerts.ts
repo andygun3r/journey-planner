@@ -4,6 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { Redis } from "ioredis";
 import type { ParsedSchedule, ParsedTS } from "./pushport.js";
 import { sendPush } from "./push.js";
+import { hhmmDeltaMinutes } from "./train-status.js";
 
 /**
  * Commute alert matching. When Darwin reports a cancellation or a significant
@@ -20,7 +21,7 @@ import { sendPush } from "./push.js";
 const db = getSharedDb();
 
 /** Minutes late before a delay is worth alerting on. */
-const DELAY_THRESHOLD_MIN = 5;
+export const DELAY_THRESHOLD_MIN = 5;
 
 let trackedUids = new Set<string>();
 let trackedLoadedAt = 0;
@@ -52,6 +53,7 @@ interface MatchedCommute {
   originCrs: string | null;
   destCrs: string | null;
   pushSubscription: unknown;
+  pushCommuteDisruptions: boolean;
 }
 
 /** Corridors (with owning user + commute) that this train serves on this date. */
@@ -67,6 +69,7 @@ async function matchingCommutes(uid: string, ssd: string): Promise<MatchedCommut
       originCrs: commuteCorridor.originCrs,
       destCrs: commuteCorridor.destCrs,
       pushSubscription: user.pushSubscription,
+      pushCommuteDisruptions: user.pushCommuteDisruptions,
     })
     .from(commuteCorridor)
     .innerJoin(commute, eq(commute.id, commuteCorridor.commuteId))
@@ -74,13 +77,17 @@ async function matchingCommutes(uid: string, ssd: string): Promise<MatchedCommut
     .where(and(eq(commuteCorridor.trainUid, uid), eq(commuteCorridor.serviceDate, ssd)));
 }
 
-async function isUserOnHoliday(userId: string, date: string): Promise<boolean> {
+/** Skip alerting for a user's holiday date ranges — shared by every alert producer. */
+export async function isUserOnHoliday(userId: string, date: string): Promise<boolean> {
   const rows = await db
     .select({ startDate: commuteHoliday.startDate, endDate: commuteHoliday.endDate })
     .from(commuteHoliday)
     .where(eq(commuteHoliday.userId, userId));
   return isDateInHolidayRange(date, rows);
 }
+
+/** Which push-preference column gates a given alert. */
+export type AlertCategory = "commute" | "pre_departure" | "network";
 
 export interface PublishAndPushArgs {
   alertId: string;
@@ -93,16 +100,25 @@ export interface PublishAndPushArgs {
   direction: string | null;
   serviceDate: string;
   pushSubscription: unknown;
+  /** Which category this alert belongs to, for the categoryEnabled gate below. */
+  category: AlertCategory;
+  /** The user's opt-in for `category` — resolved by the caller from its own user join. */
+  categoryEnabled: boolean;
   redis: Redis | null;
 }
 
 /**
  * Redis-publish + Web Push for one already-inserted alert row (the dedupe
  * insert itself is the caller's job — this is the generic notify tail,
- * shared by raiseAlert (live Darwin events, matched via commute_corridor) and
+ * shared by raiseAlert (live Darwin events, matched via commute_corridor),
  * raisePinStaleAlerts (precompute.ts, a stale pin has no corridor row to
  * join from, so it inserts directly and calls this with commuteId/userId it
- * already has on hand).
+ * already has on hand), and the pre-departure/network-disruption producers.
+ *
+ * The Redis publish (in-app SSE feed) always fires — a user sees every alert
+ * they're eligible for on-screen regardless of push preference. Only the Web
+ * Push send is gated by categoryEnabled: that's the "push out of the
+ * browser" opt-in, not a filter on what's shown in-app.
  */
 export async function publishAndPush({
   alertId,
@@ -115,6 +131,8 @@ export async function publishAndPush({
   direction,
   serviceDate,
   pushSubscription,
+  category,
+  categoryEnabled,
   redis,
 }: PublishAndPushArgs): Promise<void> {
   const payload = { id: alertId, commuteId, kind, headline, detail, direction };
@@ -122,7 +140,7 @@ export async function publishAndPush({
     await redis.publish(`commute:alert:${userId}`, JSON.stringify(payload));
   }
 
-  if (pushSubscription) {
+  if (pushSubscription && categoryEnabled) {
     const failStatus = await sendPush(pushSubscription, {
       title: headline,
       body: detail ?? commuteLabel,
@@ -134,6 +152,7 @@ export async function publishAndPush({
       await db.update(user).set({ pushSubscription: null }).where(eq(user.id, userId));
     }
   }
+  void category; // reserved for future per-category diagnostics/metrics
 }
 
 interface RaiseArgs {
@@ -181,6 +200,8 @@ async function raiseAlert({ match, kind, rid, headline, detail, redis }: RaiseAr
     direction: match.direction,
     serviceDate: match.serviceDate,
     pushSubscription: match.pushSubscription,
+    category: "commute",
+    categoryEnabled: match.pushCommuteDisruptions,
     redis,
   });
 }
@@ -219,23 +240,6 @@ function maxDelayMinutes(ts: ParsedTS): number {
     }
   }
   return worst;
-}
-
-/** Minutes from a scheduled HH:MM[:SS] to an estimated HH:MM[:SS] (same day). */
-function hhmmDeltaMinutes(sched: string, est: string): number | null {
-  const s = toMinutes(sched);
-  const e = toMinutes(est);
-  if (s === null || e === null) return null;
-  let delta = e - s;
-  // Handle midnight wrap (est just after midnight, sched just before).
-  if (delta < -720) delta += 1440;
-  return delta;
-}
-
-function toMinutes(t: string): number | null {
-  const m = /^(\d{2}):(\d{2})/.exec(t);
-  if (!m) return null;
-  return Number(m[1]) * 60 + Number(m[2]);
 }
 
 /** A TS (train status) update — check for a significant delay. */

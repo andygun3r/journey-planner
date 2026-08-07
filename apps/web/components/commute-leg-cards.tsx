@@ -118,8 +118,8 @@ function LegCard({
         </p>
       )}
 
-      {live?.serviceId && (
-        <Link href={`/services/${live.serviceId}`} className="leg-card-service-link">
+      {live?.serviceHref && (
+        <Link href={`/services/${live.serviceHref}`} className="leg-card-service-link">
           View service →
         </Link>
       )}

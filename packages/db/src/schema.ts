@@ -868,7 +868,7 @@ export const alert = pgTable(
     commuteId: uuid("commute_id")
       .notNull()
       .references(() => commute.id, { onDelete: "cascade" }),
-    kind: text("kind").notNull(), // cancellation | delay | kb_incident | pin_stale
+    kind: text("kind").notNull(), // cancellation | delay | kb_incident | pin_stale | pre_departure | network_disruption
     /** rid for train events, kb incident id for incidents, train_uid for pin_stale. */
     ref: text("ref").notNull(),
     /** Which leg/direction/date this alert relates to (for train events). */
@@ -1039,6 +1039,18 @@ export const user = pgTable("user", {
   image: text("image"),
   role: text("role").notNull().default("user"),
   pushSubscription: jsonb("push_subscription"),
+  /**
+   * Per-category push opt-in (v1.6). `pushSubscription` is just the
+   * destination — these three flags decide what's actually sent to it. All
+   * default false (a fresh subscriber opts into each kind explicitly); see
+   * the migration for the one-time back-fill that keeps existing
+   * subscribers' commute-disruption alerts working unchanged. Gates the push
+   * send only — the in-app alert feed (SSE) keeps showing everything
+   * regardless. See publishAndPush in services/darwin-ingest/src/alerts.ts.
+   */
+  pushCommuteDisruptions: boolean("push_commute_disruptions").notNull().default(false),
+  pushPreDeparture: boolean("push_pre_departure").notNull().default(false),
+  pushNetworkDisruptions: boolean("push_network_disruptions").notNull().default(false),
   /**
    * Accessibility preferences (v1, /settings) — an opt-in layer on top of the
    * single default theme (see PRODUCT.md's Accessibility & Inclusion

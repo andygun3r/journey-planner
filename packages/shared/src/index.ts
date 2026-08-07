@@ -9,3 +9,4 @@ export * from "./service-match.js";
 export * from "./shapefile.js";
 export * from "./bng.js";
 export * from "./accessibility.js";
+export * from "./disruptions.js";

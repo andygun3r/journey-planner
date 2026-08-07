@@ -4044,6 +4044,22 @@ a.map-tip-anchor:hover .map-tip {
   font-size: 0.85rem;
   margin: 1rem 0 0;
 }
+.push-categories {
+  border: 0;
+  padding: 0;
+  margin: 0.9rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.push-categories legend {
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  padding: 0 0 0.4rem;
+}
 
 /* ========================================================================== */
 /* Favourites & recents (home quick-journeys, results ☆)                      */

@@ -15,14 +15,22 @@ function urlBase64ToBuffer(base64String: string): ArrayBuffer {
 
 type State = "unsupported" | "unconfigured" | "default" | "granted" | "denied" | "busy";
 
+interface PushPreferences {
+  commuteDisruptions: boolean;
+  preDeparture: boolean;
+  networkDisruptions: boolean;
+}
+
 interface Props {
   vapidPublicKey: string | null;
   initiallySubscribed: boolean;
+  initialPreferences: PushPreferences;
 }
 
-export function PushToggle({ vapidPublicKey, initiallySubscribed }: Props) {
+export function PushToggle({ vapidPublicKey, initiallySubscribed, initialPreferences }: Props) {
   const [state, setState] = useState<State>("default");
   const [subscribed, setSubscribed] = useState(initiallySubscribed);
+  const [prefs, setPrefs] = useState(initialPreferences);
 
   useEffect(() => {
     if (!vapidPublicKey) {
@@ -78,6 +86,20 @@ export function PushToggle({ vapidPublicKey, initiallySubscribed }: Props) {
     }
   }
 
+  async function setPreference(patch: Partial<PushPreferences>) {
+    const next = { ...prefs, ...patch };
+    setPrefs(next); // optimistic — matches accessibility-settings' save-on-change immediacy
+    try {
+      await fetch("/api/push/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+    } catch {
+      setPrefs(prefs); // revert on failure
+    }
+  }
+
   if (state === "unsupported") {
     return <p className="push-note">Push notifications aren&rsquo;t supported in this browser.</p>;
   }
@@ -95,14 +117,43 @@ export function PushToggle({ vapidPublicKey, initiallySubscribed }: Props) {
   return (
     <div className="push-toggle">
       {subscribed ? (
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={disable}
-          disabled={state === "busy"}
-        >
-          {state === "busy" ? "…" : "Turn off push alerts"}
-        </button>
+        <>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={disable}
+            disabled={state === "busy"}
+          >
+            {state === "busy" ? "…" : "Turn off push alerts"}
+          </button>
+          <fieldset className="push-categories">
+            <legend>What should push us alerts?</legend>
+            <label className="day-toggle">
+              <input
+                type="checkbox"
+                checked={prefs.commuteDisruptions}
+                onChange={(e) => void setPreference({ commuteDisruptions: e.target.checked })}
+              />
+              Disruptions on my commute — cancellations and delays on my usual trains
+            </label>
+            <label className="day-toggle">
+              <input
+                type="checkbox"
+                checked={prefs.preDeparture}
+                onChange={(e) => void setPreference({ preDeparture: e.target.checked })}
+              />
+              Before I leave — how my train is looking, even when it&rsquo;s fine
+            </label>
+            <label className="day-toggle">
+              <input
+                type="checkbox"
+                checked={prefs.networkDisruptions}
+                onChange={(e) => void setPreference({ networkDisruptions: e.target.checked })}
+              />
+              Wider network disruptions that affect my commute
+            </label>
+          </fieldset>
+        </>
       ) : (
         <button
           type="button"
@@ -110,7 +161,7 @@ export function PushToggle({ vapidPublicKey, initiallySubscribed }: Props) {
           onClick={enable}
           disabled={state === "busy"}
         >
-          {state === "busy" ? "…" : "Get push alerts for disruptions"}
+          {state === "busy" ? "…" : "Get push alerts"}
         </button>
       )}
     </div>

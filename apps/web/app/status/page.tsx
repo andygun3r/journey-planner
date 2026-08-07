@@ -3,6 +3,7 @@ import {
   disruptionsConfigured,
   fetchNetworkDisruptions,
   serviceIndicatorsByToc,
+  RTPPM_TO_DISRUPTIONS_NAME,
   type Disruption,
   type ServiceIndicator,
 } from "@/lib/disruptions";
@@ -21,25 +22,6 @@ function tflChipClass(severity: number): string {
   if (severity >= 8) return "chip-warn";
   return "chip-danger";
 }
-
-/**
- * RTPPM (Network Rail) and the Disruptions API (RDG) don't share an operator
- * code space — RTPPM's operator_code is a Network Rail numeric id, not the
- * ATOC 2-letter code — so operators are joined by name. Most names match
- * exactly, but a handful diverge between the two feeds; this maps RTPPM's
- * operator name to the Disruptions API's tocName for those.
- */
-const RTPPM_TO_DISRUPTIONS_NAME: Record<string, string> = {
-  Chiltern: "Chiltern Railways",
-  "Caledonian Sleeper Limited": "Caledonian Sleeper",
-  "Greater Thameslink Railway": "Thameslink",
-  "London North Eastern Railway": "LNER",
-  "Lumo East Coast": "Lumo",
-  "Lumo West Coast": "Lumo",
-  "Northern Trains": "Northern",
-  "TransPennine Trains": "TransPennine Express",
-  "West Midlands Trains": "West Midlands Railway",
-};
 
 function disruptionsFor(op: OperatorPunctuality, networkDisruptions: Disruption[]): Disruption[] {
   const name = RTPPM_TO_DISRUPTIONS_NAME[op.name] ?? op.name;

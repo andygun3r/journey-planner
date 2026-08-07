@@ -1,4 +1,4 @@
-import { getBoard, type BoardDeparture } from "./board";
+import { getBoard, type BoardDeparture, type BoardSource } from "./board";
 import { ridServiceId } from "./service-details";
 import { ukHhmm } from "./uk-time";
 import type { JourneyLegView, JourneyView } from "./journeys";
@@ -13,7 +13,14 @@ import type { JourneyLegView, JourneyView } from "./journeys";
 export interface LegLiveView {
   /** Darwin run id, once matched — links the card to /services/[id]. */
   rid?: string;
-  serviceId?: string;
+  /**
+   * The id + query string to link to /services/[id] with, already in the
+   * shape the page expects (e.g. "744311ADLESTN_?from=ASN"). Built the same
+   * way boards/[crs]/page.tsx's serviceHref does: the LDBWS trip id when the
+   * board came from LDBWS — richer (real calling pattern, formation) than
+   * the rid: fallback — else the Darwin rid.
+   */
+  serviceHref?: string;
   platform?: string;
   status: "on-time" | "delayed" | "cancelled" | "scheduled";
   delayMinutes?: number;
@@ -25,10 +32,22 @@ export interface LegLiveView {
 export type LiveJourneyLeg = JourneyLegView & { live?: LegLiveView };
 export type LiveJourneyView = Omit<JourneyView, "legs"> & { legs: LiveJourneyLeg[] };
 
-function toLive(row: BoardDeparture): LegLiveView {
+/**
+ * Same precedence boards/[crs]/page.tsx's serviceHref uses: prefer the
+ * LDBWS trip id (only meaningful when the board that produced this row was
+ * itself LDBWS-sourced) over the Darwin rid, since it resolves to the
+ * fuller Service Details view rather than the rid-only fallback.
+ */
+function toServiceHref(row: BoardDeparture, source: BoardSource, originCrs: string): string | undefined {
+  const serviceId = row.tripId && source === "ldbws" ? row.tripId : row.rid ? ridServiceId(row.rid) : undefined;
+  if (!serviceId) return undefined;
+  return `${encodeURIComponent(serviceId)}?from=${originCrs}`;
+}
+
+function toLive(row: BoardDeparture, source: BoardSource, originCrs: string): LegLiveView {
   return {
     rid: row.rid,
-    serviceId: row.rid ? ridServiceId(row.rid) : undefined,
+    serviceHref: toServiceHref(row, source, originCrs),
     platform: row.platform,
     status: row.status,
     delayMinutes: row.delayMinutes,
@@ -59,12 +78,12 @@ function findRow(rows: BoardDeparture[], leg: JourneyLegView): BoardDeparture | 
 export async function enrichJourneyLive(journey: JourneyView): Promise<LiveJourneyView> {
   const railLegOrigins = [...new Set(journey.legs.filter((l) => l.mode === "rail").map((l) => l.originCrs))];
 
-  const boards = new Map<string, BoardDeparture[]>();
+  const boards = new Map<string, { rows: BoardDeparture[]; source: BoardSource }>();
   await Promise.all(
     railLegOrigins.map(async (crs) => {
       try {
         const outcome = await getBoard(crs, undefined, 40);
-        if (outcome.ok) boards.set(crs, outcome.board.departures);
+        if (outcome.ok) boards.set(crs, { rows: outcome.board.departures, source: outcome.board.source });
       } catch {
         /* live enrichment is best-effort */
       }
@@ -73,11 +92,11 @@ export async function enrichJourneyLive(journey: JourneyView): Promise<LiveJourn
 
   const legs: LiveJourneyLeg[] = journey.legs.map((leg) => {
     if (leg.mode !== "rail") return leg;
-    const rows = boards.get(leg.originCrs);
-    if (!rows) return leg;
-    const row = findRow(rows, leg);
+    const board = boards.get(leg.originCrs);
+    if (!board) return leg;
+    const row = findRow(board.rows, leg);
     if (!row) return leg;
-    return { ...leg, live: toLive(row) };
+    return { ...leg, live: toLive(row, board.source, leg.originCrs) };
   });
 
   return { ...journey, legs };

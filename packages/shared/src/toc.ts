@@ -39,6 +39,16 @@ export function tocName(code: string): string | undefined {
   return TOC_NAMES[code.toUpperCase()];
 }
 
+let tocCodesByName: Map<string, string> | null = null;
+
+/** Passenger-facing operator name -> ATOC two-letter code (reverse of tocName). */
+export function tocCodeForName(name: string): string | undefined {
+  if (!tocCodesByName) {
+    tocCodesByName = new Map(Object.entries(TOC_NAMES).map(([code, n]) => [n, code]));
+  }
+  return tocCodesByName.get(name);
+}
+
 /**
  * ATOC TOC codes → Network Rail operating region. Some TOCs (e.g. CrossCountry,
  * Avanti West Coast) run services across several NR regions — each is assigned to

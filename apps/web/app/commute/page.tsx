@@ -10,7 +10,7 @@ import { PushToggle } from "@/components/push-toggle";
 import { listAlerts } from "@/lib/alerts";
 import { getDashboardData } from "@/lib/commute-dashboard";
 import { getUserId } from "@/lib/current-user";
-import { hasPushSubscription, vapidPublicKey } from "@/lib/push";
+import { getPushPreferences, hasPushSubscription, vapidPublicKey } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +24,11 @@ export default async function CommuteDashboardPage({ searchParams }: Props) {
   const { commute: commuteId, shift } = await searchParams;
   const shiftMinutes = shift ? Number(shift) || 0 : 0;
 
-  const [state, alerts, pushOn] = await Promise.all([
+  const [state, alerts, pushOn, pushPrefs] = await Promise.all([
     getDashboardData(userId, new Date(), commuteId, shiftMinutes),
     listAlerts(userId, { limit: 20 }),
     hasPushSubscription(userId),
+    getPushPreferences(userId),
   ]);
   const vapid = vapidPublicKey();
 
@@ -152,7 +153,7 @@ export default async function CommuteDashboardPage({ searchParams }: Props) {
 
       {vapid && (
         <div className="commute-push">
-          <PushToggle vapidPublicKey={vapid} initiallySubscribed={pushOn} />
+          <PushToggle vapidPublicKey={vapid} initiallySubscribed={pushOn} initialPreferences={pushPrefs} />
         </div>
       )}
     </main>
