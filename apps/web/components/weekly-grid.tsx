@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { type PinDraft, PinnedLegPicker } from "./pinned-leg-picker";
 import { StationInput, type StationOption } from "./station-input";
 
@@ -41,6 +42,79 @@ export function emptyDay(): DayDraft {
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+/** Whether a day already has a plan worth warning about before overwriting it. */
+function dayHasPlan(d: DayDraft): boolean {
+  return d.active && (Boolean(d.work) || d.amPins.length > 0 || d.pmPins.length > 0);
+}
+
+interface CopyDayControlProps {
+  fromDow: number;
+  days: DayDraft[];
+  onCopy: (fromDow: number, toDows: number[]) => void;
+}
+
+/** "Copy this day's plan to other days" — ticks the target weekdays, confirms before overwriting. */
+function CopyDayControl({ fromDow, days, onCopy }: CopyDayControlProps) {
+  const [open, setOpen] = useState(false);
+  const [checked, setChecked] = useState<Set<number>>(new Set());
+
+  function toggle(dow: number) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(dow)) next.delete(dow);
+      else next.add(dow);
+      return next;
+    });
+  }
+
+  function apply() {
+    const toDows = [...checked];
+    if (toDows.length === 0) return;
+    const overwriting = toDows.filter((dow) => dayHasPlan(days[dow]!));
+    if (overwriting.length > 0) {
+      const names = overwriting.map((dow) => DAY_NAMES[dow]).join(", ");
+      if (!confirm(`${names} already ${overwriting.length === 1 ? "has" : "have"} a plan — replace it with this day's plan?`)) {
+        return;
+      }
+    }
+    onCopy(fromDow, toDows);
+    setChecked(new Set());
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button type="button" className="btn-link" onClick={() => setOpen(true)}>
+        Copy to other days…
+      </button>
+    );
+  }
+
+  return (
+    <div className="copy-day-picker">
+      <p className="editor-hint">Copy this day&rsquo;s plan to:</p>
+      <div className="copy-day-options">
+        {DAY_NAMES.map((name, dow) =>
+          dow === fromDow ? null : (
+            <label key={name} className="copy-day-option">
+              <input type="checkbox" checked={checked.has(dow)} onChange={() => toggle(dow)} />
+              {DAY_SHORT[dow]}
+            </label>
+          ),
+        )}
+      </div>
+      <div className="copy-day-actions">
+        <button type="button" className="btn btn-secondary" onClick={apply} disabled={checked.size === 0}>
+          Apply
+        </button>
+        <button type="button" className="btn-link" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface Props {
   stations: StationOption[];
   days: DayDraft[];
@@ -48,9 +122,10 @@ interface Props {
   /** The commute's home station + label — the AM chain's starting point / PM chain's end. */
   homeCrs: string;
   homeLabel: string;
+  onCopyDay: (fromDow: number, toDows: number[]) => void;
 }
 
-export function WeeklyGrid({ stations, days, onChange, homeCrs, homeLabel }: Props) {
+export function WeeklyGrid({ stations, days, onChange, homeCrs, homeLabel, onCopyDay }: Props) {
   return (
     <div className="weekly-grid">
       {days.map((day, i) => (
@@ -70,6 +145,7 @@ export function WeeklyGrid({ stations, days, onChange, homeCrs, homeLabel }: Pro
                 </span>
               </span>
             </label>
+            {day.active && <CopyDayControl fromDow={i} days={days} onCopy={onCopyDay} />}
           </div>
 
           {day.active && (
@@ -108,6 +184,8 @@ export function WeeklyGrid({ stations, days, onChange, homeCrs, homeLabel }: Pro
                     onChange={(pins) => onChange(i, { amPins: pins })}
                     chainOriginCrs={homeCrs}
                     chainOriginLabel={homeLabel || "Home"}
+                    chainDestCrs={day.work?.crs ?? ""}
+                    chainDestLabel={day.workLabel || day.work?.name || "Work"}
                     windowStart={day.amStart || "00:00"}
                     dayOfWeek={i}
                   />
@@ -142,6 +220,8 @@ export function WeeklyGrid({ stations, days, onChange, homeCrs, homeLabel }: Pro
                     onChange={(pins) => onChange(i, { pmPins: pins })}
                     chainOriginCrs={day.work?.crs ?? ""}
                     chainOriginLabel={day.workLabel || day.work?.name || "Work"}
+                    chainDestCrs={homeCrs}
+                    chainDestLabel={homeLabel || "Home"}
                     windowStart={day.pmStart || "00:00"}
                     dayOfWeek={i}
                   />

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { deleteCommuteAction, saveCommuteAction } from "@/app/commute/actions";
 import type { CommuteWithLegs } from "@/lib/commutes";
-import type { PinDraft } from "./pinned-leg-picker";
+import { nearestDateForDayOfWeek, type PinDraft } from "./pinned-leg-picker";
 import { StationInput, type StationOption } from "./station-input";
 import { type DayDraft, emptyDay, WeeklyGrid } from "./weekly-grid";
 
@@ -98,6 +98,34 @@ export function CommuteEditor({ stations, commute }: Props) {
     );
   }
 
+  /**
+   * Copies one day's full plan (work station, windows, pinned legs) onto
+   * other days — a pure client-side state copy, since persistence is
+   * full-replace-all per save (see updateCommute in lib/commutes.ts); there's
+   * no server-side linkage between days to maintain.
+   */
+  function copyDay(fromDow: number, toDows: number[]) {
+    setDays((prev) => {
+      const source = prev[fromDow];
+      if (!source) return prev;
+      return prev.map((d, i) => {
+        if (!toDows.includes(i)) return d;
+        // Pins carry a pickedServiceDate anchored to the day they were
+        // searched on. The train_uid/times themselves stay valid — the whole
+        // point of a pin is that trip_mapping revalidates it by day-of-week,
+        // not by this stored date — but the date itself would be wrong for
+        // the target day, so recompute it to what a fresh pick would store.
+        const retarget = (p: PinDraft): PinDraft => ({ ...p, pickedServiceDate: nearestDateForDayOfWeek(i) });
+        return {
+          ...source,
+          active: true,
+          amPins: source.amPins.map(retarget),
+          pmPins: source.pmPins.map(retarget),
+        };
+      });
+    });
+  }
+
   function buildPayload() {
     const legs = days
       .map((d, dayOfWeek) => ({ d, dayOfWeek }))
@@ -125,15 +153,31 @@ export function CommuteEditor({ stations, commute }: Props) {
     };
   }
 
-  /** Leg N+1 must start where leg N ended — a hard block, not a warning. */
-  function findChainGap(pins: PinDraft[]): string | null {
+  /**
+   * A direction's pins must form one unbroken chain from its real origin to
+   * its real destination — checks both internal contiguity (leg N+1 starts
+   * where leg N ended) and full coverage (the chain actually starts/ends
+   * where it should, catching a slot the user declared via a change station
+   * but never searched/picked — an empty slot just means the pins array is
+   * shorter than the declared structure, which this also catches since the
+   * last pin's destCrs won't match the real destination). A hard block, not
+   * a warning.
+   */
+  function findChainProblem(pins: PinDraft[], originCrs: string, originLabel: string, destCrs: string, destLabel: string): string | null {
+    if (pins.length === 0) return null; // window-only day, nothing pinned — fine
     const sorted = [...pins].sort((a, b) => a.sequence - b.sequence);
+    if (sorted[0]!.originCrs !== originCrs) {
+      return `The first leg doesn't start at ${originLabel} — pick a leg that starts there, or remove the change stations before it.`;
+    }
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1]!;
       const cur = sorted[i]!;
       if (prev.destCrs !== cur.originCrs) {
         return `"${prev.destLabel}" doesn't match "${cur.originLabel}" — pick a leg that starts where the previous one ends, or remove the gap.`;
       }
+    }
+    if (sorted[sorted.length - 1]!.destCrs !== destCrs) {
+      return `You still need to pick a train for the last leg to ${destLabel}.`;
     }
     return null;
   }
@@ -150,10 +194,22 @@ export function CommuteEditor({ stations, commute }: Props) {
         return "Set both a From and To for the morning window";
       if ((leg.pm.start ? 1 : 0) + (leg.pm.end ? 1 : 0) === 1)
         return "Set both a From and To for the evening window";
-      const amGap = findChainGap(leg.pins.filter((p) => p.direction === "am"));
-      if (amGap) return amGap;
-      const pmGap = findChainGap(leg.pins.filter((p) => p.direction === "pm"));
-      if (pmGap) return pmGap;
+      const amProblem = findChainProblem(
+        leg.pins.filter((p) => p.direction === "am"),
+        payload.homeCrs,
+        homeLabel.trim() || "Home",
+        leg.workCrs,
+        leg.workLabel,
+      );
+      if (amProblem) return amProblem;
+      const pmProblem = findChainProblem(
+        leg.pins.filter((p) => p.direction === "pm"),
+        leg.workCrs,
+        leg.workLabel,
+        payload.homeCrs,
+        homeLabel.trim() || "Home",
+      );
+      if (pmProblem) return pmProblem;
     }
     return null;
   }
@@ -243,6 +299,7 @@ export function CommuteEditor({ stations, commute }: Props) {
         onChange={patchDay}
         homeCrs={home?.crs ?? ""}
         homeLabel={homeLabel}
+        onCopyDay={copyDay}
       />
 
       {error && (
