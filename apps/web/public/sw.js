@@ -1,6 +1,6 @@
-/* Mainline service worker — Web Push (commute alerts) + a minimal offline shell.
+/* Signaller service worker — Web Push (commute alerts) + a minimal offline shell.
  *
- * Caching policy is deliberately conservative because Mainline is a live product:
+ * Caching policy is deliberately conservative because Signaller is a live product:
  * we NEVER serve stale live data. Only static assets are cached, plus a
  * navigation fallback so the app opens (into the search screen) when offline.
  * API responses (boards, journeys, alerts, live-trains) are always network-only.
@@ -8,7 +8,7 @@
 
 // Bumping this name is what evicts old entries: `activate` deletes every cache
 // whose key !== CACHE. Bump it whenever the caching policy changes.
-const CACHE = "mainline-shell-v3";
+const CACHE = "signaller-shell-v3";
 const SHELL = ["/", "/icon.png", "/icon-192.png", "/apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {
@@ -71,9 +71,9 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch (_e) {
-    data = { title: "Mainline", body: event.data ? event.data.text() : "" };
+    data = { title: "Signaller", body: event.data ? event.data.text() : "" };
   }
-  const title = data.title || "Mainline";
+  const title = data.title || "Signaller";
   const options = {
     body: data.body || "",
     tag: data.tag,

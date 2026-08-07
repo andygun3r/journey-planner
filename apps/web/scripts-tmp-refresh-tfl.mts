@@ -1,6 +1,6 @@
 process.env.NODE_ENV = 'development';
 const { refreshAllTflStops } = await import('./lib/tfl-stops.ts');
-const { TFL_MODES } = await import('@mainline/shared');
+const { TFL_MODES } = await import('@signaller/shared');
 console.log('starting refresh for modes:', TFL_MODES);
 const t0 = Date.now();
 const total = await refreshAllTflStops(TFL_MODES);

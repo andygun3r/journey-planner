@@ -15,10 +15,10 @@ RUN pnpm exec turbo build --filter=web
 # Next's standalone output only traces what the running server imports —
 # migrate.js is a separate script the server never calls, so drizzle-orm/
 # postgres never make it into .next/standalone/node_modules on their own.
-# A self-contained prod install of just @mainline/db (with its own
+# A self-contained prod install of just @signaller/db (with its own
 # node_modules) sidesteps guessing which pnpm symlinks are safe to copy
 # piecemeal across build stages.
-RUN pnpm deploy --filter @mainline/db --prod --legacy /app/db-deploy
+RUN pnpm deploy --filter @signaller/db --prod --legacy /app/db-deploy
 
 FROM node:22-alpine AS runner
 RUN apk add --no-cache docker-cli
