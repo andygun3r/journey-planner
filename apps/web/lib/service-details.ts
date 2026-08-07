@@ -3,6 +3,7 @@ import { tocName } from "@signaller/shared";
 import { eq, inArray, sql } from "drizzle-orm";
 import type { CallProgress } from "./call-status";
 import { getDb } from "./db";
+import type { JourneyLegView } from "./journeys";
 import { enrichWithDarwinProgress, enrichWithNrProgress, frontIndex } from "./service-progress";
 import { hhmmToIso, resolvePatternTimes } from "./uk-time";
 
@@ -207,7 +208,7 @@ export function isRidServiceId(id: string): boolean {
   return id.startsWith("rid:");
 }
 
-function ridFromServiceId(id: string): string | null {
+export function ridFromServiceId(id: string): string | null {
   const rid = id.slice("rid:".length).trim();
   return rid.length > 0 ? rid : null;
 }
@@ -531,10 +532,26 @@ function liveTime(s: {
   };
 }
 
-export async function fetchServiceDetailsByRid(rid: string): Promise<ServiceDetails | null> {
-  const db = getDb();
+export interface DarwinTrainByRid {
+  rid: string;
+  uid: string;
+  ssd: string;
+  toc: string | null;
+  cancelled: boolean;
+  cancelReason: string | null;
+  lateReason: string | null;
+}
 
-  const trainRows = await db
+/**
+ * The darwin_train row for a Darwin run id — gives train_uid + scheduled
+ * start date (ssd), the codebase's stable "this day's running of this train"
+ * identity. Extracted from fetchServiceDetailsByRid so pin resolution
+ * (apps/web/lib/pin-resolution.ts) can reuse the exact same lookup rather
+ * than duplicating it.
+ */
+export async function trainByRid(rid: string): Promise<DarwinTrainByRid | null> {
+  const db = getDb();
+  const rows = await db
     .select({
       rid: darwinTrain.rid,
       uid: darwinTrain.uid,
@@ -547,7 +564,13 @@ export async function fetchServiceDetailsByRid(rid: string): Promise<ServiceDeta
     .from(darwinTrain)
     .where(eq(darwinTrain.rid, rid))
     .limit(1);
-  const train = trainRows[0];
+  return rows[0] ?? null;
+}
+
+export async function fetchServiceDetailsByRid(rid: string): Promise<ServiceDetails | null> {
+  const db = getDb();
+
+  const train = await trainByRid(rid);
   if (!train) return null;
 
   const rows = await db
@@ -624,6 +647,93 @@ export async function fetchServiceDetailsByRid(rid: string): Promise<ServiceDeta
     portions: [],
     progress: live.progress,
     rid,
+  };
+}
+
+/**
+ * A JourneyLegView for one pinned leg's origin->dest span, built from a
+ * specific Darwin run's calling pattern (darwin_stop_forecast, joined by
+ * rid). Used by apps/web/lib/pinned-journey.ts to turn a pinned commute leg
+ * into the same shape planJourneys() produces, so the walkthrough
+ * (commute-walkthrough.ts/tsx) can render it unmodified.
+ *
+ * Returns null when the rid's calling pattern doesn't contain both CRS (e.g.
+ * Darwin hasn't fully populated this run's stops yet) — the caller falls
+ * back to the pin's own scheduled times in that case.
+ */
+export async function stopForecastLegView(
+  rid: string,
+  fromCrs: string,
+  toCrs: string,
+): Promise<JourneyLegView | null> {
+  const db = getDb();
+  const train = await trainByRid(rid);
+  if (!train) return null;
+
+  const rows = await db
+    .select({
+      seq: darwinStopForecast.seq,
+      crs: darwinStopForecast.crs,
+      schedArr: darwinStopForecast.schedArr,
+      schedDep: darwinStopForecast.schedDep,
+      schedPass: darwinStopForecast.schedPass,
+      estArr: darwinStopForecast.estArr,
+      estDep: darwinStopForecast.estDep,
+      actArr: darwinStopForecast.actArr,
+      actDep: darwinStopForecast.actDep,
+      suppressed: darwinStopForecast.suppressed,
+    })
+    .from(darwinStopForecast)
+    .where(eq(darwinStopForecast.rid, rid))
+    .orderBy(sql`${darwinStopForecast.seq} asc`);
+
+  const withCrs = rows.filter((r) => r.crs);
+  const fromIdx = withCrs.findIndex((r) => r.crs === fromCrs);
+  const toIdx = withCrs.findIndex((r, i) => r.crs === toCrs && i > fromIdx);
+  if (fromIdx === -1 || toIdx === -1) return null;
+
+  const span = withCrs.slice(fromIdx, toIdx + 1);
+  const crsValues = [...new Set(span.map((s) => s.crs).filter(Boolean) as string[])];
+  const stationRows =
+    crsValues.length > 0
+      ? await db.select({ crs: station.crs, name: station.name }).from(station).where(inArray(station.crs, crsValues))
+      : [];
+  const stationNameByCrs = new Map(stationRows.map((s) => [s.crs, s.name]));
+
+  const anchor = serviceDateAnchor(train.ssd);
+  const dated = datePattern(
+    span.map((s, i): ServiceCall => {
+      const live = liveTime(s);
+      return {
+        crs: s.crs ?? undefined,
+        name: s.crs ? (stationNameByCrs.get(s.crs) ?? s.crs) : "",
+        scheduled: scheduledTime(s),
+        actual: live.actual,
+        expected: live.expected,
+        cancelled: train.cancelled || s.suppressed,
+        isThisStop: i === 0,
+      };
+    }),
+    anchor,
+  );
+
+  const first = dated[0]!;
+  const last = dated[dated.length - 1]!;
+  const intermediate = dated.slice(1, -1);
+
+  return {
+    mode: "rail",
+    originCrs: fromCrs,
+    originName: first.name,
+    destCrs: toCrs,
+    destName: last.name,
+    departs: first.actualIso ?? first.expectedIso ?? first.scheduledIso ?? anchor.toISOString(),
+    arrives: last.actualIso ?? last.expectedIso ?? last.scheduledIso ?? anchor.toISOString(),
+    operator: train.toc ? (tocName(train.toc) ?? train.toc) : undefined,
+    staySeated: false,
+    cancelled: train.cancelled,
+    callCount: intermediate.length,
+    nextCallName: intermediate[0]?.name,
   };
 }
 

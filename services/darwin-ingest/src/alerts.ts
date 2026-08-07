@@ -82,6 +82,60 @@ async function isUserOnHoliday(userId: string, date: string): Promise<boolean> {
   return isDateInHolidayRange(date, rows);
 }
 
+export interface PublishAndPushArgs {
+  alertId: string;
+  commuteId: string;
+  userId: string;
+  commuteLabel: string;
+  kind: string;
+  headline: string;
+  detail?: string;
+  direction: string | null;
+  serviceDate: string;
+  pushSubscription: unknown;
+  redis: Redis | null;
+}
+
+/**
+ * Redis-publish + Web Push for one already-inserted alert row (the dedupe
+ * insert itself is the caller's job — this is the generic notify tail,
+ * shared by raiseAlert (live Darwin events, matched via commute_corridor) and
+ * raisePinStaleAlerts (precompute.ts, a stale pin has no corridor row to
+ * join from, so it inserts directly and calls this with commuteId/userId it
+ * already has on hand).
+ */
+export async function publishAndPush({
+  alertId,
+  commuteId,
+  userId,
+  commuteLabel,
+  kind,
+  headline,
+  detail,
+  direction,
+  serviceDate,
+  pushSubscription,
+  redis,
+}: PublishAndPushArgs): Promise<void> {
+  const payload = { id: alertId, commuteId, kind, headline, detail, direction };
+  if (redis) {
+    await redis.publish(`commute:alert:${userId}`, JSON.stringify(payload));
+  }
+
+  if (pushSubscription) {
+    const failStatus = await sendPush(pushSubscription, {
+      title: headline,
+      body: detail ?? commuteLabel,
+      url: "/commute",
+      tag: `commute-${commuteId}-${serviceDate}`,
+    });
+    if (failStatus === 404 || failStatus === 410) {
+      // Subscription is gone — clear it so we stop trying.
+      await db.update(user).set({ pushSubscription: null }).where(eq(user.id, userId));
+    }
+  }
+}
+
 interface RaiseArgs {
   match: MatchedCommute;
   kind: "cancellation" | "delay";
@@ -115,32 +169,20 @@ async function raiseAlert({ match, kind, rid, headline, detail, redis }: RaiseAr
   // Dedupe hit — already alerted for this train/commute/kind/date. Stop here so
   // we don't re-publish or re-push.
   if (inserted.length === 0) return;
-  const alertId = inserted[0]!.id;
 
-  const payload = {
-    id: alertId,
+  await publishAndPush({
+    alertId: inserted[0]!.id,
     commuteId: match.commuteId,
+    userId: match.userId,
+    commuteLabel: match.commuteLabel,
     kind,
     headline,
     detail,
     direction: match.direction,
-  };
-  if (redis) {
-    await redis.publish(`commute:alert:${match.userId}`, JSON.stringify(payload));
-  }
-
-  if (match.pushSubscription) {
-    const failStatus = await sendPush(match.pushSubscription, {
-      title: headline,
-      body: detail ?? match.commuteLabel,
-      url: "/commute",
-      tag: `commute-${match.commuteId}-${match.serviceDate}`,
-    });
-    if (failStatus === 404 || failStatus === 410) {
-      // Subscription is gone — clear it so we stop trying.
-      await db.update(user).set({ pushSubscription: null }).where(eq(user.id, match.userId));
-    }
-  }
+    serviceDate: match.serviceDate,
+    pushSubscription: match.pushSubscription,
+    redis,
+  });
 }
 
 /** A schedule update carrying a cancellation. */

@@ -1,5 +1,6 @@
 "use client";
 
+import { type PinDraft, PinnedLegPicker } from "./pinned-leg-picker";
 import { StationInput, type StationOption } from "./station-input";
 
 /** Draft state for one day-of-week row in the editor. */
@@ -15,6 +16,9 @@ export interface DayDraft {
   backupWork: StationOption | null;
   backupHome: StationOption | null;
   backupNote: string;
+  /** Pinned real services for this day, primary over the am/pm window when set. */
+  amPins: PinDraft[];
+  pmPins: PinDraft[];
 }
 
 export function emptyDay(): DayDraft {
@@ -29,6 +33,8 @@ export function emptyDay(): DayDraft {
     backupWork: null,
     backupHome: null,
     backupNote: "",
+    amPins: [],
+    pmPins: [],
   };
 }
 
@@ -39,9 +45,12 @@ interface Props {
   stations: StationOption[];
   days: DayDraft[];
   onChange: (dayOfWeek: number, patch: Partial<DayDraft>) => void;
+  /** The commute's home station + label — the AM chain's starting point / PM chain's end. */
+  homeCrs: string;
+  homeLabel: string;
 }
 
-export function WeeklyGrid({ stations, days, onChange }: Props) {
+export function WeeklyGrid({ stations, days, onChange, homeCrs, homeLabel }: Props) {
   return (
     <div className="weekly-grid">
       {days.map((day, i) => (
@@ -90,9 +99,20 @@ export function WeeklyGrid({ stations, days, onChange }: Props) {
               <div className="day-windows">
                 <fieldset className="window">
                   <legend>Morning · home → work</legend>
+                  <p className="editor-hint">
+                    Pick real trains below, or just set a rough time window — pinned trains take
+                    priority when both are set.
+                  </p>
+                  <PinnedLegPicker
+                    pins={day.amPins}
+                    onChange={(pins) => onChange(i, { amPins: pins })}
+                    chainOriginCrs={homeCrs}
+                    chainOriginLabel={homeLabel || "Home"}
+                    windowStart={day.amStart || "00:00"}
+                  />
                   <div className="window-times">
                     <label>
-                      From
+                      From{day.amPins.length > 0 ? " (fallback)" : ""}
                       <input
                         type="time"
                         value={day.amStart}
@@ -100,7 +120,7 @@ export function WeeklyGrid({ stations, days, onChange }: Props) {
                       />
                     </label>
                     <label>
-                      To
+                      To{day.amPins.length > 0 ? " (fallback)" : ""}
                       <input
                         type="time"
                         value={day.amEnd}
@@ -112,9 +132,20 @@ export function WeeklyGrid({ stations, days, onChange }: Props) {
 
                 <fieldset className="window">
                   <legend>Evening · work → home</legend>
+                  <p className="editor-hint">
+                    Pick real trains below, or just set a rough time window — pinned trains take
+                    priority when both are set.
+                  </p>
+                  <PinnedLegPicker
+                    pins={day.pmPins}
+                    onChange={(pins) => onChange(i, { pmPins: pins })}
+                    chainOriginCrs={day.work?.crs ?? ""}
+                    chainOriginLabel={day.workLabel || day.work?.name || "Work"}
+                    windowStart={day.pmStart || "00:00"}
+                  />
                   <div className="window-times">
                     <label>
-                      From
+                      From{day.pmPins.length > 0 ? " (fallback)" : ""}
                       <input
                         type="time"
                         value={day.pmStart}
@@ -122,7 +153,7 @@ export function WeeklyGrid({ stations, days, onChange }: Props) {
                       />
                     </label>
                     <label>
-                      To
+                      To{day.pmPins.length > 0 ? " (fallback)" : ""}
                       <input
                         type="time"
                         value={day.pmEnd}

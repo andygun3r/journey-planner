@@ -1,7 +1,7 @@
 import {
   type ActiveLeg,
-  type CommuteRecord,
   dayOfWeekForDate,
+  type CommuteRecord,
   londonDate,
   londonWallTimeToIso,
   pickDefaultCommute,
@@ -11,6 +11,7 @@ import { listCommutes } from "./commutes";
 import { type Disruption as BoardDisruption, fetchStationDisruptions } from "./disruptions";
 import { holidayRangesFor } from "./holidays";
 import { planJourneys, type JourneyView } from "./journeys";
+import { buildPinnedJourney } from "./pinned-journey";
 
 /** Other commutes the user has, for a switcher UI — excludes the one in play. */
 export interface OtherCommute {
@@ -30,6 +31,9 @@ export type DashboardState =
       /** True when the routing engine couldn't be reached. */
       engineOffline: boolean;
       otherCommutes: OtherCommute[];
+      /** Set when this leg has pinned services but one no longer matches the
+       *  timetable for today — journeys still falls back to a live search. */
+      pinStaleNotice?: { headline: string };
     }
   | {
       kind: "no-active";
@@ -100,9 +104,32 @@ export async function getDashboardData(
   const base = Date.parse(windowStartIso) > now.getTime() ? windowStartIso : now.toISOString();
   const when = new Date(Date.parse(base) + shiftMinutes * 60_000).toISOString();
 
-  const outcome = await planJourneys(leg.originCrs, leg.destCrs, when);
-  const journeys = outcome.ok ? outcome.journeys : [];
-  const engineOffline = !outcome.ok && outcome.reason === "engine-offline";
+  let journeys: JourneyView[] = [];
+  let engineOffline = false;
+  let pinStaleNotice: { headline: string } | undefined;
+
+  if (leg.pinnedLegs && leg.pinnedLegs.length > 0) {
+    const pinnedOutcome = await buildPinnedJourney(leg.pinnedLegs, leg.dayOfWeek, today);
+    if (pinnedOutcome.ok) {
+      journeys = [pinnedOutcome.journey];
+    } else {
+      // Pin is stale or Darwin has no data for it yet — never silently drop
+      // the user's plan without telling them; fall back to a live search for
+      // today so the dashboard still has something useful to show.
+      if (pinnedOutcome.reason === "pin-stale") {
+        pinStaleNotice = {
+          headline: `Your pinned ${leg.direction === "am" ? "morning" : "evening"} train no longer runs today — showing live alternatives instead.`,
+        };
+      }
+      const fallback = await planJourneys(leg.originCrs, leg.destCrs, when);
+      journeys = fallback.ok ? fallback.journeys : [];
+      engineOffline = !fallback.ok && fallback.reason === "engine-offline";
+    }
+  } else {
+    const outcome = await planJourneys(leg.originCrs, leg.destCrs, when);
+    journeys = outcome.ok ? outcome.journeys : [];
+    engineOffline = !outcome.ok && outcome.reason === "engine-offline";
+  }
 
   // Origin-station disruptions (best-effort; never block the dashboard).
   //
@@ -128,5 +155,6 @@ export async function getDashboardData(
     disruptions,
     engineOffline,
     otherCommutes,
+    pinStaleNotice,
   };
 }

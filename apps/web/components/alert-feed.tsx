@@ -131,12 +131,17 @@ export function AlertFeed({ initialAlerts }: Props) {
         {unseen.map((a) => (
           <li key={a.id} className={`alert-item alert-${a.kind}`}>
             <span className={`chip ${a.kind === "cancellation" ? "chip-danger" : "chip-warn"}`}>
-              {a.kind === "cancellation" ? "Cancelled" : "Delayed"}
+              {a.kind === "cancellation" ? "Cancelled" : a.kind === "pin_stale" ? "Pin broken" : "Delayed"}
             </span>
             <div className="alert-body">
               <p className="alert-headline">{a.headline}</p>
               {a.detail && <p className="alert-detail">{a.detail}</p>}
               <p className="alert-time">{timeFmt.format(new Date(a.createdAt))}</p>
+              {a.kind === "pin_stale" && (
+                <p className="alert-detail">
+                  <a href="/commute/edit">Edit this commute</a> to pick a new service.
+                </p>
+              )}
             </div>
             <button
               type="button"

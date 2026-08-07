@@ -121,6 +121,15 @@ async function CommuteStatus({
 
         {leg.upcoming && <DailyFlex shiftMinutes={shiftMinutes} />}
 
+        {state.pinStaleNotice && (
+          <div className="notice notice-warn">
+            <p>{state.pinStaleNotice.headline}</p>
+            <p className="editor-hint">
+              <Link href="/commute/edit">Edit this commute</Link> to pick a new service.
+            </p>
+          </div>
+        )}
+
         {state.engineOffline ? (
           <div className="notice notice-danger">
             <h2>Live routing is offline</h2>

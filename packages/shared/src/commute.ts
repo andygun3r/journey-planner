@@ -36,6 +36,29 @@ const Window = z
     message: "Start must be before end",
   });
 
+/**
+ * A single real, timetabled train service pinned as one leg of a commute
+ * direction. Identity is train_uid (Network Rail CIF) — never a Darwin rid
+ * (per-day, ephemeral) or a GTFS trip id (routing-engine artifact, remapped
+ * across timetable versions). See commute_leg_pin's doc comment in
+ * packages/db/src/schema.ts for the full rationale.
+ */
+export const CommuteLegPinInput = z.object({
+  direction: z.enum(["am", "pm"]),
+  sequence: z.number().int().min(0).max(9),
+  trainUid: z.string().trim().min(1).max(20),
+  gtfsTripId: z.string().trim().max(120).nullish(),
+  originCrs: CRS,
+  originLabel: z.string().trim().min(1).max(60),
+  schedDep: HHMM,
+  destCrs: CRS,
+  destLabel: z.string().trim().min(1).max(60),
+  schedArr: HHMM,
+  toc: z.string().trim().max(10).nullish(),
+  pickedServiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+export type CommuteLegPinInput = z.infer<typeof CommuteLegPinInput>;
+
 export const CommuteLegInput = z
   .object({
     dayOfWeek: z.number().int().min(0).max(6), // 0 = Mon ... 6 = Sun
@@ -51,6 +74,11 @@ export const CommuteLegInput = z
     backupWorkCrs: CRS.nullish(),
     backupHomeCrs: CRS.nullish(),
     backupNote: z.string().trim().max(120).nullish(),
+    /**
+     * Real pinned services for this day, primary over the am/pm window when
+     * present (the window becomes a fallback — see resolveActiveLegForCommute).
+     */
+    pins: z.array(CommuteLegPinInput).max(6).default([]),
   })
   .refine((l) => l.am.start != null || l.pm.start != null, {
     message: "A day needs at least an AM or a PM window",
@@ -96,6 +124,22 @@ export interface CommuteRecord {
   createdAt?: string;
 }
 
+export interface CommuteLegPinRecord {
+  id: string;
+  direction: Direction;
+  sequence: number;
+  trainUid: string;
+  gtfsTripId: string | null;
+  originCrs: string;
+  originLabel: string;
+  schedDep: string;
+  destCrs: string;
+  destLabel: string;
+  schedArr: string;
+  toc: string | null;
+  pickedServiceDate: string;
+}
+
 export interface CommuteLegRecord {
   id: string;
   dayOfWeek: number;
@@ -108,6 +152,8 @@ export interface CommuteLegRecord {
   backupWorkCrs: string | null;
   backupHomeCrs: string | null;
   backupNote: string | null;
+  /** Pinned real services for this day, both directions, sequence-ordered. */
+  pins: CommuteLegPinRecord[];
 }
 
 export interface HolidayRange {
@@ -133,6 +179,12 @@ export interface ActiveLeg {
   backupOriginCrs?: string;
   backupDestCrs?: string;
   backupNote?: string;
+  /**
+   * Pinned real services for this direction, sequence-ordered — present and
+   * non-empty means the caller should build the journey from these (see
+   * buildPinnedJourney in apps/web) rather than a live window-based plan.
+   */
+  pinnedLegs?: CommuteLegPinRecord[];
 }
 
 // ---------------------------------------------------------------------------
@@ -201,6 +253,12 @@ function windowFor(leg: CommuteLegRecord, dir: Direction): { start: string; end:
   return { start: start.slice(0, 5), end: end.slice(0, 5) };
 }
 
+/** This direction's pinned services, sequence-ordered, or undefined when none. */
+function pinsFor(leg: CommuteLegRecord, dir: Direction): CommuteLegPinRecord[] | undefined {
+  const pins = leg.pins.filter((p) => p.direction === dir).sort((a, b) => a.sequence - b.sequence);
+  return pins.length > 0 ? pins : undefined;
+}
+
 /**
  * Given a commute, its legs, the device's holidays and "now", decide which
  * single leg+direction the dashboard should focus on.
@@ -250,6 +308,7 @@ export function resolveActiveLegForCommute(
       backupOriginCrs: leg.backupHomeCrs ?? undefined,
       backupDestCrs: leg.backupWorkCrs ?? undefined,
       backupNote: leg.backupNote ?? undefined,
+      pinnedLegs: pinsFor(leg, "am"),
     };
   }
 
@@ -269,6 +328,7 @@ export function resolveActiveLegForCommute(
       backupOriginCrs: leg.backupWorkCrs ?? undefined,
       backupDestCrs: leg.backupHomeCrs ?? undefined,
       backupNote: leg.backupNote ?? undefined,
+      pinnedLegs: pinsFor(leg, "pm"),
     };
   }
 

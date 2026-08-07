@@ -723,6 +723,57 @@ export const commuteLeg = pgTable(
 );
 
 /**
+ * A single real, timetabled train service pinned as one leg of a commute
+ * direction (am = home→work, pm = work→home). Multiple rows per
+ * (commuteLegId, direction) let a day's commute be built from several
+ * changes, in sequence order (0, 1, 2, ...).
+ *
+ * Identity is train_uid (Network Rail CIF) — NEVER a Darwin rid (per-day,
+ * ephemeral) or GTFS tripId (routing-engine artifact, remapped across
+ * timetable versions — see trip_mapping's doc comment). gtfsTripId here is a
+ * cached convenience for same-day display/lookups only; daily revalidation
+ * always re-derives it from train_uid via trip_mapping, never trusts this
+ * stale copy.
+ *
+ * Presence of >=1 row for a (commuteLegId, direction) is what makes that
+ * direction "pinned" — commute_leg's own am/pm window becomes the fallback
+ * for it (used for live re-planning if a pin stops matching the timetable).
+ */
+export const commuteLegPin = pgTable(
+  "commute_leg_pin",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    commuteLegId: uuid("commute_leg_id")
+      .notNull()
+      .references(() => commuteLeg.id, { onDelete: "cascade" }),
+    /** 'am' (home→work) or 'pm' (work→home) — matches commute_corridor.direction. */
+    direction: text("direction").notNull(),
+    /** 0-based order within this leg/direction: leg 1, leg 2 (a change), ... */
+    sequence: smallint("sequence").notNull(),
+    trainUid: text("train_uid").notNull(),
+    /** GTFS trip id observed at pin time — display/lookup convenience only. */
+    gtfsTripId: text("gtfs_trip_id"),
+    originCrs: text("origin_crs").notNull(),
+    originLabel: text("origin_label").notNull(),
+    /** Scheduled departure HH:MM at originCrs, as picked from the board. */
+    schedDep: text("sched_dep").notNull(),
+    destCrs: text("dest_crs").notNull(),
+    destLabel: text("dest_label").notNull(),
+    /** Scheduled arrival HH:MM at destCrs, as picked from the board. */
+    schedArr: text("sched_arr").notNull(),
+    toc: text("toc"),
+    /** The UK service date (YYYY-MM-DD) the user was looking at when they picked
+     *  this row — informational only, never used for revalidation. */
+    pickedServiceDate: date("picked_service_date").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("commute_leg_pin_seq_idx").on(t.commuteLegId, t.direction, t.sequence),
+    index("commute_leg_pin_uid_idx").on(t.trainUid),
+  ],
+);
+
+/**
  * Holiday / leave ranges, owned by a user so a single entry suppresses alerts
  * for every commute of theirs. Inclusive date range; a single day sets
  * start = end.
@@ -800,8 +851,8 @@ export const alert = pgTable(
     commuteId: uuid("commute_id")
       .notNull()
       .references(() => commute.id, { onDelete: "cascade" }),
-    kind: text("kind").notNull(), // cancellation | delay | kb_incident
-    /** rid for train events, kb incident id for incidents. */
+    kind: text("kind").notNull(), // cancellation | delay | kb_incident | pin_stale
+    /** rid for train events, kb incident id for incidents, train_uid for pin_stale. */
     ref: text("ref").notNull(),
     /** Which leg/direction/date this alert relates to (for train events). */
     commuteLegId: uuid("commute_leg_id"),

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { deleteCommuteAction, saveCommuteAction } from "@/app/commute/actions";
 import type { CommuteWithLegs } from "@/lib/commutes";
+import type { PinDraft } from "./pinned-leg-picker";
 import { StationInput, type StationOption } from "./station-input";
 import { type DayDraft, emptyDay, WeeklyGrid } from "./weekly-grid";
 
@@ -16,6 +17,19 @@ function draftsFrom(commute: CommuteWithLegs | null, stations: StationOption[]):
   const byCrs = new Map(stations.map((s) => [s.crs, s]));
   const days = Array.from({ length: 7 }, emptyDay);
   for (const leg of commute?.legs ?? []) {
+    const pinDraft = (p: (typeof leg.pins)[number]): PinDraft => ({
+      sequence: p.sequence,
+      trainUid: p.trainUid,
+      gtfsTripId: p.gtfsTripId,
+      originCrs: p.originCrs,
+      originLabel: p.originLabel,
+      schedDep: p.schedDep.slice(0, 5),
+      destCrs: p.destCrs,
+      destLabel: p.destLabel,
+      schedArr: p.schedArr.slice(0, 5),
+      toc: p.toc,
+      pickedServiceDate: p.pickedServiceDate,
+    });
     days[leg.dayOfWeek] = {
       active: true,
       work: byCrs.get(leg.workCrs) ?? { crs: leg.workCrs, name: leg.workCrs },
@@ -31,6 +45,14 @@ function draftsFrom(commute: CommuteWithLegs | null, stations: StationOption[]):
         ? (byCrs.get(leg.backupHomeCrs) ?? { crs: leg.backupHomeCrs, name: leg.backupHomeCrs })
         : null,
       backupNote: leg.backupNote ?? "",
+      amPins: leg.pins
+        .filter((p) => p.direction === "am")
+        .sort((a, b) => a.sequence - b.sequence)
+        .map(pinDraft),
+      pmPins: leg.pins
+        .filter((p) => p.direction === "pm")
+        .sort((a, b) => a.sequence - b.sequence)
+        .map(pinDraft),
     };
   }
   return days;
@@ -49,7 +71,31 @@ export function CommuteEditor({ stations, commute }: Props) {
   const [pending, startTransition] = useTransition();
 
   function patchDay(dow: number, patch: Partial<DayDraft>) {
-    setDays((prev) => prev.map((d, i) => (i === dow ? { ...d, ...patch } : d)));
+    setDays((prev) =>
+      prev.map((d, i) => {
+        if (i !== dow) return d;
+        const next = { ...d, ...patch };
+        // Pre-fill the fallback window from the pinned journey's own times
+        // whenever pins change — forward-only, never clears an edited window
+        // when the last pin is removed (decision: window stays independently
+        // editable after pre-fill).
+        if (patch.amPins) {
+          const sorted = [...patch.amPins].sort((a, b) => a.sequence - b.sequence);
+          if (sorted.length > 0) {
+            next.amStart = sorted[0]!.schedDep;
+            next.amEnd = sorted[sorted.length - 1]!.schedArr;
+          }
+        }
+        if (patch.pmPins) {
+          const sorted = [...patch.pmPins].sort((a, b) => a.sequence - b.sequence);
+          if (sorted.length > 0) {
+            next.pmStart = sorted[0]!.schedDep;
+            next.pmEnd = sorted[sorted.length - 1]!.schedArr;
+          }
+        }
+        return next;
+      }),
+    );
   }
 
   function buildPayload() {
@@ -65,6 +111,10 @@ export function CommuteEditor({ stations, commute }: Props) {
         backupWorkCrs: d.backupWork?.crs || null,
         backupHomeCrs: d.backupHome?.crs || null,
         backupNote: d.backupNote.trim() || null,
+        pins: [
+          ...d.amPins.map((p) => ({ ...p, direction: "am" as const })),
+          ...d.pmPins.map((p) => ({ ...p, direction: "pm" as const })),
+        ],
       }));
     return {
       label: label.trim(),
@@ -73,6 +123,19 @@ export function CommuteEditor({ stations, commute }: Props) {
       priority,
       legs,
     };
+  }
+
+  /** Leg N+1 must start where leg N ended — a hard block, not a warning. */
+  function findChainGap(pins: PinDraft[]): string | null {
+    const sorted = [...pins].sort((a, b) => a.sequence - b.sequence);
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1]!;
+      const cur = sorted[i]!;
+      if (prev.destCrs !== cur.originCrs) {
+        return `"${prev.destLabel}" doesn't match "${cur.originLabel}" — pick a leg that starts where the previous one ends, or remove the gap.`;
+      }
+    }
+    return null;
   }
 
   function clientValidate(payload: ReturnType<typeof buildPayload>): string | null {
@@ -87,6 +150,10 @@ export function CommuteEditor({ stations, commute }: Props) {
         return "Set both a From and To for the morning window";
       if ((leg.pm.start ? 1 : 0) + (leg.pm.end ? 1 : 0) === 1)
         return "Set both a From and To for the evening window";
+      const amGap = findChainGap(leg.pins.filter((p) => p.direction === "am"));
+      if (amGap) return amGap;
+      const pmGap = findChainGap(leg.pins.filter((p) => p.direction === "pm"));
+      if (pmGap) return pmGap;
     }
     return null;
   }
@@ -165,11 +232,18 @@ export function CommuteEditor({ stations, commute }: Props) {
 
       <h2 className="editor-subhead">Weekly schedule</h2>
       <p className="editor-hint">
-        Turn on the days you travel and set where you&rsquo;re heading and roughly when.
-        Work can differ each day.
+        Turn on the days you travel and set where you&rsquo;re heading. Pick real trains for a
+        precise plan, or just set a rough time window — pinned trains always come first when both
+        are set, and we&rsquo;ll switch to a live search automatically if one stops running.
       </p>
 
-      <WeeklyGrid stations={stations} days={days} onChange={patchDay} />
+      <WeeklyGrid
+        stations={stations}
+        days={days}
+        onChange={patchDay}
+        homeCrs={home?.crs ?? ""}
+        homeLabel={homeLabel}
+      />
 
       {error && (
         <p className="form-error" role="alert">
