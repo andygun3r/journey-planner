@@ -1,9 +1,11 @@
 import { createEngine, type RawItinerary, type RawLeg } from "@signaller/routing-adapter";
-import { isCrs, isNaptanId, normaliseCrs, operatorFromRouteName, TFL_MODES } from "@signaller/shared";
+import { normaliseCrs, operatorFromRouteName, TFL_MODES } from "@signaller/shared";
+import { geocodePostcode } from "./geocoding";
 import { computeStitchedStatus } from "./journey-status";
-import { stationName } from "./stations";
-import { journeyResults, lineStatus, type TflJourney, type TflJourneyLeg } from "./tfl";
-import { cachedStopPoint, nearestRailInterchange } from "./tfl-stop-cache";
+import { type JourneyEndpoint, parseEndpoint } from "./journey-endpoint";
+import { nearestStations, stationName } from "./stations";
+import { journeyResults, lineStatus, tflConfigured, type TflJourney, type TflJourneyLeg } from "./tfl";
+import { cachedStopPoint, nearestRailInterchange, nearestRailStationSmart } from "./tfl-stop-cache";
 
 /** View models for the results UI (pre-Darwin: engine data only). */
 export interface JourneyLegView {
@@ -35,6 +37,9 @@ export interface JourneyView {
   status: "on-time" | "delayed" | "cancelled" | "scheduled";
   delayMinutes?: number;
   legs: JourneyLegView[];
+  /** Set when the destination was a geocoded postcode/coords that fell back to
+   * "nearest station" (no TfL last-mile stitch available) — e.g. "≈750m from Victoria". */
+  destinationWalkNote?: string;
 }
 
 export type PlanOutcome =
@@ -210,54 +215,24 @@ async function toStitchedJourneyView(
 }
 
 /**
- * Plan a journey that may need a TfL leg: either endpoint given as a NaPTAN id
- * (rather than a bare CRS) triggers stitching. CRS-to-CRS requests are always
- * MOTIS-only — National Rail stations are always MOTIS-reachable from each
- * other, so a rail-only request never needs to consult TfL at all.
+ * Rail (fromCrs) + TfL last-mile leg to a TfL destination point (a real
+ * NaPTAN id, or a raw "lat,lon" string TfL's JourneyResults endpoint also
+ * accepts as a `to`). Shared by the NaPTAN-destination path and the
+ * geocoded-postcode/coords-destination path in planFlexible.
  */
-export async function planMultiModal(
-  from: string,
-  to: string,
-  when?: string,
-  arriveBy = false,
+async function stitchRailToTflPoint(
+  fromCrs: string,
+  interchangeCrs: string,
+  interchangeNaptanId: string,
+  tflDestId: string,
+  when: string | undefined,
 ): Promise<PlanOutcome> {
-  const fromIsNaptan = isNaptanId(from) && !isCrs(from);
-  const toIsNaptan = isNaptanId(to) && !isCrs(to);
-
-  if (!fromIsNaptan && !toIsNaptan) {
-    return planJourneys(from, to, when, arriveBy);
-  }
-
-  // v1 only supports a rail-leg-then-TfL-leg shape (CRS origin, NaPTAN destination).
-  // A NaPTAN origin (TfL-then-rail) or NaPTAN-to-NaPTAN request is out of scope.
-  if (fromIsNaptan || !isCrs(from)) {
-    return { ok: false, reason: "bad-request" };
-  }
-
-  const fromCrs = normaliseCrs(from);
-  const destPoint = await cachedStopPoint(to);
-  if (!destPoint) return { ok: false, reason: "bad-request" };
-
-  // Destination is itself a rail interchange — no TfL leg needed, plan as rail-only.
-  if (destPoint.crs) {
-    return planJourneys(fromCrs, destPoint.crs, when, arriveBy);
-  }
-
-  if (destPoint.lat === undefined || destPoint.lon === undefined) {
-    return { ok: false, reason: "no-journeys" };
-  }
-
-  const interchange = await nearestRailInterchange(destPoint.lat, destPoint.lon);
-  if (!interchange?.crs) {
-    return { ok: false, reason: "no-journeys" };
-  }
-
   const engine = createEngine();
   let railItineraries: RawItinerary[];
   try {
     railItineraries = await engine.plan({
       from: fromCrs,
-      to: interchange.crs,
+      to: interchangeCrs,
       when,
       arriveBy: false, // arriveBy is resolved against the final destination, not the interchange
       numItineraries: 6,
@@ -274,7 +249,7 @@ export async function planMultiModal(
   const stitched: JourneyView[] = [];
   for (const [i, railItinerary] of bestRail.entries()) {
     const railArrival = railItinerary.legs[railItinerary.legs.length - 1]!.destination.scheduled;
-    const tflJourneys = await journeyResults(interchange.naptanId, to, {
+    const tflJourneys = await journeyResults(interchangeNaptanId, tflDestId, {
       when: railArrival,
       arriveBy: false,
     });
@@ -286,4 +261,183 @@ export async function planMultiModal(
   if (stitched.length === 0) return { ok: false, reason: "no-journeys" };
   stitched.sort((a, b) => Date.parse(a.arrives) - Date.parse(b.arrives));
   return { ok: true, journeys: topN(stitched, 6) };
+}
+
+/**
+ * Attach a "≈Xm from <station>" note to every journey in an outcome — used
+ * when a coords/postcode destination falls back to "nearest station" (no TfL
+ * stitching available or configured) so the walking gap is stated honestly
+ * rather than silently absorbed into the destination label.
+ */
+function withWalkNote(outcome: PlanOutcome, distanceMeters: number, stationLabel: string): PlanOutcome {
+  if (!outcome.ok) return outcome;
+  const note =
+    distanceMeters < 1000
+      ? `≈${Math.round(distanceMeters / 50) * 50}m from ${stationLabel}`
+      : `≈${(distanceMeters / 1000).toFixed(1)}km from ${stationLabel}`;
+  return { ...outcome, journeys: outcome.journeys.map((j) => ({ ...j, destinationWalkNote: note })) };
+}
+
+export interface FlexiblePlanOutcome {
+  outcome: PlanOutcome;
+  fromLabel?: string;
+  toLabel?: string;
+}
+
+/**
+ * Resolve a JourneyEndpoint down to a routable CRS, trying TfL-aware nearest-
+ * station resolution for coords/postcode endpoints. Returns null (with a
+ * PlanOutcome failure reason) when resolution isn't possible.
+ */
+async function resolveToCrs(
+  endpoint: JourneyEndpoint,
+): Promise<{ crs: string; label: string } | { error: PlanOutcome }> {
+  if (endpoint.type === "crs") return { crs: endpoint.crs, label: await stationName(endpoint.crs) };
+
+  if (endpoint.type === "geo") {
+    const nearest = await nearestRailStationSmart(endpoint.lat, endpoint.lon);
+    if (!nearest) return { error: { ok: false, reason: "no-journeys" } };
+    return { crs: nearest.crs, label: nearest.name };
+  }
+
+  if (endpoint.type === "postcode") {
+    const geo = await geocodePostcode(endpoint.text);
+    if (!geo) return { error: { ok: false, reason: "bad-request" } };
+    const nearest = await nearestRailStationSmart(geo.lat, geo.lon);
+    if (!nearest) return { error: { ok: false, reason: "no-journeys" } };
+    return { crs: nearest.crs, label: nearest.name };
+  }
+
+  // naptan endpoints resolve via cachedStopPoint, handled separately in planFlexible
+  // (they may or may not carry a CRS directly) — not reached from here.
+  return { error: { ok: false, reason: "bad-request" } };
+}
+
+/**
+ * Plan a journey between two JourneyEndpoints — CRS, TfL NaPTAN, GPS coords,
+ * or a geocoded postcode, in any combination. CRS-to-CRS stays on the cheap
+ * planJourneys fast path untouched. A coords/postcode endpoint on either side
+ * resolves to its nearest usable rail station (TfL-aware); when the
+ * *destination* is coords/postcode and falls within TfL coverage, a real
+ * walk/tube/bus last-mile leg is stitched on rather than just resolving to
+ * the nearest station — outside TfL coverage (or if stitching fails) it
+ * degrades to "nearest station" with a walking-distance note, never an error.
+ */
+export async function planFlexible(
+  from: JourneyEndpoint,
+  to: JourneyEndpoint,
+  when?: string,
+  arriveBy = false,
+): Promise<FlexiblePlanOutcome> {
+  // Fast path: identical to the original planJourneys entry point.
+  if (from.type === "crs" && to.type === "crs") {
+    const [fromLabel, toLabel] = await Promise.all([stationName(from.crs), stationName(to.crs)]);
+    return { outcome: await planJourneys(from.crs, to.crs, when, arriveBy), fromLabel, toLabel };
+  }
+
+  // Existing NaPTAN-destination stitching path (CRS origin required), generalised
+  // to also accept a geo/postcode origin below.
+  if (to.type === "naptan") {
+    const fromResolved = await resolveToCrs(from);
+    if ("error" in fromResolved) return { outcome: fromResolved.error };
+
+    const destPoint = await cachedStopPoint(to.naptanId);
+    if (!destPoint) return { outcome: { ok: false, reason: "bad-request" } };
+
+    if (destPoint.crs) {
+      return {
+        outcome: await planJourneys(fromResolved.crs, destPoint.crs, when, arriveBy),
+        fromLabel: fromResolved.label,
+        toLabel: await stationName(destPoint.crs),
+      };
+    }
+    if (destPoint.lat === undefined || destPoint.lon === undefined) {
+      return { outcome: { ok: false, reason: "no-journeys" } };
+    }
+    const interchange = await nearestRailInterchange(destPoint.lat, destPoint.lon);
+    if (!interchange?.crs) return { outcome: { ok: false, reason: "no-journeys" } };
+
+    return {
+      outcome: await stitchRailToTflPoint(fromResolved.crs, interchange.crs, interchange.naptanId, to.naptanId, when),
+      fromLabel: fromResolved.label,
+      toLabel: destPoint.commonName,
+    };
+  }
+
+  // Coords/postcode destination: try a real TfL last-mile stitch when in
+  // coverage, else fall back to nearest-station with a distance note.
+  if (to.type === "geo" || to.type === "postcode") {
+    const fromResolved = await resolveToCrs(from);
+    if ("error" in fromResolved) return { outcome: fromResolved.error };
+
+    let destLat: number;
+    let destLon: number;
+    let toLabel: string;
+    if (to.type === "geo") {
+      destLat = to.lat;
+      destLon = to.lon;
+      toLabel = "your destination";
+    } else {
+      const geo = await geocodePostcode(to.text);
+      if (!geo) return { outcome: { ok: false, reason: "bad-request" } };
+      destLat = geo.lat;
+      destLon = geo.lon;
+      toLabel = geo.label;
+    }
+
+    if (tflConfigured()) {
+      const interchange = await nearestRailInterchange(destLat, destLon);
+      if (interchange?.crs) {
+        const stitched = await stitchRailToTflPoint(
+          fromResolved.crs,
+          interchange.crs,
+          interchange.naptanId,
+          `${destLat},${destLon}`,
+          when,
+        );
+        if (stitched.ok) return { outcome: stitched, fromLabel: fromResolved.label, toLabel };
+        // Stitching found no usable TfL journeys — fall through to the plain
+        // nearest-station fallback below rather than surfacing a hard error.
+      }
+    }
+
+    const [nearest] = await nearestStations(destLat, destLon, 1);
+    if (!nearest) return { outcome: { ok: false, reason: "no-journeys" } };
+    const plain = await planJourneys(fromResolved.crs, nearest.crs, when, arriveBy);
+    return {
+      outcome: withWalkNote(plain, nearest.distanceMeters, nearest.name),
+      fromLabel: fromResolved.label,
+      toLabel,
+    };
+  }
+
+  // Coords/postcode origin with a plain CRS destination.
+  const fromResolved = await resolveToCrs(from);
+  if ("error" in fromResolved) return { outcome: fromResolved.error };
+  if (to.type !== "crs") return { outcome: { ok: false, reason: "bad-request" } };
+
+  return {
+    outcome: await planJourneys(fromResolved.crs, to.crs, when, arriveBy),
+    fromLabel: fromResolved.label,
+    toLabel: await stationName(to.crs),
+  };
+}
+
+/**
+ * String-keyed compat wrapper over planFlexible, preserving the original
+ * planMultiModal API (CRS/NaPTAN in, PlanOutcome out) for existing callers —
+ * apps/web/app/api/journeys/route.ts and anything else that doesn't need the
+ * richer coords/postcode endpoints.
+ */
+export async function planMultiModal(
+  from: string,
+  to: string,
+  when?: string,
+  arriveBy = false,
+): Promise<PlanOutcome> {
+  const fromEndpoint = parseEndpoint(from);
+  const toEndpoint = parseEndpoint(to);
+  if (!fromEndpoint || !toEndpoint) return { ok: false, reason: "bad-request" };
+  const { outcome } = await planFlexible(fromEndpoint, toEndpoint, when, arriveBy);
+  return outcome;
 }

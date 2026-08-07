@@ -1,0 +1,3838 @@
+{
+  "id": "8a153c0e-c570-488f-9a32-6e72a5d2880e",
+  "prevId": "c81908e0-eaba-489f-b9b1-f768b74ae79c",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.account": {
+      "name": "account",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "access_token": {
+          "name": "access_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refresh_token": {
+          "name": "refresh_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "access_token_expires_at": {
+          "name": "access_token_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refresh_token_expires_at": {
+          "name": "refresh_token_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "id_token": {
+          "name": "id_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "password": {
+          "name": "password",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "account_user_id_user_id_fk": {
+          "name": "account_user_id_user_id_fk",
+          "tableFrom": "account",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.alert": {
+      "name": "alert",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "commute_id": {
+          "name": "commute_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ref": {
+          "name": "ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "commute_leg_id": {
+          "name": "commute_leg_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "direction": {
+          "name": "direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "service_date": {
+          "name": "service_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "headline": {
+          "name": "headline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "detail": {
+          "name": "detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "seen_at": {
+          "name": "seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "alert_commute_idx": {
+          "name": "alert_commute_idx",
+          "columns": [
+            {
+              "expression": "commute_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "alert_dedupe_idx": {
+          "name": "alert_dedupe_idx",
+          "columns": [
+            {
+              "expression": "commute_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "service_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "alert_commute_id_commute_id_fk": {
+          "name": "alert_commute_id_commute_id_fk",
+          "tableFrom": "alert",
+          "tableTo": "commute",
+          "columnsFrom": [
+            "commute_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.apikey": {
+      "name": "apikey",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "config_id": {
+          "name": "config_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'default'"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start": {
+          "name": "start",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prefix": {
+          "name": "prefix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reference_id": {
+          "name": "reference_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "refill_interval": {
+          "name": "refill_interval",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refill_amount": {
+          "name": "refill_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_refill_at": {
+          "name": "last_refill_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "enabled": {
+          "name": "enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "rate_limit_enabled": {
+          "name": "rate_limit_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "rate_limit_time_window": {
+          "name": "rate_limit_time_window",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rate_limit_max": {
+          "name": "rate_limit_max",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "request_count": {
+          "name": "request_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "remaining": {
+          "name": "remaining",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_request": {
+          "name": "last_request",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "permissions": {
+          "name": "permissions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "apikey_reference_id_user_id_fk": {
+          "name": "apikey_reference_id_user_id_fk",
+          "tableFrom": "apikey",
+          "tableTo": "user",
+          "columnsFrom": [
+            "reference_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.commute": {
+      "name": "commute",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "home_crs": {
+          "name": "home_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "home_label": {
+          "name": "home_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origin_crs": {
+          "name": "origin_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dest_crs": {
+          "name": "dest_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "days_mask": {
+          "name": "days_mask",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "window_start": {
+          "name": "window_start",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "window_end": {
+          "name": "window_end",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "direction_paired_commute_id": {
+          "name": "direction_paired_commute_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "commute_user_idx": {
+          "name": "commute_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "commute_user_id_user_id_fk": {
+          "name": "commute_user_id_user_id_fk",
+          "tableFrom": "commute",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.commute_corridor": {
+      "name": "commute_corridor",
+      "schema": "",
+      "columns": {
+        "commute_id": {
+          "name": "commute_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "service_date": {
+          "name": "service_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "direction": {
+          "name": "direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "train_uid": {
+          "name": "train_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "commute_leg_id": {
+          "name": "commute_leg_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origin_crs": {
+          "name": "origin_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dest_crs": {
+          "name": "dest_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sched_dep": {
+          "name": "sched_dep",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "station_crs_list": {
+          "name": "station_crs_list",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "tocs": {
+          "name": "tocs",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "corridor_uid_date_idx": {
+          "name": "corridor_uid_date_idx",
+          "columns": [
+            {
+              "expression": "train_uid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "service_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "corridor_service_date_idx": {
+          "name": "corridor_service_date_idx",
+          "columns": [
+            {
+              "expression": "service_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "commute_corridor_commute_id_commute_id_fk": {
+          "name": "commute_corridor_commute_id_commute_id_fk",
+          "tableFrom": "commute_corridor",
+          "tableTo": "commute",
+          "columnsFrom": [
+            "commute_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "commute_corridor_commute_leg_id_commute_leg_id_fk": {
+          "name": "commute_corridor_commute_leg_id_commute_leg_id_fk",
+          "tableFrom": "commute_corridor",
+          "tableTo": "commute_leg",
+          "columnsFrom": [
+            "commute_leg_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "commute_corridor_commute_id_service_date_direction_train_uid_pk": {
+          "name": "commute_corridor_commute_id_service_date_direction_train_uid_pk",
+          "columns": [
+            "commute_id",
+            "service_date",
+            "direction",
+            "train_uid"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.commute_holiday": {
+      "name": "commute_holiday",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "label": {
+          "name": "label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "holiday_user_idx": {
+          "name": "holiday_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "start_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "commute_holiday_user_id_user_id_fk": {
+          "name": "commute_holiday_user_id_user_id_fk",
+          "tableFrom": "commute_holiday",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.commute_leg": {
+      "name": "commute_leg",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "commute_id": {
+          "name": "commute_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day_of_week": {
+          "name": "day_of_week",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "work_crs": {
+          "name": "work_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "work_label": {
+          "name": "work_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "am_window_start": {
+          "name": "am_window_start",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "am_window_end": {
+          "name": "am_window_end",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pm_window_start": {
+          "name": "pm_window_start",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pm_window_end": {
+          "name": "pm_window_end",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "commute_leg_commute_dow_idx": {
+          "name": "commute_leg_commute_dow_idx",
+          "columns": [
+            {
+              "expression": "commute_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "day_of_week",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "commute_leg_commute_id_commute_id_fk": {
+          "name": "commute_leg_commute_id_commute_id_fk",
+          "tableFrom": "commute_leg",
+          "tableTo": "commute",
+          "columnsFrom": [
+            "commute_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.darwin_formation": {
+      "name": "darwin_formation",
+      "schema": "",
+      "columns": {
+        "rid": {
+          "name": "rid",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "fid": {
+          "name": "fid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "coaches": {
+          "name": "coaches",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.darwin_station_message": {
+      "name": "darwin_station_message",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "severity": {
+          "name": "severity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "html": {
+          "name": "html",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "crs_list": {
+          "name": "crs_list",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.darwin_stop_forecast": {
+      "name": "darwin_stop_forecast",
+      "schema": "",
+      "columns": {
+        "rid": {
+          "name": "rid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seq": {
+          "name": "seq",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tiploc": {
+          "name": "tiploc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "crs": {
+          "name": "crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sched_arr": {
+          "name": "sched_arr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sched_dep": {
+          "name": "sched_dep",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sched_pass": {
+          "name": "sched_pass",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "est_arr": {
+          "name": "est_arr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "est_dep": {
+          "name": "est_dep",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "act_arr": {
+          "name": "act_arr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "act_dep": {
+          "name": "act_dep",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "platform": {
+          "name": "platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "platform_changed": {
+          "name": "platform_changed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "suppressed": {
+          "name": "suppressed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "last_msg_ts": {
+          "name": "last_msg_ts",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "darwin_stop_crs_idx": {
+          "name": "darwin_stop_crs_idx",
+          "columns": [
+            {
+              "expression": "crs",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "darwin_stop_seq_idx": {
+          "name": "darwin_stop_seq_idx",
+          "columns": [
+            {
+              "expression": "rid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "seq",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "darwin_stop_forecast_rid_tiploc_pk": {
+          "name": "darwin_stop_forecast_rid_tiploc_pk",
+          "columns": [
+            "rid",
+            "tiploc"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.darwin_train": {
+      "name": "darwin_train",
+      "schema": "",
+      "columns": {
+        "rid": {
+          "name": "rid",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "uid": {
+          "name": "uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ssd": {
+          "name": "ssd",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "headcode": {
+          "name": "headcode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "toc": {
+          "name": "toc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled": {
+          "name": "cancelled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "cancel_reason": {
+          "name": "cancel_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "late_reason": {
+          "name": "late_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deactivated": {
+          "name": "deactivated",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "darwin_train_uid_ssd_idx": {
+          "name": "darwin_train_uid_ssd_idx",
+          "columns": [
+            {
+              "expression": "uid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ssd",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "darwin_train_headcode_ssd_idx": {
+          "name": "darwin_train_headcode_ssd_idx",
+          "columns": [
+            {
+              "expression": "headcode",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ssd",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "darwin_train_ssd_idx": {
+          "name": "darwin_train_ssd_idx",
+          "columns": [
+            {
+              "expression": "ssd",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.etl_run": {
+      "name": "etl_run",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "feed": {
+          "name": "feed",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_modified_at": {
+          "name": "source_modified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "imported_at": {
+          "name": "imported_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "ok": {
+          "name": "ok",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "detail": {
+          "name": "detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.fare": {
+      "name": "fare",
+      "schema": "",
+      "columns": {
+        "flow_id": {
+          "name": "flow_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ticket_code": {
+          "name": "ticket_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "price_pence": {
+          "name": "price_pence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "restriction_code": {
+          "name": "restriction_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "fare_flow_id_ticket_code_pk": {
+          "name": "fare_flow_id_ticket_code_pk",
+          "columns": [
+            "flow_id",
+            "ticket_code"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.fare_flow": {
+      "name": "fare_flow",
+      "schema": "",
+      "columns": {
+        "flow_id": {
+          "name": "flow_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "origin_nlc": {
+          "name": "origin_nlc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dest_nlc": {
+          "name": "dest_nlc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "route_code": {
+          "name": "route_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "direction": {
+          "name": "direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "fare_flow_od_idx": {
+          "name": "fare_flow_od_idx",
+          "columns": [
+            {
+              "expression": "origin_nlc",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "dest_nlc",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.favourite_journey": {
+      "name": "favourite_journey",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_crs": {
+          "name": "from_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "to_crs": {
+          "name": "to_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "favourite_user_idx": {
+          "name": "favourite_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "favourite_journey_user_id_user_id_fk": {
+          "name": "favourite_journey_user_id_user_id_fk",
+          "tableFrom": "favourite_journey",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.kb_incident": {
+      "name": "kb_incident",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "severity": {
+          "name": "severity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "affected_operators": {
+          "name": "affected_operators",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "affected_routes_text": {
+          "name": "affected_routes_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "starts_at": {
+          "name": "starts_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ends_at": {
+          "name": "ends_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_updated": {
+          "name": "last_updated",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cleared": {
+          "name": "cleared",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "raw": {
+          "name": "raw",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ndf_override": {
+      "name": "ndf_override",
+      "schema": "",
+      "columns": {
+        "origin_nlc": {
+          "name": "origin_nlc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dest_nlc": {
+          "name": "dest_nlc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "route_code": {
+          "name": "route_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "railcard": {
+          "name": "railcard",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "ticket_code": {
+          "name": "ticket_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "price_pence": {
+          "name": "price_pence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "ndf_override_origin_nlc_dest_nlc_route_code_railcard_ticket_code_pk": {
+          "name": "ndf_override_origin_nlc_dest_nlc_route_code_railcard_ticket_code_pk",
+          "columns": [
+            "origin_nlc",
+            "dest_nlc",
+            "route_code",
+            "railcard",
+            "ticket_code"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.nr_corpus": {
+      "name": "nr_corpus",
+      "schema": "",
+      "columns": {
+        "stanox": {
+          "name": "stanox",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "tiploc": {
+          "name": "tiploc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "crs": {
+          "name": "crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nlc": {
+          "name": "nlc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "nr_corpus_tiploc_idx": {
+          "name": "nr_corpus_tiploc_idx",
+          "columns": [
+            {
+              "expression": "tiploc",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "nr_corpus_crs_idx": {
+          "name": "nr_corpus_crs_idx",
+          "columns": [
+            {
+              "expression": "crs",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.nr_headcode": {
+      "name": "nr_headcode",
+      "schema": "",
+      "columns": {
+        "uid": {
+          "name": "uid",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "headcode": {
+          "name": "headcode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "nr_headcode_headcode_idx": {
+          "name": "nr_headcode_headcode_idx",
+          "columns": [
+            {
+              "expression": "headcode",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.nr_rtppm": {
+      "name": "nr_rtppm",
+      "schema": "",
+      "columns": {
+        "operator_code": {
+          "name": "operator_code",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "operator_name": {
+          "name": "operator_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total": {
+          "name": "total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "on_time": {
+          "name": "on_time",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "late": {
+          "name": "late",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancel_very_late": {
+          "name": "cancel_very_late",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ppm": {
+          "name": "ppm",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rolling_ppm": {
+          "name": "rolling_ppm",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.nr_signalling_state": {
+      "name": "nr_signalling_state",
+      "schema": "",
+      "columns": {
+        "td_area": {
+          "name": "td_area",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data": {
+          "name": "data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "nr_signalling_state_td_area_address_pk": {
+          "name": "nr_signalling_state_td_area_address_pk",
+          "columns": [
+            "td_area",
+            "address"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.nr_smart": {
+      "name": "nr_smart",
+      "schema": "",
+      "columns": {
+        "td_area": {
+          "name": "td_area",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_berth": {
+          "name": "from_berth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "to_berth": {
+          "name": "to_berth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stanox": {
+          "name": "stanox",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "platform": {
+          "name": "platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "berth_offset": {
+          "name": "berth_offset",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "nr_smart_stanox_idx": {
+          "name": "nr_smart_stanox_idx",
+          "columns": [
+            {
+              "expression": "stanox",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "nr_smart_td_area_from_berth_to_berth_pk": {
+          "name": "nr_smart_td_area_from_berth_to_berth_pk",
+          "columns": [
+            "td_area",
+            "from_berth",
+            "to_berth"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.nr_train_position": {
+      "name": "nr_train_position",
+      "schema": "",
+      "columns": {
+        "train_id": {
+          "name": "train_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "headcode": {
+          "name": "headcode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rid": {
+          "name": "rid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_stanox": {
+          "name": "last_stanox",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_tiploc": {
+          "name": "last_tiploc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_crs": {
+          "name": "last_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_event_type": {
+          "name": "last_event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_reported_at": {
+          "name": "last_reported_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "td_area": {
+          "name": "td_area",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "berth": {
+          "name": "berth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lateness": {
+          "name": "lateness",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "nr_pos_headcode_idx": {
+          "name": "nr_pos_headcode_idx",
+          "columns": [
+            {
+              "expression": "headcode",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "nr_pos_rid_idx": {
+          "name": "nr_pos_rid_idx",
+          "columns": [
+            {
+              "expression": "rid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "nr_pos_reported_idx": {
+          "name": "nr_pos_reported_idx",
+          "columns": [
+            {
+              "expression": "last_reported_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "nr_pos_updated_idx": {
+          "name": "nr_pos_updated_idx",
+          "columns": [
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.nr_train_position_history": {
+      "name": "nr_train_position_history",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "train_id": {
+          "name": "train_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "headcode": {
+          "name": "headcode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rid": {
+          "name": "rid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_stanox": {
+          "name": "last_stanox",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_tiploc": {
+          "name": "last_tiploc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_crs": {
+          "name": "last_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_event_type": {
+          "name": "last_event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reported_at": {
+          "name": "reported_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "td_area": {
+          "name": "td_area",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "berth": {
+          "name": "berth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lateness": {
+          "name": "lateness",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "nr_pos_hist_train_time_idx": {
+          "name": "nr_pos_hist_train_time_idx",
+          "columns": [
+            {
+              "expression": "train_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "reported_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "nr_pos_hist_rid_time_idx": {
+          "name": "nr_pos_hist_rid_time_idx",
+          "columns": [
+            {
+              "expression": "rid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "reported_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "nr_pos_hist_recorded_idx": {
+          "name": "nr_pos_hist_recorded_idx",
+          "columns": [
+            {
+              "expression": "recorded_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "nr_pos_hist_headcode_time_idx": {
+          "name": "nr_pos_hist_headcode_time_idx",
+          "columns": [
+            {
+              "expression": "headcode",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "reported_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.nr_tsr": {
+      "name": "nr_tsr",
+      "schema": "",
+      "columns": {
+        "tsr_id": {
+          "name": "tsr_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "route_group": {
+          "name": "route_group",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "route_code": {
+          "name": "route_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "from_stanox": {
+          "name": "from_stanox",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "to_stanox": {
+          "name": "to_stanox",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "line_name": {
+          "name": "line_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "direction": {
+          "name": "direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "passenger_speed_mph": {
+          "name": "passenger_speed_mph",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "freight_speed_mph": {
+          "name": "freight_speed_mph",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "valid_to": {
+          "name": "valid_to",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "raw": {
+          "name": "raw",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "nr_tsr_route_idx": {
+          "name": "nr_tsr_route_idx",
+          "columns": [
+            {
+              "expression": "route_group",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.nr_vstp_schedule": {
+      "name": "nr_vstp_schedule",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "train_uid": {
+          "name": "train_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stp_indicator": {
+          "name": "stp_indicator",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_type": {
+          "name": "transaction_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "headcode": {
+          "name": "headcode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origin_tiploc": {
+          "name": "origin_tiploc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dest_tiploc": {
+          "name": "dest_tiploc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "schedule": {
+          "name": "schedule",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "received_at": {
+          "name": "received_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "nr_vstp_uid_idx": {
+          "name": "nr_vstp_uid_idx",
+          "columns": [
+            {
+              "expression": "train_uid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.orm_signal": {
+      "name": "orm_signal",
+      "schema": "",
+      "columns": {
+        "osm_id": {
+          "name": "osm_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ref": {
+          "name": "ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "normalized_ref": {
+          "name": "normalized_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "caption": {
+          "name": "caption",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signal_direction": {
+          "name": "signal_direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signal_position": {
+          "name": "signal_position",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "track_bearing": {
+          "name": "track_bearing",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "main": {
+          "name": "main",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "main_design": {
+          "name": "main_design",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "main_function": {
+          "name": "main_function",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "main_form": {
+          "name": "main_form",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "main_states": {
+          "name": "main_states",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "distant": {
+          "name": "distant",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "distant_form": {
+          "name": "distant_form",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "distant_states": {
+          "name": "distant_states",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "combined": {
+          "name": "combined",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "combined_form": {
+          "name": "combined_form",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "combined_states": {
+          "name": "combined_states",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "minor": {
+          "name": "minor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "minor_form": {
+          "name": "minor_form",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shunting": {
+          "name": "shunting",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "shunting_form": {
+          "name": "shunting_form",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "main_repeated": {
+          "name": "main_repeated",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "main_repeated_form": {
+          "name": "main_repeated_form",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "route": {
+          "name": "route",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "route_design": {
+          "name": "route_design",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "route_form": {
+          "name": "route_form",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "route_states": {
+          "name": "route_states",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tags": {
+          "name": "tags",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lat": {
+          "name": "lat",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lon": {
+          "name": "lon",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "imported_at": {
+          "name": "imported_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "orm_signal_ref_idx": {
+          "name": "orm_signal_ref_idx",
+          "columns": [
+            {
+              "expression": "normalized_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "orm_signal_lon_lat_idx": {
+          "name": "orm_signal_lon_lat_idx",
+          "columns": [
+            {
+              "expression": "lon",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lat",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.passkey": {
+      "name": "passkey",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "public_key": {
+          "name": "public_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "credential_i_d": {
+          "name": "credential_i_d",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "counter": {
+          "name": "counter",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "device_type": {
+          "name": "device_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "backed_up": {
+          "name": "backed_up",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "transports": {
+          "name": "transports",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aaguid": {
+          "name": "aaguid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "passkey_user_id_user_id_fk": {
+          "name": "passkey_user_id_user_id_fk",
+          "tableFrom": "passkey",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.rail_corridor": {
+      "name": "rail_corridor",
+      "schema": "",
+      "columns": {
+        "from_crs": {
+          "name": "from_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "to_crs": {
+          "name": "to_crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "geometry": {
+          "name": "geometry",
+          "type": "real[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "length_m": {
+          "name": "length_m",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "rail_corridor_from_crs_to_crs_pk": {
+          "name": "rail_corridor_from_crs_to_crs_pk",
+          "columns": [
+            "from_crs",
+            "to_crs"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.route_name": {
+      "name": "route_name",
+      "schema": "",
+      "columns": {
+        "route_code": {
+          "name": "route_code",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.session": {
+      "name": "session",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ip_address": {
+          "name": "ip_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "session_user_id_user_id_fk": {
+          "name": "session_user_id_user_id_fk",
+          "tableFrom": "session",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "session_token_unique": {
+          "name": "session_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.sop_mapping": {
+      "name": "sop_mapping",
+      "schema": "",
+      "columns": {
+        "td_area": {
+          "name": "td_area",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bit": {
+          "name": "bit",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_type": {
+          "name": "item_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "item_id": {
+          "name": "item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aspect": {
+          "name": "aspect",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "sop_item_idx": {
+          "name": "sop_item_idx",
+          "columns": [
+            {
+              "expression": "td_area",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "sop_mapping_td_area_address_bit_pk": {
+          "name": "sop_mapping_td_area_address_bit_pk",
+          "columns": [
+            "td_area",
+            "address",
+            "bit"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.station": {
+      "name": "station",
+      "schema": "",
+      "columns": {
+        "crs": {
+          "name": "crs",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tiplocs": {
+          "name": "tiplocs",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "nlc": {
+          "name": "nlc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lat": {
+          "name": "lat",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lon": {
+          "name": "lon",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "track_lat": {
+          "name": "track_lat",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "track_lon": {
+          "name": "track_lon",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "interchange_min": {
+          "name": "interchange_min",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 5
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.station_cluster": {
+      "name": "station_cluster",
+      "schema": "",
+      "columns": {
+        "cluster_nlc": {
+          "name": "cluster_nlc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "member_nlc": {
+          "name": "member_nlc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "station_cluster_member_idx": {
+          "name": "station_cluster_member_idx",
+          "columns": [
+            {
+              "expression": "member_nlc",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "station_cluster_cluster_nlc_member_nlc_pk": {
+          "name": "station_cluster_cluster_nlc_member_nlc_pk",
+          "columns": [
+            "cluster_nlc",
+            "member_nlc"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.station_facility": {
+      "name": "station_facility",
+      "schema": "",
+      "columns": {
+        "crs": {
+          "name": "crs",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "step_free_access": {
+          "name": "step_free_access",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "step_free_description": {
+          "name": "step_free_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ticket_office_hours": {
+          "name": "ticket_office_hours",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "has_car_park": {
+          "name": "has_car_park",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "car_park_spaces": {
+          "name": "car_park_spaces",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "has_toilets": {
+          "name": "has_toilets",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "has_lifts": {
+          "name": "has_lifts",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "has_waiting_room": {
+          "name": "has_waiting_room",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "has_wifi": {
+          "name": "has_wifi",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "assistance_available": {
+          "name": "assistance_available",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "assistance_description": {
+          "name": "assistance_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "raw": {
+          "name": "raw",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "station_facility_crs_station_crs_fk": {
+          "name": "station_facility_crs_station_crs_fk",
+          "tableFrom": "station_facility",
+          "tableTo": "station",
+          "columnsFrom": [
+            "crs"
+          ],
+          "columnsTo": [
+            "crs"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.station_track_model_position": {
+      "name": "station_track_model_position",
+      "schema": "",
+      "columns": {
+        "crs": {
+          "name": "crs",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "elr": {
+          "name": "elr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mileage": {
+          "name": "mileage",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "asset_id": {
+          "name": "asset_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "matched_lat": {
+          "name": "matched_lat",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "matched_lon": {
+          "name": "matched_lon",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "snap_distance_m": {
+          "name": "snap_distance_m",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "computed_at": {
+          "name": "computed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "station_track_model_position_crs_station_crs_fk": {
+          "name": "station_track_model_position_crs_station_crs_fk",
+          "tableFrom": "station_track_model_position",
+          "tableTo": "station",
+          "columnsFrom": [
+            "crs"
+          ],
+          "columnsTo": [
+            "crs"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.tfl_stop_point_cache": {
+      "name": "tfl_stop_point_cache",
+      "schema": "",
+      "columns": {
+        "naptan_id": {
+          "name": "naptan_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "common_name": {
+          "name": "common_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "crs": {
+          "name": "crs",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lat": {
+          "name": "lat",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lon": {
+          "name": "lon",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "modes": {
+          "name": "modes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "fetched_at": {
+          "name": "fetched_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "tfl_stop_crs_idx": {
+          "name": "tfl_stop_crs_idx",
+          "columns": [
+            {
+              "expression": "crs",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tfl_stop_modes_idx": {
+          "name": "tfl_stop_modes_idx",
+          "columns": [
+            {
+              "expression": "modes",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ticket_type": {
+      "name": "ticket_type",
+      "schema": "",
+      "columns": {
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "class": {
+          "name": "class",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "max_passengers": {
+          "name": "max_passengers",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "validity": {
+          "name": "validity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.track_model_line": {
+      "name": "track_model_line",
+      "schema": "",
+      "columns": {
+        "asset_id": {
+          "name": "asset_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "elr": {
+          "name": "elr",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "track_id": {
+          "name": "track_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_mileage": {
+          "name": "start_mileage",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_mileage": {
+          "name": "end_mileage",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "geometry": {
+          "name": "geometry",
+          "type": "real[]",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "track_model_line_elr_idx": {
+          "name": "track_model_line_elr_idx",
+          "columns": [
+            {
+              "expression": "elr",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.trip_mapping": {
+      "name": "trip_mapping",
+      "schema": "",
+      "columns": {
+        "gtfs_trip_id": {
+          "name": "gtfs_trip_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "train_uid": {
+          "name": "train_uid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_runs_from": {
+          "name": "date_runs_from",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_runs_to": {
+          "name": "date_runs_to",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "days_mask": {
+          "name": "days_mask",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stp_indicator": {
+          "name": "stp_indicator",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "trip_mapping_uid_idx": {
+          "name": "trip_mapping_uid_idx",
+          "columns": [
+            {
+              "expression": "train_uid",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user": {
+      "name": "user",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_verified": {
+          "name": "email_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "image": {
+          "name": "image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'user'"
+        },
+        "push_subscription": {
+          "name": "push_subscription",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "user_email_unique": {
+          "name": "user_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.verification": {
+      "name": "verification",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "identifier": {
+          "name": "identifier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

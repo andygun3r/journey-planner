@@ -8,7 +8,8 @@
 import { tflStopPointCache } from "@signaller/db";
 import { eq } from "drizzle-orm";
 import { getDb } from "./db";
-import { nearbyStopPoints, stopPoint, type TflStopPoint } from "./tfl";
+import { nearestStations } from "./stations";
+import { nearbyStopPoints, stopPoint, tflConfigured, type TflStopPoint } from "./tfl";
 
 const REFRESH_MS = 7 * 24 * 60 * 60 * 1000; // weekly
 
@@ -77,4 +78,24 @@ export async function nearestRailInterchange(
   const candidates = await nearbyStopPoints(lat, lon, 1000);
   await Promise.all(candidates.map(writeCache));
   return candidates.find((c) => c.crs !== undefined) ?? null;
+}
+
+/**
+ * Nearest usable rail station to a lat/lon, TfL-aware: prefers
+ * nearestRailInterchange (catches tube/bus interchanges that are also rail
+ * stations, London area) and falls back to the nearest plain rail station
+ * (haversine over the station table) when TfL isn't configured or has
+ * nothing within range. Single policy shared by the GPS-origin path and the
+ * geocoded-postcode-destination fallback path.
+ */
+export async function nearestRailStationSmart(
+  lat: number,
+  lon: number,
+): Promise<{ crs: string; name: string } | null> {
+  if (tflConfigured()) {
+    const interchange = await nearestRailInterchange(lat, lon);
+    if (interchange?.crs) return { crs: interchange.crs, name: interchange.commonName };
+  }
+  const [nearest] = await nearestStations(lat, lon, 1);
+  return nearest ? { crs: nearest.crs, name: nearest.name } : null;
 }

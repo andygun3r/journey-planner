@@ -348,6 +348,59 @@ a {
   opacity: 0.75;
 }
 
+.combo-option-postcode {
+  border-top: 1px solid var(--border);
+  margin-top: 0.25rem;
+  padding-top: 0.6rem;
+}
+
+/* ---- Origin GPS chip ---- */
+
+.origin-chip-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.origin-chip {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-control);
+  padding: 0.65rem 0.75rem;
+  min-height: 48px;
+  flex: 1;
+  text-align: left;
+  cursor: pointer;
+}
+
+.origin-chip:hover {
+  background: var(--border);
+}
+
+.origin-chip:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.origin-change-btn {
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 0.5rem;
+  cursor: pointer;
+}
+
+.origin-change-btn:hover {
+  color: var(--ink);
+}
+
 /* ---- Journey results ---- */
 
 .results-head {
@@ -1513,6 +1566,18 @@ a {
   margin-top: 0.3rem;
   font-weight: 600;
   font-size: 0.8125rem;
+}
+
+/* Station facilities panel (boards/[crs]) — reuses .disruption's collapsible card */
+.station-facilities {
+  margin-bottom: 1rem;
+}
+
+.station-facilities-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
 }
 
 /* Per-operator service indicator chip on service pages */
@@ -3531,6 +3596,16 @@ details[open] > .commute-dep-link .commute-dep-chevron {
   text-decoration: none;
   font-weight: 550;
   font-size: 0.9rem;
+}
+.quick-chip-gps {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.quick-chip-gps:disabled {
+  cursor: wait;
+  opacity: 0.75;
 }
 .quick-star {
   color: var(--accent);

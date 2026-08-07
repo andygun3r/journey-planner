@@ -2,6 +2,8 @@ import { loadFares } from "./load-fares.js";
 import { railCorridors } from "./rail-corridors.js";
 import { guarded } from "./run-guard.js";
 import { importOrmSignals } from "./orm-signals.js";
+import { syncStationFacilities } from "./kb-facilities.js";
+import { syncKbIncidents } from "./kb-incidents.js";
 import { snapStations } from "./snap-stations.js";
 import { trackModel } from "./track-model.js";
 import { syncTrackModelFromSftp } from "./track-model-sftp.js";
@@ -63,6 +65,16 @@ if (httpPort) {
       // files after a successful load.
       await syncTrackModelFromSftp();
       break;
+    case "kb-facilities":
+      // Nightly sync of RDG Knowledgebase station facilities/accessibility
+      // into station_facility. No-ops if KB_API_KEY/KB_BASE_URL aren't set.
+      await guarded("etl-kb-facilities", "kb-facilities", () => syncStationFacilities());
+      break;
+    case "kb-incidents":
+      // One-shot manual run of the KB incidents poll (server.ts runs this on
+      // a 5-min interval in standing-service mode) — for local testing.
+      await guarded("etl-kb-incidents", "kb-incidents", () => syncKbIncidents());
+      break;
     case "load-fares":
       // Re-load fares from the MariaDB scratch DB into Postgres (skips download/import).
       await guarded("etl-fares", "fares", () => loadFares());
@@ -73,7 +85,7 @@ if (httpPort) {
       break;
     default:
       console.error(
-        "Usage: etl <timetable|package|fares|load-fares|postprocess|snap-stations|orm-signals|rail-corridors|track-model|track-model-sftp|server>",
+        "Usage: etl <timetable|package|fares|load-fares|postprocess|snap-stations|orm-signals|rail-corridors|track-model|track-model-sftp|kb-facilities|kb-incidents|server>",
       );
       process.exit(1);
   }

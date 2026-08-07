@@ -25,3 +25,6 @@ fi
 
 echo "Syncing Network Rail Track Model from SFTP…"
 pnpm tsx src/index.ts track-model-sftp
+
+echo "Syncing National Rail Knowledgebase station facilities…"
+pnpm tsx src/index.ts kb-facilities

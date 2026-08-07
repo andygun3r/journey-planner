@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { isCrs, normaliseCrs } from "@signaller/shared";
+import { normaliseCrs } from "@signaller/shared";
 import { FavouriteToggle } from "@/components/favourite-toggle";
 import { getUserId } from "@/lib/current-user";
 import { indicativeFare, formatFare } from "@/lib/fares";
 import { isFavourite, touchFavourite } from "@/lib/favourites";
-import { planJourneys, type JourneyView } from "@/lib/journeys";
-import { stationName } from "@/lib/stations";
+import { parseEndpoint } from "@/lib/journey-endpoint";
+import { planFlexible, type JourneyView } from "@/lib/journeys";
 
 export const dynamic = "force-dynamic";
 
@@ -120,11 +120,22 @@ export default async function JourneysPage({
   const when = params.when;
   const arriveBy = params.arriveBy === "1";
 
-  const outcome = await planJourneys(from, to, when, arriveBy);
-  const [fromName, toName] = await Promise.all([stationName(from), stationName(to)]);
+  const fromEndpoint = parseEndpoint(from);
+  const toEndpoint = parseEndpoint(to);
+  const badEndpoint = !fromEndpoint || !toEndpoint;
+
+  const { outcome, fromLabel, toLabel } = badEndpoint
+    ? { outcome: { ok: false as const, reason: "bad-request" as const }, fromLabel: undefined, toLabel: undefined }
+    : await planFlexible(fromEndpoint, toEndpoint, when, arriveBy);
+
+  const fromName = fromLabel ?? from;
+  const toName = toLabel ?? to;
+  // Postcode/coords searches degrade gracefully rather than erroring outright, but
+  // still shouldn't get the generic "check the stations are right" copy.
+  const isPostcodeSearch = fromEndpoint?.type === "postcode" || toEndpoint?.type === "postcode";
 
   // Save/recall support: only for a valid station pair.
-  const validPair = isCrs(from.toUpperCase()) && isCrs(to.toUpperCase()) && from !== to;
+  const validPair = fromEndpoint?.type === "crs" && toEndpoint?.type === "crs" && from !== to;
   let saved = false;
   let fare: Awaited<ReturnType<typeof indicativeFare>> = null;
   if (validPair) {
@@ -151,6 +162,9 @@ export default async function JourneysPage({
         <h1>
           {fromName} → {toName}
         </h1>
+        {outcome.ok && outcome.journeys[0]?.destinationWalkNote && (
+          <p className="jmeta">{outcome.journeys[0].destinationWalkNote}</p>
+        )}
         <span className="when">
           {when
             ? `${arriveBy ? "arrive by" : "leave"} ${whenFmt.format(new Date(when))}`
@@ -184,7 +198,16 @@ export default async function JourneysPage({
         </div>
       )}
 
-      {!outcome.ok && outcome.reason === "bad-request" && (
+      {!outcome.ok && outcome.reason === "bad-request" && isPostcodeSearch && (
+        <div className="notice">
+          <h2>Couldn&rsquo;t find that postcode</h2>
+          <p>
+            Check it and try again, or <Link href="/">search by station</Link> instead.
+          </p>
+        </div>
+      )}
+
+      {!outcome.ok && outcome.reason === "bad-request" && !isPostcodeSearch && (
         <div className="notice">
           <h2>That search didn&rsquo;t make sense</h2>
           <p>

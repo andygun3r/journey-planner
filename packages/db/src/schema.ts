@@ -43,6 +43,36 @@ export const station = pgTable("station", {
 });
 
 /**
+ * Station facilities/accessibility, from the RDG Knowledgebase feed
+ * (enhanced JSON v5.0 stations data). Static, refreshed nightly by
+ * services/etl's kb-facilities job — see CLAUDE.md §5.
+ *
+ * Flat nullable-boolean-per-amenity, matching nrRtppm/nrTsr's style below:
+ * the web panel only needs presence/absence plus a couple of free-text
+ * fields, so there's no need for a normalized amenities table. `raw` keeps
+ * the untransformed KB record so new typed columns can be backfilled later
+ * without re-fetching, since the exact feed shape isn't confirmed yet.
+ */
+export const stationFacility = pgTable("station_facility", {
+  crs: text("crs")
+    .primaryKey()
+    .references(() => station.crs),
+  stepFreeAccess: boolean("step_free_access"),
+  stepFreeDescription: text("step_free_description"),
+  ticketOfficeHours: text("ticket_office_hours"),
+  hasCarPark: boolean("has_car_park"),
+  carParkSpaces: integer("car_park_spaces"),
+  hasToilets: boolean("has_toilets"),
+  hasLifts: boolean("has_lifts"),
+  hasWaitingRoom: boolean("has_waiting_room"),
+  hasWifi: boolean("has_wifi"),
+  assistanceAvailable: boolean("assistance_available"),
+  assistanceDescription: text("assistance_description"),
+  raw: jsonb("raw"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Physical signal positions from the self-hosted OpenRailwayMap import.
  *
  * This is the "where is the post on the ground?" layer, independent of whether
@@ -511,6 +541,8 @@ export const kbIncident = pgTable("kb_incident", {
   endsAt: timestamp("ends_at", { withTimezone: true }),
   lastUpdated: timestamp("last_updated", { withTimezone: true }),
   cleared: boolean("cleared").notNull().default(false),
+  /** Untransformed KB record, kept until the real feed shape is confirmed. */
+  raw: jsonb("raw"),
 });
 
 // ---------------------------------------------------------------------------

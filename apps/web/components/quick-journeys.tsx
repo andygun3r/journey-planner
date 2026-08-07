@@ -1,9 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { FavouriteJourney } from "@/lib/favourites";
 import { type RecentSearch, useRecents } from "./use-recents";
+
+const GPS_TIMEOUT_MS = 8000;
+
+function locate(): Promise<{ lat: number; lon: number } | null> {
+  return new Promise((resolve) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => resolve(null),
+      { timeout: GPS_TIMEOUT_MS },
+    );
+  });
+}
 
 /**
  * Home-screen shortcuts: saved journeys (server, device-keyed) and recent
@@ -11,8 +28,18 @@ import { type RecentSearch, useRecents } from "./use-recents";
  * the "five-second, one-hand" path for a returning commuter.
  */
 export function QuickJourneys({ initialFavourites }: { initialFavourites: FavouriteJourney[] }) {
+  const router = useRouter();
   const { recents, remove } = useRecents();
   const [favourites, setFavourites] = useState<FavouriteJourney[]>(initialFavourites);
+  const [locating, setLocating] = useState<string | null>(null); // keyed by recent's `to`, while a GPS fix is pending
+
+  async function runGpsRecent(r: RecentSearch) {
+    setLocating(r.to);
+    const fix = await locate();
+    setLocating(null);
+    if (!fix) return; // silent — the search form itself is the place to explain a denial
+    router.push(`/journeys?from=geo:${fix.lat},${fix.lon}&to=${encodeURIComponent(r.to)}`);
+  }
 
   // Refresh favourites on mount in case they changed elsewhere.
   useEffect(() => {
@@ -77,9 +104,25 @@ export function QuickJourneys({ initialFavourites }: { initialFavourites: Favour
           <ul className="quick-list">
             {shownRecents.map((r: RecentSearch) => (
               <li key={`${r.from}>${r.to}`} className="quick-chip">
-                <Link href={`/journeys?from=${r.from}&to=${r.to}`} className="quick-chip-link">
-                  {r.fromName} <span className="quick-arrow">→</span> {r.toName}
-                </Link>
+                {r.from.startsWith("geo:") ? (
+                  // Coordinates go stale — re-request a fresh fix rather than replaying the old one.
+                  <button
+                    type="button"
+                    className="quick-chip-link quick-chip-gps"
+                    onClick={() => void runGpsRecent(r)}
+                    disabled={locating === r.to}
+                  >
+                    {locating === r.to ? "Finding your location…" : r.fromName}{" "}
+                    <span className="quick-arrow">→</span> {r.toName}
+                  </button>
+                ) : (
+                  <Link
+                    href={`/journeys?from=${encodeURIComponent(r.from)}&to=${encodeURIComponent(r.to)}`}
+                    className="quick-chip-link"
+                  >
+                    {r.fromName} <span className="quick-arrow">→</span> {r.toName}
+                  </Link>
+                )}
                 <button
                   type="button"
                   className="quick-remove"

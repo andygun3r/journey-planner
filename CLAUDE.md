@@ -124,10 +124,22 @@ service indicators (`/tocs/serviceIndicators`).
 - **Client**: `apps/web/lib/disruptions.ts`.
 - **Env**: `DISRUPTIONS_API_KEY`, `DISRUPTIONS_BASE_URL` (`…/1010-disruptions-experience-api-11_1`).
 
-### 5. Knowledgebase *(planned)*
-Static/near-static reference (station facilities, incident KB). Wired but unused.
+### 5. Knowledgebase *(RDM REST)*
+Station facilities/accessibility (static, ~daily) plus an incidents feed (mostly
+planned engineering work with date ranges). Exact endpoint paths/response shape are
+unconfirmed until RDM registration — see `services/etl/src/kb-client.ts`.
 
-- **Env**: `KB_FEED_URL`.
+- **Facilities**: nightly ETL job (`etl kb-facilities`, part of the nightly cron)
+  syncs into `station_facility`, surfaced on `/boards/[crs]` via
+  `apps/web/lib/stations.ts`'s `stationFacilities()`.
+- **Incidents**: `services/etl`'s standing service polls every 5 minutes
+  (`kb-incidents`, only runs when `ETL_CRON=1`) into `kb_incident`, surfaced as
+  "Planned engineering works" on `/status` via `apps/web/lib/kb-incidents.ts`. Kept
+  separate from the Disruptions API (§4) — not merged/deduped — since Disruptions
+  stays the primary live-status source and this is a forward-looking layer.
+- **Auth**: consumer key in `x-apikey` (same as other RDM REST feeds; adjust
+  `kb-client.ts` if the real product differs).
+- **Env**: `KB_API_KEY`, `KB_BASE_URL`.
 
 ### 6. DTD static feeds — Timetable & Fares *(NRDP downloads)*
 Batch bulk data driving the routing engine and fares, **not** RDM APIs. Downloaded from
@@ -220,6 +232,7 @@ named signals/aspects.
 | Between-station positioning / moving-train icon | Network Rail TRUST + TD (with CORPUS/SMART) |
 | Disruptions & TOC service status | Disruptions API |
 | Signalling diagram (aspects) | Network Rail TD S-class + SOP maps |
+| Station facilities/accessibility, planned engineering works | Knowledgebase |
 
 ## Licensing
 

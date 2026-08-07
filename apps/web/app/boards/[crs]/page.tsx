@@ -3,11 +3,12 @@ import { notFound } from "next/navigation";
 import { BoardFilter } from "@/components/board-filter";
 import { BoardRefresher } from "@/components/board-refresher";
 import { LiveCountdown } from "@/components/live-countdown";
+import { StationFacilitiesPanel } from "@/components/station-facilities-panel";
 import { StationSignallingButton } from "@/components/station-signalling-button";
 import { type BoardDeparture } from "@/lib/board";
 import { cachedBoard } from "@/lib/board-cache";
 import { ridServiceId } from "@/lib/service-details";
-import { getStations, stationName } from "@/lib/stations";
+import { getStations, stationFacilities, stationName } from "@/lib/stations";
 
 export const dynamic = "force-dynamic";
 
@@ -322,9 +323,10 @@ export default async function BoardPage({
 }) {
   const { crs } = await params;
   const { board, callingAt } = await searchParams;
-  const [outcome, stations] = await Promise.all([
+  const [outcome, stations, facility] = await Promise.all([
     cachedBoard(crs, undefined, 20, callingAt),
     getStations().catch(() => []),
+    stationFacilities(crs),
   ]);
 
   if (!outcome.ok && outcome.reason === "unknown-station") notFound();
@@ -380,6 +382,8 @@ export default async function BoardPage({
           </div>
 
           <StationSignallingButton crs={outcome.board.crs} name={outcome.board.stationName} />
+
+          <StationFacilitiesPanel facility={facility} />
 
           <BoardFilter crs={outcome.board.crs} stations={stations} active={activeFilter} />
           {activeFilter && (

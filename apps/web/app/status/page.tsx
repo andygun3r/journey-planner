@@ -6,6 +6,7 @@ import {
   type Disruption,
   type ServiceIndicator,
 } from "@/lib/disruptions";
+import { getPlannedEngineeringWorks, type KbIncident } from "@/lib/kb-incidents";
 import { getNetworkPunctuality, type OperatorPunctuality, type PpmStatus } from "@/lib/punctuality";
 import { lineStatus, tflConfigured, type TflLineStatus } from "@/lib/tfl";
 
@@ -66,6 +67,48 @@ function StatusChip({ status }: { status: PpmStatus }) {
 
 function pct(n: number | null): string {
   return n == null ? "—" : `${Math.round(n)}%`;
+}
+
+const worksDateFmt = new Intl.DateTimeFormat("en-GB", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  timeZone: "Europe/London",
+});
+
+/** "12 Jul – 15 Jul" when both ends are known, else just whichever end is. */
+function worksDateRange(work: KbIncident): string {
+  if (work.startsAt && work.endsAt) {
+    return `${worksDateFmt.format(work.startsAt)} – ${worksDateFmt.format(work.endsAt)}`;
+  }
+  if (work.startsAt) return `From ${worksDateFmt.format(work.startsAt)}`;
+  if (work.endsAt) return `Until ${worksDateFmt.format(work.endsAt)}`;
+  return "";
+}
+
+function EngineeringWorkRow({ work }: { work: KbIncident }) {
+  return (
+    <details className="disruption">
+      <summary className="disruption-summary">
+        <span className="disruption-icon" aria-hidden="true">
+          🛠
+        </span>
+        <span className="disruption-head">
+          <span className="disruption-title">{work.summary}</span>
+          {work.affectedOperators.length > 0 && (
+            <span className="disruption-ops">{work.affectedOperators.join(", ")}</span>
+          )}
+        </span>
+      </summary>
+      <div className="disruption-body">
+        {worksDateRange(work) && <p className="disruption-block-heading">{worksDateRange(work)}</p>}
+        {work.description && <p className="disruption-block">{work.description}</p>}
+        {work.affectedRoutesText && (
+          <p className="disruption-block">{work.affectedRoutesText}</p>
+        )}
+      </div>
+    </details>
+  );
 }
 
 function TflLineRow({ line }: { line: TflLineStatus }) {
@@ -177,9 +220,10 @@ export default async function StatusPage() {
   const networkDisruptions = disruptionsConfigured()
     ? await fetchNetworkDisruptions().catch(() => [] as Disruption[])
     : [];
+  const engineeringWorks = await getPlannedEngineeringWorks();
 
   const hasPunctuality = Boolean(data.national) || data.operators.length > 0;
-  const hasAnything = hasPunctuality || tflLines.length > 0;
+  const hasAnything = hasPunctuality || tflLines.length > 0 || engineeringWorks.length > 0;
 
   return (
     <main>
@@ -262,6 +306,20 @@ export default async function StatusPage() {
               <div role="table">
                 {tflLines.map((line) => (
                   <TflLineRow key={line.lineId} line={line} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {engineeringWorks.length > 0 && (
+            <section className="status-section" aria-label="Planned engineering works">
+              <div className="status-section-head">
+                <span className="status-section-title">Planned engineering works</span>
+                <span className="status-section-note">National Rail Knowledgebase</span>
+              </div>
+              <div className="disruptions">
+                {engineeringWorks.map((work) => (
+                  <EngineeringWorkRow key={work.id} work={work} />
                 ))}
               </div>
             </section>
