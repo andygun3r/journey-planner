@@ -3642,16 +3642,11 @@ a.map-tip-anchor:hover .map-tip {
   text-transform: uppercase;
   color: var(--muted);
 }
-.leg-card-plat,
-.leg-card-plat-link {
+.leg-card-plat {
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 0.85rem;
   color: var(--ink);
-  text-decoration: none;
-}
-.leg-card-plat-link:hover {
-  text-decoration: underline;
 }
 .leg-card-plat-label {
   font-weight: 500;
@@ -3720,6 +3715,19 @@ a.map-tip-anchor:hover .map-tip {
 .leg-card-status-danger {
   color: var(--on-red, #ffffff);
 }
+.leg-card-service-link {
+  display: block;
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: none;
+}
+.leg-card-service-link:hover {
+  text-decoration: underline;
+}
 /* The disrupted state: the card itself becomes the alert, full Signal Red —
    the one place this surface breaks the "red is a spotlight, never a fill"
    rule, because a cancelled train is exactly the kind of single, screen-
@@ -3735,12 +3743,15 @@ a.map-tip-anchor:hover .map-tip {
   color: rgba(255, 255, 255, 0.78);
 }
 .leg-card-disrupted .leg-card-plat,
-.leg-card-disrupted .leg-card-plat-link,
 .leg-card-disrupted .leg-card-time {
   color: #ffffff;
 }
 .leg-card-disrupted .leg-card-arrow {
   color: rgba(255, 255, 255, 0.5);
+}
+.leg-card-disrupted .leg-card-service-link {
+  color: #ffffff;
+  border-top-color: rgba(255, 255, 255, 0.3);
 }
 @media (max-width: 40rem) {
   .leg-card {
@@ -3851,9 +3862,12 @@ a.map-tip-anchor:hover .map-tip {
   font-weight: 550;
 }
 .log-row-detail {
+  display: block;
   color: var(--muted);
   font-size: 0.82rem;
+  line-height: 1.45;
   padding-left: 1.15rem;
+  max-width: 65ch;
 }
 
 .commute-backup {

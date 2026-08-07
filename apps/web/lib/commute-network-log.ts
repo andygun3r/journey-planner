@@ -1,7 +1,7 @@
 import type { CommuteLegRecord } from "@signaller/shared";
 import type { CommuteWithLegs } from "./commutes";
 import { getBoard, normaliseOperatorName } from "./board";
-import { serviceIndicatorsByRegion, type ServiceIndicator } from "./disruptions";
+import { fetchServiceIndicators, type ServiceIndicator } from "./disruptions";
 
 /**
  * Every CRS a commute's legs could depart from or arrive at, across both
@@ -60,33 +60,31 @@ async function operatorsForStations(crsList: string[]): Promise<Set<string>> {
 }
 
 /**
- * Network Rail region -> service indicator rows, filtered down to only the
- * operators that actually serve the user's configured commutes. Always
- * computed from every commute the user has (not just today's active leg) —
- * this panel is meant to answer "is my commute's operator running normally"
- * even on a day with nothing scheduled, a holiday, or after the last train.
+ * Service indicator rows — one per operator — filtered down to only the
+ * operators that actually serve the user's configured commutes, disrupted
+ * operators first. Always computed from every commute the user has (not
+ * just today's active leg) — this panel is meant to answer "is my commute's
+ * operator running normally" even on a day with nothing scheduled, a
+ * holiday, or after the last train.
  *
- * Falls back to the unfiltered full-network view when the user has no
+ * Falls back to the unfiltered full-network list when the user has no
  * commutes yet, or when nothing on the board could be matched to an
  * indicator (e.g. RTPPM naming drift) — showing everything is more useful
  * than showing an empty log for someone still setting up.
  */
 export async function serviceIndicatorsForCommutes(
   commutes: CommuteWithLegs[],
-): Promise<Map<string, ServiceIndicator[]>> {
-  const byRegion = await serviceIndicatorsByRegion();
-  if (commutes.length === 0) return byRegion;
+): Promise<ServiceIndicator[]> {
+  const all = await fetchServiceIndicators();
+  const sorted = [...all].sort((a, b) => Number(a.good) - Number(b.good));
+  if (commutes.length === 0) return sorted;
 
   const stations = stationsForCommutes(commutes);
-  if (stations.length === 0) return byRegion;
+  if (stations.length === 0) return sorted;
 
   const relevantOperators = await operatorsForStations(stations);
-  if (relevantOperators.size === 0) return byRegion;
+  if (relevantOperators.size === 0) return sorted;
 
-  const filtered = new Map<string, ServiceIndicator[]>();
-  for (const [region, indicators] of byRegion) {
-    const kept = indicators.filter((ind) => relevantOperators.has(normaliseOperatorName(ind.tocName)));
-    if (kept.length > 0) filtered.set(region, kept);
-  }
-  return filtered.size > 0 ? filtered : byRegion;
+  const filtered = sorted.filter((ind) => relevantOperators.has(normaliseOperatorName(ind.tocName)));
+  return filtered.length > 0 ? filtered : sorted;
 }

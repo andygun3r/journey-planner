@@ -10,6 +10,16 @@
  *
  * Same defensive pattern as tfl.ts/ldbws.ts: any failure (network, timeout,
  * malformed response, not-found) degrades to null, never throws into a 500.
+ *
+ * A real "no such postcode" (postcodes.io 404) and a transient failure
+ * (network blip, timeout, a 5xx) both used to collapse to the same silent
+ * null, which read to a user as "check the postcode and try again" even
+ * when the postcode was fine and the app just couldn't reach the geocoder —
+ * see the "Couldn't find that postcode" report for SE27 9QT, a postcode that
+ * resolves fine directly against the API. A 404 is left alone (retrying a
+ * real not-found wastes a round trip); anything else gets one retry and,
+ * if that also fails, a logged reason so a report like that one is
+ * diagnosable from the server logs instead of a dead end.
  */
 
 export interface GeocodeResult {
@@ -23,16 +33,32 @@ function baseUrl(): string {
   return process.env.POSTCODES_IO_BASE_URL ?? "https://api.postcodes.io";
 }
 
-async function get(path: string, timeoutMs = 5000): Promise<unknown | null> {
+async function attempt(url: string, timeoutMs: number): Promise<{ ok: true; data: unknown } | { ok: false; reason: string; retryable: boolean }> {
   try {
-    const res = await fetch(`${baseUrl()}${path}`, {
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    if (res.status === 404) return { ok: false, reason: "404 not found", retryable: false };
+    if (!res.ok) return { ok: false, reason: `HTTP ${res.status}`, retryable: true };
+    return { ok: true, data: await res.json() };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return { ok: false, reason, retryable: true };
   }
+}
+
+async function get(path: string, timeoutMs = 5000): Promise<unknown | null> {
+  const url = `${baseUrl()}${path}`;
+  const first = await attempt(url, timeoutMs);
+  if (first.ok) return first.data;
+  if (!first.retryable) return null;
+
+  // One retry for anything that looks transient — a single dropped
+  // connection or slow response shouldn't read to the user as "that
+  // postcode doesn't exist."
+  const second = await attempt(url, timeoutMs);
+  if (second.ok) return second.data;
+
+  console.error(`[geocoding] ${path} failed twice: ${first.reason}, then ${second.reason}`);
+  return null;
 }
 
 interface PostcodeResult {

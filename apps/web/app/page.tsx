@@ -153,8 +153,9 @@ async function CommuteStatus({
  * commute(s) and active speed restrictions, read as one shift-log strip
  * beneath the personal commute focus — quiet, tabular, hairline-ruled rows
  * rather than a second bank of cards competing with "your commute" above.
- * Regions with good service collapse to a single line; only trouble earns a
- * second line of detail.
+ * One row per operator; a disrupted operator's row carries its disruption
+ * message in full — this is the app's own honest wording from the feed,
+ * never trimmed or summarised, so it stays trustworthy.
  *
  * Filtered to the operators actually running the user's commute routes
  * (see commute-network-log.ts) — this isn't scoped to today's active leg, so
@@ -165,11 +166,11 @@ async function CommuteStatus({
  */
 async function NetworkLog({ userId }: { userId: string | null }) {
   const commutes = userId ? await listCommutes(userId).catch(() => []) : [];
-  const [byRegion, tsrs] = await Promise.all([
+  const [indicators, tsrs] = await Promise.all([
     serviceIndicatorsForCommutes(commutes),
     activeTsrs(),
   ]);
-  if (byRegion.size === 0 && tsrs.length === 0) return null;
+  if (indicators.length === 0 && tsrs.length === 0) return null;
 
   return (
     <section className="network-log" aria-labelledby="network-log-heading">
@@ -177,22 +178,18 @@ async function NetworkLog({ userId }: { userId: string | null }) {
         Network log
       </h2>
       <ul className="log-list">
-        {[...byRegion.entries()].map(([region, indicators]) => {
-          const disrupted = indicators.filter((i) => !i.good);
-          const ok = disrupted.length === 0;
-          return (
-            <li key={region} className={`log-row ${ok ? "" : "log-row-warn"}`}>
-              <span className="log-row-main">
-                <span className={`log-dot ${ok ? "log-dot-ok" : "log-dot-warn"}`} aria-hidden="true" />
-                <span className="log-row-label">{region}</span>
-                <span className="log-row-status">
-                  {ok ? "Good service" : `${disrupted.length} operator${disrupted.length === 1 ? "" : "s"} affected`}
-                </span>
-              </span>
-              {!ok && <span className="log-row-detail">{disrupted.map((i) => i.tocName).join(", ")}</span>}
-            </li>
-          );
-        })}
+        {indicators.map((ind) => (
+          <li key={ind.tocCode || ind.tocName} className={`log-row ${ind.good ? "" : "log-row-warn"}`}>
+            <span className="log-row-main">
+              <span className={`log-dot ${ind.good ? "log-dot-ok" : "log-dot-warn"}`} aria-hidden="true" />
+              <span className="log-row-label">{ind.tocName}</span>
+              <span className="log-row-status">{ind.good ? "Good service" : ind.status || "Disruption"}</span>
+            </span>
+            {!ind.good && ind.statusDescription && (
+              <span className="log-row-detail">{ind.statusDescription}</span>
+            )}
+          </li>
+        ))}
         {tsrs.map((tsr) => (
           <li key={tsr.tsrId} className="log-row log-row-warn">
             <span className="log-row-main">

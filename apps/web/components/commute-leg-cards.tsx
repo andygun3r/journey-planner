@@ -74,21 +74,11 @@ function LegCard({
     <li className={`leg-card ${stateClass}`} aria-current={current ? "step" : undefined}>
       <div className="leg-card-head">
         <span className="leg-card-kind">{leg.staySeated ? "Stay seated" : isFirst ? "Board" : "Change"}</span>
-        {live?.serviceId ? (
-          <Link href={`/services/${live.serviceId}`} className="leg-card-plat-link">
-            {live.platform ? (
-              <>
-                <span className="leg-card-plat-label">Plat</span> {live.platform}
-              </>
-            ) : (
-              "Live"
-            )}
-          </Link>
-        ) : live?.platform ? (
+        {live?.platform && (
           <span className="leg-card-plat">
             <span className="leg-card-plat-label">Plat</span> {live.platform}
           </span>
-        ) : null}
+        )}
       </div>
 
       <div className="leg-card-route">
@@ -126,6 +116,12 @@ function LegCard({
         <p className="leg-card-status">
           {index === 0 ? <LiveCountdown iso={leg.departs} /> : "Scheduled"}
         </p>
+      )}
+
+      {live?.serviceId && (
+        <Link href={`/services/${live.serviceId}`} className="leg-card-service-link">
+          View service →
+        </Link>
       )}
     </li>
   );
