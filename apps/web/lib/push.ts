@@ -1,10 +1,57 @@
 import { user } from "@signaller/db";
 import { eq } from "drizzle-orm";
+import webpush from "web-push";
 import { getDb } from "./db";
 
 /** VAPID public key the client needs to subscribe. Exposed to the browser. */
 export function vapidPublicKey(): string | null {
   return process.env.VAPID_PUBLIC_KEY ?? null;
+}
+
+/**
+ * Whether this server can actually send a push. The public key alone is enough
+ * for a browser to subscribe, but sending also needs the private key — so a
+ * half-configured server can collect subscriptions it can never deliver to.
+ * The admin test-alert page reports on this directly.
+ */
+export function pushSendConfigured(): boolean {
+  return Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+}
+
+let vapidReady = false;
+
+/**
+ * Send one push to a stored subscription, from the web app.
+ *
+ * services/darwin-ingest has its own copy of this (src/push.ts) — that's the
+ * one every real alert goes through. This exists so the admin test alert can
+ * verify VAPID/subscription setup from the web container itself, which is
+ * where the misconfiguration usually is. Kept small and dependency-light
+ * rather than shared via packages/shared, which apps/web also imports into
+ * client components and so must stay free of Node-only packages like web-push.
+ *
+ * Returns the failing HTTP status, or null on success / when unconfigured.
+ */
+export async function sendPushFromWeb(
+  subscription: unknown,
+  payload: { title: string; body: string; url: string; tag?: string },
+): Promise<number | null> {
+  const pub = process.env.VAPID_PUBLIC_KEY;
+  const priv = process.env.VAPID_PRIVATE_KEY;
+  if (!pub || !priv) return null;
+  if (!vapidReady) {
+    webpush.setVapidDetails(process.env.VAPID_SUBJECT ?? "mailto:alerts@signaller.local", pub, priv);
+    vapidReady = true;
+  }
+  try {
+    await webpush.sendNotification(
+      subscription as webpush.PushSubscription,
+      JSON.stringify(payload),
+    );
+    return null;
+  } catch (err) {
+    return (err as { statusCode?: number }).statusCode ?? null;
+  }
 }
 
 /** Store (or replace) a user's Web Push subscription. */
@@ -28,6 +75,16 @@ export async function hasPushSubscription(userId: string): Promise<boolean> {
     .where(eq(user.id, userId))
     .limit(1);
   return rows[0]?.sub != null;
+}
+
+/** A user's stored Web Push subscription, or null if they have none. */
+export async function getPushSubscription(userId: string): Promise<unknown | null> {
+  const rows = await getDb()
+    .select({ sub: user.pushSubscription })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+  return rows[0]?.sub ?? null;
 }
 
 /** Per-category push opt-in — which kinds of alert actually buzz the user's device. */

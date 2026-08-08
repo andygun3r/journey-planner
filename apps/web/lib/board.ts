@@ -83,6 +83,13 @@ export interface BoardPosition {
   reportedAgoSeconds?: number;
   /** True while the train hasn't left its origin yet. */
   approaching: boolean;
+  /**
+   * True when the last report is old enough that the position may no longer be
+   * where the train actually is. The row is still shown — a quiet feed is not
+   * the same as a train that vanished — but the UI must say the age out loud
+   * rather than present a stale location as current.
+   */
+  stale?: boolean;
 }
 
 export interface BoardResult {

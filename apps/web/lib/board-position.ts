@@ -16,14 +16,23 @@ import { londonDateKey, ukHhmm } from "./uk-time";
  * berth steps (trainId = "TD:<headcode>", rid never set — TD doesn't carry
  * one). We match rid directly for the former, and bridge rid -> uid ->
  * headcode (nr_headcode, from the NROD schedule feed) for the latter, same
- * as service-progress.ts's TD correlation. Only reports fresher than 10
- * minutes are shown — an unreported train should read as "not tracking",
- * not display a stale, possibly wrong, location.
+ * as service-progress.ts's TD correlation.
+ *
+ * Report age is handled in two steps, not one. A single cutoff meant a train
+ * whose feed simply went quiet for eleven minutes dropped off the board
+ * entirely and then reappeared — the "positions sometimes disappear" report.
+ * TD and TRUST coverage is genuinely patchy, so a gap that long is normal
+ * running, not a missing train. Past STALE_AFTER_MS we keep showing the last
+ * known position and flag it `stale` so the UI can age it ("last seen 14 min
+ * ago"); only past DROP_AFTER_MS is it too old to mean anything and dropped.
  *
  * One bulk query set per board; a no-op when the NR ingester hasn't run.
  */
 
+/** Past this, the position is shown but labelled with its age. */
 const STALE_AFTER_MS = 10 * 60_000;
+/** Past this, the position is too old to be meaningful and is dropped. */
+const DROP_AFTER_MS = 45 * 60_000;
 
 const hhmm = (iso: string) => ukHhmm(iso);
 
@@ -67,7 +76,7 @@ export async function enrichBoardWithPosition(
   ];
   if (rids.length === 0) return departures;
 
-  const staleCutoff = new Date(Date.now() - STALE_AFTER_MS);
+  const dropCutoff = new Date(Date.now() - DROP_AFTER_MS);
 
   // 2. NR position for those rids (TRUST movements, correlated via activation).
   const positions = await db
@@ -79,7 +88,7 @@ export async function enrichBoardWithPosition(
       lateness: nrTrainPosition.lateness,
     })
     .from(nrTrainPosition)
-    .where(and(inArray(nrTrainPosition.rid, rids), gt(nrTrainPosition.lastReportedAt, staleCutoff)));
+    .where(and(inArray(nrTrainPosition.rid, rids), gt(nrTrainPosition.lastReportedAt, dropCutoff)));
 
   const posByRid = new Map(positions.filter((p) => p.rid).map((p) => [p.rid as string, p]));
 
@@ -134,7 +143,7 @@ export async function enrichBoardWithPosition(
           .where(
             and(
               inArray(nrTrainPosition.headcode, headcodes),
-              gt(nrTrainPosition.lastReportedAt, staleCutoff),
+              gt(nrTrainPosition.lastReportedAt, dropCutoff),
             ),
           );
         const tdByHeadcode = new Map(tdRows.filter((r) => r.headcode).map((r) => [r.headcode as string, r]));
@@ -175,13 +184,14 @@ export async function enrichBoardWithPosition(
     // No station name yet (berth-only) — still say it's moving.
     const label = where ? `${verb === "at" ? "At" : cap(verb)} ${where}` : "On the move";
 
+    const agoMs = p.lastReportedAt ? Date.now() - p.lastReportedAt.getTime() : undefined;
+
     const position: BoardPosition = {
       label,
       latenessMinutes:
         p.lateness !== null && p.lateness !== undefined ? Math.round(p.lateness / 60) : undefined,
-      reportedAgoSeconds: p.lastReportedAt
-        ? Math.round((Date.now() - p.lastReportedAt.getTime()) / 1000)
-        : undefined,
+      reportedAgoSeconds: agoMs !== undefined ? Math.round(agoMs / 1000) : undefined,
+      stale: agoMs !== undefined && agoMs > STALE_AFTER_MS,
       // If it hasn't reported a movement, or only a berth pass at origin, treat
       // as approaching. We keep it simple: any live NR report means it's tracked.
       approaching: false,

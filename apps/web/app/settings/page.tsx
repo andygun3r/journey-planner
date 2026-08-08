@@ -3,10 +3,12 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { AccountSection } from "@/components/account-section";
 import { AccessibilitySettings } from "@/components/accessibility-settings";
+import { PushToggle } from "@/components/push-toggle";
 import { auth } from "@/lib/auth";
 import { getUserId } from "@/lib/current-user";
 import { listCommutes } from "@/lib/commutes";
 import { getAccessibilityPrefs } from "@/lib/accessibility-prefs";
+import { getPushPreferences, hasPushSubscription, vapidPublicKey } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
@@ -17,10 +19,13 @@ export default async function SettingsPage() {
   const email = session?.user?.email;
   if (!email) redirect("/login");
 
-  const [commutes, prefs] = await Promise.all([
+  const [commutes, prefs, pushOn, pushPrefs] = await Promise.all([
     listCommutes(userId),
     getAccessibilityPrefs(userId),
+    hasPushSubscription(userId),
+    getPushPreferences(userId),
   ]);
+  const vapid = vapidPublicKey();
 
   return (
     <main>
@@ -48,6 +53,25 @@ export default async function SettingsPage() {
             Holidays
           </Link>
         </div>
+      </div>
+
+      <div className="notice">
+        <h2>Alerts</h2>
+        <p>
+          Signaller can send alerts to your phone or desktop, even when the app is closed. Pick
+          which ones you want below.
+        </p>
+        {vapid ? (
+          <PushToggle
+            vapidPublicKey={vapid}
+            initiallySubscribed={pushOn}
+            initialPreferences={pushPrefs}
+          />
+        ) : (
+          <p className="push-note">
+            Push alerts aren&rsquo;t set up on this server yet (no VAPID keys configured).
+          </p>
+        )}
       </div>
 
       <div className="notice">

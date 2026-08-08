@@ -4,13 +4,12 @@ import { AdHocCommuteStart } from "@/components/ad-hoc-commute-start";
 import { AlertFeed } from "@/components/alert-feed";
 import { BoardRefresher } from "@/components/board-refresher";
 import { CommutePanel } from "@/components/commute-panel";
+import { CommuteRunControl } from "@/components/commute-run-control";
 import { CommuteSwitcher } from "@/components/commute-switcher";
 import { DailyFlex } from "@/components/daily-flex";
-import { PushToggle } from "@/components/push-toggle";
 import { listAlerts } from "@/lib/alerts";
 import { getDashboardData } from "@/lib/commute-dashboard";
 import { getUserId } from "@/lib/current-user";
-import { getPushPreferences, hasPushSubscription, vapidPublicKey } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 
@@ -24,13 +23,10 @@ export default async function CommuteDashboardPage({ searchParams }: Props) {
   const { commute: commuteId, shift } = await searchParams;
   const shiftMinutes = shift ? Number(shift) || 0 : 0;
 
-  const [state, alerts, pushOn, pushPrefs] = await Promise.all([
+  const [state, alerts] = await Promise.all([
     getDashboardData(userId, new Date(), commuteId, shiftMinutes),
     listAlerts(userId, { limit: 20 }),
-    hasPushSubscription(userId),
-    getPushPreferences(userId),
   ]);
-  const vapid = vapidPublicKey();
 
   if (state.kind === "no-commute") {
     return (
@@ -58,16 +54,19 @@ export default async function CommuteDashboardPage({ searchParams }: Props) {
     const message =
       state.reason === "holiday"
         ? "You're on holiday today — enjoy the break. Alerts are paused."
-        : state.reason === "no-leg-today"
-          ? "No commute scheduled for today."
-          : "You're done for today. Nothing more scheduled on this commute.";
+        : state.reason === "skipped"
+          ? "You've marked today as not travelling on this commute."
+          : state.reason === "no-leg-today"
+            ? "No commute scheduled for today."
+            : "You're done for today. Nothing more scheduled on this commute.";
     return (
       <main className="commute-page">
         <div className="results-head">
           <h1>{state.commuteLabel}</h1>
           <span className="when">
             <Link href="/commute/edit">edit</Link> · <Link href="/commute/list">manage</Link> ·{" "}
-            <Link href="/commute/holidays">holidays</Link>
+            <Link href="/commute/calendar">calendar</Link> ·{" "}
+          <Link href="/commute/holidays">holidays</Link>
           </span>
         </div>
         <CommuteSwitcher
@@ -91,7 +90,8 @@ export default async function CommuteDashboardPage({ searchParams }: Props) {
         <h1>{state.commuteLabel}</h1>
         <span className="when">
           <BoardRefresher intervalMs={30_000} /> · <Link href="/commute/edit">edit</Link> ·{" "}
-          <Link href="/commute/list">manage</Link> · <Link href="/commute/holidays">holidays</Link>
+          <Link href="/commute/list">manage</Link> · <Link href="/commute/calendar">calendar</Link> ·{" "}
+          <Link href="/commute/holidays">holidays</Link>
         </span>
       </div>
 
@@ -112,7 +112,11 @@ export default async function CommuteDashboardPage({ searchParams }: Props) {
             {leg.originLabel} <span className="commute-arrow">→</span> {leg.destLabel}
           </h2>
           <p className="commute-route-crs">
-            {leg.originCrs} → {leg.destCrs} · window {leg.windowStart}–{leg.windowEnd}
+            {leg.originCrs} → {leg.destCrs}
+            {/* A started run widens the window to the whole day (it's the run,
+                not the clock, holding this leg on screen), so printing
+                "00:00–23:59" here would be noise. */}
+            {!state.run && ` · window ${leg.windowStart}–${leg.windowEnd}`}
           </p>
         </div>
 
@@ -133,7 +137,15 @@ export default async function CommuteDashboardPage({ searchParams }: Props) {
             <p>Signaller couldn&rsquo;t reach the routing engine to show your next trains.</p>
           </div>
         ) : (
-          <CommutePanel leg={leg} journeys={state.journeys} />
+          <>
+            <CommuteRunControl
+              commuteId={state.commuteId}
+              leg={leg}
+              journey={state.journeys[0]}
+              activeRun={state.run ? { id: state.run.id, startedAt: state.run.startedAt } : undefined}
+            />
+            <CommutePanel leg={leg} journeys={state.journeys} />
+          </>
         )}
       </section>
 
@@ -151,11 +163,6 @@ export default async function CommuteDashboardPage({ searchParams }: Props) {
         </section>
       )}
 
-      {vapid && (
-        <div className="commute-push">
-          <PushToggle vapidPublicKey={vapid} initiallySubscribed={pushOn} initialPreferences={pushPrefs} />
-        </div>
-      )}
     </main>
   );
 }

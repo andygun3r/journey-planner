@@ -218,6 +218,20 @@
       "when": 1786132211556,
       "tag": "0030_blue_karma",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1786195948531,
+      "tag": "0031_stale_spitfire",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786196569323,
+      "tag": "0032_clean_korvac",
+      "breakpoints": true
     }
   ]
 }

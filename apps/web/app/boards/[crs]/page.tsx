@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BoardDetailToggle } from "@/components/board-detail-toggle";
 import { BoardFilter } from "@/components/board-filter";
 import { BoardRefresher } from "@/components/board-refresher";
 import { LiveCountdown } from "@/components/live-countdown";
@@ -33,13 +34,26 @@ function coachSummary(d: BoardDeparture): string {
   return firstCount > 0 ? `${base} · ${firstCount} First` : base;
 }
 
+/** " · last seen 14 min ago" — the age of a position we no longer treat as current. */
+function positionAge(reportedAgoSeconds: number | undefined): string {
+  if (reportedAgoSeconds === undefined) return " · not tracking";
+  const mins = Math.round(reportedAgoSeconds / 60);
+  return ` · last seen ${mins} min ago`;
+}
+
 function StatusCell({ d, direction }: { d: BoardDeparture; direction: BoardDirection }) {
   // The instant we expect it to leave/arrive here: the live estimate, else scheduled.
   const expectedIso = d.live ?? d.scheduled;
   // Show a ticking "N mins" only while the train is actually tracked live
   // (Network Rail position present) and not cancelled — otherwise the board
-  // stays a scheduled/expected clock, as before.
-  const showCountdown = direction === "departures" && d.status !== "cancelled" && Boolean(d.position);
+  // stays a scheduled/expected clock, as before. A stale position doesn't
+  // count: a live-looking countdown must not be driven by a location we've
+  // already decided is too old to trust.
+  const showCountdown =
+    direction === "departures" &&
+    d.status !== "cancelled" &&
+    Boolean(d.position) &&
+    !d.position?.stale;
 
   switch (d.status) {
     case "cancelled":
@@ -101,14 +115,22 @@ function placeLabel(direction: BoardDirection): string {
   return direction === "arrivals" ? "Origin" : "Destination";
 }
 
+/**
+ * The id the service APIs know this row by, or undefined when the row hasn't
+ * been correlated to one. Shared by the row's link and its detail toggle so the
+ * two can never disagree about which service they point at.
+ */
+function serviceIdFor(d: BoardDeparture, source: string): string | undefined {
+  return d.tripId && source === "ldbws" ? d.tripId : d.rid ? ridServiceId(d.rid) : undefined;
+}
+
 function serviceHref(
   d: BoardDeparture,
   direction: BoardDirection,
   crs: string,
   source: string,
 ): string | undefined {
-  const serviceId =
-    d.tripId && source === "ldbws" ? d.tripId : d.rid ? ridServiceId(d.rid) : undefined;
+  const serviceId = serviceIdFor(d, source);
   if (!serviceId) return undefined;
   const param = direction === "arrivals" ? "to" : "from";
   return `/services/${encodeURIComponent(serviceId)}?${param}=${crs}`;
@@ -233,6 +255,7 @@ function BoardSection({
                 d.status !== "cancelled" &&
                 services.findIndex((x) => x.status !== "cancelled") === i;
               const href = serviceHref(d, direction, crs, source);
+              const serviceId = serviceIdFor(d, source);
               const linkable = Boolean(href);
               return (
                 <li
@@ -270,9 +293,11 @@ function BoardSection({
                     {d.position && d.status !== "cancelled" && direction === "departures" && (
                       <span
                         className={`board-position ${
-                          d.position.latenessMinutes && d.position.latenessMinutes > 1
-                            ? "board-position-late"
-                            : ""
+                          d.position.stale
+                            ? "board-position-stale"
+                            : d.position.latenessMinutes && d.position.latenessMinutes > 1
+                              ? "board-position-late"
+                              : ""
                         }`}
                       >
                         <span className="board-position-dot" aria-hidden="true" />
@@ -282,6 +307,10 @@ function BoardSection({
                           : d.position.latenessMinutes && d.position.latenessMinutes < -1
                             ? ` · ${-d.position.latenessMinutes} early`
                             : ""}
+                        {/* A quiet feed is normal on patchy TD/TRUST coverage, so the
+                            row stays — but say how old it is rather than let an
+                            out-of-date location read as current. */}
+                        {d.position.stale && positionAge(d.position.reportedAgoSeconds)}
                       </span>
                     )}
                     {d.movedFromSchedule && d.status !== "cancelled" && direction === "departures" && (
@@ -304,6 +333,17 @@ function BoardSection({
                   <span className="board-status-col">
                     <StatusCell d={d} direction={direction} />
                   </span>
+                  {/* Expands to the timetable + movements + map view. A direct
+                      child of the card's grid, not of .board-dest, so the panel
+                      can span all four columns — a map squeezed into the
+                      destination track would be unreadable. Needs a resolvable
+                      service id, same as the row's own link. */}
+                  {serviceId && (
+                    <BoardDetailToggle
+                      serviceId={serviceId}
+                      destination={placeName(d, direction) || "this service"}
+                    />
+                  )}
                 </li>
               );
             })}

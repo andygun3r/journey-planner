@@ -810,6 +810,109 @@ export const commuteHoliday = pgTable(
   (t) => [index("holiday_user_idx").on(t.userId, t.startDate)],
 );
 
+/**
+ * A single-date change to a commute — "this Tuesday only", as distinct from
+ * "every Tuesday" (which is commute_leg).
+ *
+ * The weekly grid is a template, so before this there was nowhere to record
+ * that one specific date differs: a one-off later start, a different office,
+ * or a day not travelling at all. Resolution checks for an override on today's
+ * date first and falls back to the day-of-week leg, so an untouched date keeps
+ * behaving exactly as it always did.
+ *
+ * Times are nullable in the same way commute_leg's are: null means "no window
+ * that direction". `skipped` is separate from "no windows" on purpose — it
+ * records a deliberate "not travelling this day", which must not be confused
+ * with an override that only changes the work location.
+ */
+export const commuteDayOverride = pgTable(
+  "commute_day_override",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    commuteId: uuid("commute_id")
+      .notNull()
+      .references(() => commute.id, { onDelete: "cascade" }),
+    /** The single UK-local date this override applies to. */
+    date: date("date").notNull(),
+    /** True when the user is not travelling at all on this date. */
+    skipped: boolean("skipped").notNull().default(false),
+    /** Null means "inherit from the day-of-week leg". */
+    workCrs: text("work_crs"),
+    workLabel: text("work_label"),
+    amWindowStart: time("am_window_start"),
+    amWindowEnd: time("am_window_end"),
+    pmWindowStart: time("pm_window_start"),
+    pmWindowEnd: time("pm_window_end"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // One override per commute per date — the editor upserts on this.
+    uniqueIndex("commute_day_override_unique_idx").on(t.commuteId, t.date),
+    index("commute_day_override_date_idx").on(t.commuteId, t.date),
+  ],
+);
+
+/**
+ * A commute the user has explicitly STARTED — "I am travelling now", as
+ * distinct from "this is what my Tuesday usually looks like".
+ *
+ * Without this the dashboard re-resolved the active leg on every 30-second
+ * refresh, so crossing the AM window's end mid-journey silently flipped the
+ * page to the evening leg while the user was still on the morning train. A run
+ * pins the direction and the chosen service until it genuinely finishes.
+ *
+ * `journey` holds the JourneyView the user started, so the dashboard keeps
+ * showing the train they actually boarded rather than re-planning underneath
+ * them. It is a snapshot for identity and display; live status is still
+ * re-fetched against it each refresh.
+ *
+ * One active run per commute at a time — enforced by a partial unique index on
+ * (commute_id) WHERE ended_at IS NULL, added in the migration since Drizzle
+ * can't express a partial index here.
+ */
+export const commuteRun = pgTable(
+  "commute_run",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    commuteId: uuid("commute_id")
+      .notNull()
+      .references(() => commute.id, { onDelete: "cascade" }),
+    /** Null for an ad-hoc run, which has no scheduled leg behind it. */
+    commuteLegId: uuid("commute_leg_id").references(() => commuteLeg.id, {
+      onDelete: "set null",
+    }),
+    /** UK-local service date the run belongs to. */
+    serviceDate: date("service_date").notNull(),
+    /** "am" or "pm" — the direction locked in for the duration of the run. */
+    direction: text("direction").notNull(),
+    originCrs: text("origin_crs").notNull(),
+    originLabel: text("origin_label").notNull(),
+    destCrs: text("dest_crs").notNull(),
+    destLabel: text("dest_label").notNull(),
+    /** Snapshot of the started JourneyView (see above). */
+    journey: jsonb("journey"),
+    /** Scheduled arrival of the started journey, for the auto-end check. */
+    scheduledArrival: timestamp("scheduled_arrival", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Set when the run finishes; null while it is still in play. */
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    /**
+     * How it finished: "arrived" (auto-ended on arrival), "manual" (user ended
+     * it) or "expired" (safety net so a forgotten run can't lock the dashboard
+     * overnight). Null while running.
+     */
+    endedReason: text("ended_reason"),
+  },
+  (t) => [
+    index("commute_run_user_idx").on(t.userId, t.serviceDate),
+    index("commute_run_active_idx").on(t.commuteId, t.endedAt),
+  ],
+);
+
 export const favouriteJourney = pgTable(
   "favourite_journey",
   {

@@ -653,8 +653,30 @@ async function resolveRidForHeadcode(
  *
  * No location to check against -> keep the existing rid rather than churn it
  * on missing information.
+ *
+ * Unlinking takes TWO consecutive failures, not one. A single implausible
+ * report is common and usually transient — an out-of-order movement, a
+ * mis-mapped STANOX, a diverted train briefly off its booked route — and
+ * dropping the rid on the first one made the train vanish from boards and the
+ * map until some later report re-correlated it. That churn was a direct cause
+ * of "positions sometimes disappear". A genuinely wrong link keeps failing, so
+ * it still self-corrects, just one report later.
  */
+/**
+ * trainId -> consecutive failures so far. Entries are cleared the moment a
+ * check passes or the rid is dropped, so this only ever holds trains mid-strike
+ * — but a train that fails once and then never reports again would linger, so
+ * the map is bounded and clears wholesale rather than growing for the life of
+ * the process. Losing a strike count is harmless: the worst case is one extra
+ * report before a bad link is dropped.
+ */
+const ridStrikes = new Map<string, number>();
+/** Consecutive failed plausibility checks before a rid is actually dropped. */
+const RID_STRIKES_BEFORE_UNLINK = 2;
+const RID_STRIKES_MAX_ENTRIES = 10_000;
+
 async function revalidateRid(
+  trainId: string,
   rid: string | null,
   tiploc: string | null,
   crs: string | null,
@@ -667,7 +689,20 @@ async function revalidateRid(
   const score = await candidatePlausibleAtLocation(rid, tiploc, crs, at, bookedAt).catch(
     () => SCORE_ACTUAL_IN_WINDOW,
   );
-  return score > SCORE_NONE ? rid : null;
+
+  if (score > SCORE_NONE) {
+    ridStrikes.delete(trainId);
+    return rid;
+  }
+
+  const strikes = (ridStrikes.get(trainId) ?? 0) + 1;
+  if (strikes < RID_STRIKES_BEFORE_UNLINK) {
+    if (ridStrikes.size >= RID_STRIKES_MAX_ENTRIES) ridStrikes.clear();
+    ridStrikes.set(trainId, strikes);
+    return rid;
+  }
+  ridStrikes.delete(trainId);
+  return null;
 }
 
 /**
@@ -704,7 +739,7 @@ async function applyMovementLocked(m: MovementReport): Promise<string | undefine
   // actual-vs-booked — see candidatePlausibleAtLocation.
   const bookedAt = m.plannedTimestampMs ? new Date(m.plannedTimestampMs) : null;
 
-  let rid = await revalidateRid(existing[0]?.rid ?? null, tiploc, crs, reportedAt, bookedAt);
+  let rid = await revalidateRid(m.trainId, existing[0]?.rid ?? null, tiploc, crs, reportedAt, bookedAt);
 
   // Correlation used to be attempted *only* once, in applyActivation. If the
   // matching Darwin schedule hadn't landed yet when the 0001 arrived — routine
@@ -977,7 +1012,13 @@ async function applyBerthStepLocked(b: BerthStep): Promise<string | undefined> {
       .from(nrTrainPosition)
       .where(eq(nrTrainPosition.trainId, tdTrainId(b)))
       .limit(1);
-    rid = await revalidateRid(existingRow[0]?.rid ?? null, loc?.tiploc ?? null, crs, reportedAt);
+    rid = await revalidateRid(
+      tdTrainId(b),
+      existingRow[0]?.rid ?? null,
+      loc?.tiploc ?? null,
+      crs,
+      reportedAt,
+    );
   }
 
   // The snapshot write below is guarded on reportedAt (see the `where` on the

@@ -281,6 +281,56 @@ function windowFor(leg: CommuteLegRecord, dir: Direction): { start: string; end:
   return { start: start.slice(0, 5), end: end.slice(0, 5) };
 }
 
+/**
+ * A single-date change to a commute — the resolved shape of
+ * commute_day_override. Null fields mean "inherit from the weekly template".
+ */
+export interface CommuteDayOverrideRecord {
+  date: string;
+  skipped: boolean;
+  workCrs: string | null;
+  workLabel: string | null;
+  amWindowStart: string | null;
+  amWindowEnd: string | null;
+  pmWindowStart: string | null;
+  pmWindowEnd: string | null;
+  note: string | null;
+}
+
+/**
+ * Folds a date's override onto its day-of-week leg, producing the leg that
+ * date actually runs.
+ *
+ * Field-by-field rather than wholesale replacement: an override that only
+ * moves the evening window must keep the morning's pins, backups and
+ * origin/destination settings intact. Anything the user didn't change on that
+ * date keeps following the template.
+ *
+ * Pins are dropped for a direction whose window the override moved — a pinned
+ * 07:42 train is meaningless on a day the user said they're leaving at 09:00,
+ * and silently keeping it would pin them to a train they can't catch.
+ */
+export function applyDayOverride(
+  leg: CommuteLegRecord,
+  override: CommuteDayOverrideRecord,
+): CommuteLegRecord {
+  const amChanged = override.amWindowStart != null || override.amWindowEnd != null;
+  const pmChanged = override.pmWindowStart != null || override.pmWindowEnd != null;
+
+  return {
+    ...leg,
+    workCrs: override.workCrs ?? leg.workCrs,
+    workLabel: override.workLabel ?? leg.workLabel,
+    amWindowStart: override.amWindowStart ?? leg.amWindowStart,
+    amWindowEnd: override.amWindowEnd ?? leg.amWindowEnd,
+    pmWindowStart: override.pmWindowStart ?? leg.pmWindowStart,
+    pmWindowEnd: override.pmWindowEnd ?? leg.pmWindowEnd,
+    pins: leg.pins.filter((p) =>
+      p.direction === "am" ? !amChanged : !pmChanged,
+    ),
+  };
+}
+
 /** This direction's pinned services, sequence-ordered, or undefined when none. */
 function pinsFor(leg: CommuteLegRecord, dir: Direction): CommuteLegPinRecord[] | undefined {
   const pins = leg.pins.filter((p) => p.direction === dir).sort((a, b) => a.sequence - b.sequence);
@@ -307,13 +357,24 @@ export function resolveActiveLegForCommute(
   legs: CommuteLegRecord[],
   holidays: HolidayRange[],
   now: Date = new Date(),
+  /**
+   * Today's single-date override, when the user has set one. Optional so every
+   * existing caller keeps its behaviour: with no override this resolves purely
+   * from the weekly template, exactly as before.
+   */
+  override?: CommuteDayOverrideRecord | null,
 ): ActiveLeg | null {
   const today = londonDate(now);
   if (isDateInHolidayRange(today, holidays)) return null;
 
+  // "Not travelling this day" is as strong as a holiday, but scoped to one
+  // commute rather than the whole account.
+  if (override?.skipped) return null;
+
   const dow = londonDayOfWeek(now);
-  const leg = legs.find((l) => l.dayOfWeek === dow);
-  if (!leg) return null;
+  const base = legs.find((l) => l.dayOfWeek === dow);
+  if (!base) return null;
+  const leg = override ? applyDayOverride(base, override) : base;
 
   const homeCrs = commute.homeCrs;
   const homeLabel = commute.homeLabel ?? "Home";

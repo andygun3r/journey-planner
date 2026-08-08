@@ -538,6 +538,63 @@ a {
   border-color: transparent;
 }
 
+/* Start / end commute. Sits inside the dark .commute-focus panel, so its text
+   follows the same white-on-navy treatment as .daily-flex above. */
+.commute-run {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0.9rem 0 1rem;
+}
+.commute-run .editor-hint {
+  color: rgba(255, 255, 255, 0.68);
+  margin: 0;
+}
+.commute-run-active {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+/* "Following this train" — the dot echoes the board's live-position marker, but
+   the sentence carries the meaning on its own (status is never colour-only). */
+.commute-run-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 550;
+  color: #ffffff;
+}
+.commute-run-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #8ddcb4;
+  flex: none;
+  /* Its own keyframe rather than the board's position-pulse: that one is built
+     from --ok, which is tuned for the light board background and reads muddy
+     against this navy panel. */
+  animation: commute-run-pulse 2.4s ease-out infinite;
+}
+@keyframes commute-run-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(141, 220, 180, 0.55);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 0.4rem rgba(141, 220, 180, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .commute-run-dot {
+    animation: none;
+  }
+}
+
 .daily-flex {
   display: flex;
   flex-direction: column;
@@ -960,6 +1017,408 @@ a {
    for exactly this row. */
 .board-card-next {
   border-color: var(--primary);
+}
+
+/* --- Commute calendar: month grid + per-date editor --- */
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+.cal-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.cal-nav {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.2rem;
+  line-height: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: inherit;
+}
+.cal-nav:hover {
+  background: color-mix(in oklch, var(--primary) 8%, var(--surface));
+}
+
+.cal-weekdays,
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+.cal-weekday {
+  padding: 0.2rem 0;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cal-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  /* Tall enough for the day number plus two lines of detail, and comfortably
+     over the 44px touch target minimum. */
+  min-height: 4.6rem;
+  padding: 0.35rem 0.4rem;
+  font: inherit;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  overflow: hidden;
+}
+.cal-cell-pad {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+  min-height: 0;
+}
+.cal-cell-on {
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+  background: color-mix(in oklch, var(--primary) 6%, var(--surface));
+}
+.cal-cell-off .cal-daynum {
+  color: var(--muted);
+}
+.cal-cell-today {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+/* Past dates stay readable but recede — they can still be inspected. */
+.cal-cell-past {
+  opacity: 0.55;
+}
+.cal-cell:hover {
+  border-color: var(--primary);
+}
+
+.cal-daynum {
+  font-weight: 700;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.cal-work,
+.cal-window,
+.cal-tag,
+.cal-changed-tag {
+  font-size: 0.68rem;
+  line-height: 1.25;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-work {
+  font-weight: 600;
+}
+.cal-window {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cal-tag {
+  color: var(--muted);
+  font-weight: 600;
+}
+/* "Edited" — a word, not just a colour, so the marker survives greyscale and
+   colour-blind viewing (PRODUCT.md: status is never colour-only). */
+.cal-changed-tag {
+  margin-top: auto;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* The per-date editor. Renders inline under the grid rather than as a modal:
+   on a phone a full-screen dialog would hide the month you're editing against,
+   and this keeps one-hand reach. */
+.cal-editor {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 2px solid var(--primary);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.cal-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.cal-editor-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.cal-editor-close {
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.3rem;
+  line-height: 1;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--muted);
+}
+.cal-skip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.cal-scope {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+}
+.cal-scope legend {
+  padding: 0 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cal-scope label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.cal-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+@media (max-width: 30rem) {
+  .cal-grid,
+  .cal-weekdays {
+    gap: 0.2rem;
+  }
+  .cal-cell {
+    min-height: 3.6rem;
+    padding: 0.3rem;
+  }
+  /* Below this width the work label and window can't render legibly in a
+     seventh of the screen; the day number, state tag and "Edited" marker still
+     do, and the editor carries the detail. */
+  .cal-work,
+  .cal-window {
+    display: none;
+  }
+}
+
+/* --- Board row detail: timetable + movements + map (BoardDetailToggle) --- */
+
+/* The row's .board-card-stretch link paints an ::after over the whole card, so
+   anything interactive inside it needs to sit above that overlay or the click
+   goes to the link instead. position + z-index is the whole trick. */
+.board-detail-toggle {
+  position: relative;
+  z-index: 1;
+  /* Sits under the destination column (track 2) rather than starting a new
+     row of its own, so an unexpanded row keeps its usual compact height. */
+  grid-column: 2 / -1;
+  justify-self: start;
+  margin-top: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: transparent;
+  border: 1px solid color-mix(in oklch, var(--primary) 40%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 32px;
+}
+.board-detail-toggle:hover {
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+}
+
+/* The panel spans every column: nested inside .board-dest it would be trapped
+   in the 1fr destination track, which is far too narrow for a map. */
+.bt-panel {
+  position: relative;
+  z-index: 1;
+  grid-column: 1 / -1;
+  margin-top: 0.75rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.bt-subhead {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.bt-empty {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Calling pattern. Its own grid rather than reusing .calls: this sits inside a
+   board row, so it needs to stay compact and can't assume the service page's
+   column widths. */
+.bt-calls {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.bt-call {
+  display: grid;
+  grid-template-columns: 3.6rem 1.1rem 1fr auto;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.22rem 0;
+  font-size: 0.8rem;
+}
+.bt-call-marker {
+  grid-column: 2;
+  display: flex;
+  justify-content: center;
+}
+.bt-call-time {
+  grid-column: 1;
+  display: flex;
+  gap: 0.35rem;
+  font-variant-numeric: tabular-nums;
+}
+.bt-call-sched {
+  color: var(--muted);
+}
+.bt-call-live {
+  font-weight: 650;
+  color: var(--danger);
+}
+.bt-call-node {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--border);
+}
+.bt-call-departed .bt-call-node {
+  background: var(--muted);
+}
+.bt-call-current .bt-call-node {
+  background: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 25%, transparent);
+}
+.bt-call-current .bt-call-name {
+  font-weight: 700;
+}
+.bt-call-here {
+  font-weight: 600;
+  color: var(--primary);
+}
+.bt-call-cancelled .bt-call-name {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.bt-call-plat {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+/* Movements: a horizontal strip that scrolls on its own rather than widening
+   the card (wide content must never make the page scroll sideways). */
+.bt-movements-strip {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0.25rem;
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.bt-move {
+  flex: 0 0 auto;
+  min-width: 8.5rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.75rem;
+}
+/* The most recent report — where the train actually is. Marked with weight and
+   a border as well as colour. */
+.bt-move-latest {
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 7%, transparent);
+}
+.bt-move-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--border);
+}
+.bt-move-latest .bt-move-dot {
+  background: var(--primary);
+}
+.bt-move-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.bt-move-place {
+  font-weight: 550;
+}
+.bt-move-event {
+  color: var(--muted);
+}
+
+.bt-map {
+  min-width: 0;
+}
+
+.bt-full {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+@media (max-width: 30rem) {
+  /* The 4-column card collapses on narrow screens; keep the panel full-width. */
+  .bt-panel {
+    grid-column: 1 / -1;
+  }
+  .bt-call {
+    grid-template-columns: 3.2rem 1rem 1fr auto;
+    font-size: 0.76rem;
+  }
 }
 
 .board-legend {
@@ -1790,6 +2249,21 @@ a {
 
 .board-position-late {
   color: var(--danger);
+}
+
+/* Position we're still showing but no longer treat as current. Muted, and the
+   dot stops pulsing — a pulsing dot reads as "tracking right now", which is
+   exactly what a stale report is not. The "last seen N min ago" text carries
+   the meaning; the colour only reinforces it. */
+.board-position-stale {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.board-position-stale .board-position-dot {
+  background: var(--muted);
+  box-shadow: none;
+  animation: none;
 }
 
 .board-position-dot {
@@ -4035,9 +4509,6 @@ a.map-tip-anchor:hover .map-tip {
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
   margin: 0.3rem 0 0;
-}
-.commute-push {
-  margin-top: 1rem;
 }
 .push-note {
   color: var(--muted);

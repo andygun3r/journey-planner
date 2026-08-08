@@ -9,6 +9,8 @@ import {
   resolveActiveLegForCommute,
 } from "@signaller/shared";
 import { listCommutes } from "./commutes";
+import { getOverride } from "./commute-overrides";
+import { type CommuteRun, getActiveRun } from "./commute-runs";
 import { type Disruption as BoardDisruption, fetchStationDisruptions } from "./disruptions";
 import { holidayRangesFor } from "./holidays";
 import { enrichJourneyLive } from "./journey-live";
@@ -36,12 +38,18 @@ export type DashboardState =
       /** Set when this leg has pinned services but one no longer matches the
        *  timetable for today — journeys still falls back to a live search. */
       pinStaleNotice?: { headline: string };
+      /**
+       * Set while the user has explicitly started this commute. The leg above
+       * then comes from the run, not from re-resolving the schedule, so the
+       * dashboard can't switch direction underneath someone mid-journey.
+       */
+      run?: CommuteRun;
     }
   | {
       kind: "no-active";
       commuteId: string;
       commuteLabel: string;
-      reason: "rest-of-day" | "holiday" | "no-leg-today";
+      reason: "rest-of-day" | "holiday" | "no-leg-today" | "skipped";
       otherCommutes: OtherCommute[];
       /** Home/work stations for the quick "go home" / "go to work" actions —
        *  from today's leg if one exists, otherwise the nearest day (forward,
@@ -64,6 +72,45 @@ function nearestLegForQuickStart(legs: CommuteLegRecord[], todayDow: number): Co
     if (forward) return forward;
   }
   return null;
+}
+
+/**
+ * Rebuilds the ActiveLeg a started run represents.
+ *
+ * The run stores its own origin/destination, so this holds even for an ad-hoc
+ * run with no scheduled leg behind it. Where the run DOES point at a real leg,
+ * that leg's pins and backup stations are carried across so the panel keeps
+ * showing the pinned service and its fallbacks.
+ *
+ * The window is deliberately widened to the whole day: the run is the thing
+ * keeping this leg on screen, not the clock, and a window that ends while the
+ * user is still travelling is exactly the bug this feature fixes.
+ */
+function legFromRun(run: CommuteRun, legs: CommuteLegRecord[]): ActiveLeg {
+  const leg = run.commuteLegId ? legs.find((l) => l.id === run.commuteLegId) : undefined;
+  const pins = leg?.pins
+    .filter((p) => p.direction === run.direction)
+    .sort((a, b) => a.sequence - b.sequence);
+
+  return {
+    legId: leg?.id ?? run.id,
+    dayOfWeek: leg?.dayOfWeek ?? dayOfWeekForDate(run.serviceDate),
+    direction: run.direction,
+    originCrs: run.originCrs,
+    originLabel: run.originLabel,
+    destCrs: run.destCrs,
+    destLabel: run.destLabel,
+    windowStart: "00:00",
+    windowEnd: "23:59",
+    // A run is by definition already under way — never "upcoming".
+    upcoming: false,
+    backupOriginCrs:
+      (run.direction === "am" ? leg?.backupHomeCrs : leg?.backupWorkCrs) ?? undefined,
+    backupDestCrs:
+      (run.direction === "am" ? leg?.backupWorkCrs : leg?.backupHomeCrs) ?? undefined,
+    backupNote: leg?.backupNote ?? undefined,
+    pinnedLegs: pins && pins.length > 0 ? pins : undefined,
+  };
 }
 
 /**
@@ -103,7 +150,20 @@ export async function getDashboardData(
     homeLabel: commute.homeLabel,
     priority: commute.priority,
   };
-  const leg = resolveActiveLegForCommute(record, commute.legs, holidays, now);
+  // A started run wins over schedule resolution. resolveActiveLegForCommute
+  // answers "what does the timetable say is happening now", which flips from
+  // AM to PM the instant the morning window ends — fine for an idle dashboard,
+  // wrong for someone sitting on the 08:12. getActiveRun also auto-ends the run
+  // once its arrival time passes, so this reverts to normal resolution by
+  // itself with nothing to clean up.
+  const run = await getActiveRun(userId, commute.id, now);
+
+  // Today's single-date exception, if the user set one in the calendar.
+  const todayOverride = await getOverride(userId, commute.id, londonDate(now)).catch(() => null);
+
+  const leg = run
+    ? legFromRun(run, commute.legs)
+    : resolveActiveLegForCommute(record, commute.legs, holidays, now, todayOverride);
 
   if (!leg) {
     const today = londonDate(now);
@@ -126,7 +186,15 @@ export async function getDashboardData(
       kind: "no-active",
       commuteId: commute.id,
       commuteLabel: commute.label,
-      reason: isHoliday ? "holiday" : hasLegToday ? "rest-of-day" : "no-leg-today",
+      // A skipped date is a deliberate "not travelling today", so say that
+      // rather than the misleading "you're done for today".
+      reason: todayOverride?.skipped
+        ? "skipped"
+        : isHoliday
+          ? "holiday"
+          : hasLegToday
+            ? "rest-of-day"
+            : "no-leg-today",
       otherCommutes,
       quickStart,
     };
@@ -143,7 +211,12 @@ export async function getDashboardData(
   let engineOffline = false;
   let pinStaleNotice: { headline: string } | undefined;
 
-  if (leg.pinnedLegs && leg.pinnedLegs.length > 0) {
+  if (run?.journey) {
+    // The user started a specific train. Keep showing that one — re-planning
+    // here would quietly swap them onto a "better" service they aren't on.
+    // Live status is still refreshed below via enrichJourneyLive.
+    journeys = [run.journey];
+  } else if (leg.pinnedLegs && leg.pinnedLegs.length > 0) {
     const pinnedOutcome = await buildPinnedJourney(leg.pinnedLegs, leg.dayOfWeek, today);
     if (pinnedOutcome.ok) {
       journeys = [pinnedOutcome.journey];
@@ -203,5 +276,6 @@ export async function getDashboardData(
     engineOffline,
     otherCommutes,
     pinStaleNotice,
+    run: run ?? undefined,
   };
 }

@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { AdminTestAlert } from "@/components/admin-test-alert";
+import { pushSendConfigured } from "@/lib/push";
 import { requireAdmin } from "@/lib/require-admin";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   await requireAdmin();
+  const canSendPush = pushSendConfigured();
 
   return (
     <main>
@@ -31,6 +34,15 @@ export default async function AdminPage() {
           </Link>
         </li>
       </ul>
+
+      <div className="notice">
+        <h2>Push notifications</h2>
+        <p>
+          Send a test alert to your own device to check push is working. You need push alerts
+          turned on in <Link href="/settings">Settings</Link> first.
+        </p>
+        <AdminTestAlert sendConfigured={canSendPush} />
+      </div>
     </main>
   );
 }
