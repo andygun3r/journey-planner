@@ -31,6 +31,7 @@ export function PushToggle({ vapidPublicKey, initiallySubscribed, initialPrefere
   const [state, setState] = useState<State>("default");
   const [subscribed, setSubscribed] = useState(initiallySubscribed);
   const [prefs, setPrefs] = useState(initialPreferences);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!vapidPublicKey) {
@@ -47,6 +48,7 @@ export function PushToggle({ vapidPublicKey, initiallySubscribed, initialPrefere
   async function enable() {
     if (!vapidPublicKey) return;
     setState("busy");
+    setError(null);
     try {
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
@@ -64,10 +66,21 @@ export function PushToggle({ vapidPublicKey, initiallySubscribed, initialPrefere
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subscription: sub }),
       });
-      if (!res.ok) throw new Error("save failed");
+      if (!res.ok) {
+        throw new Error(
+          res.status === 401
+            ? "You're signed out — sign in again and retry."
+            : `Couldn't save the subscription (HTTP ${res.status}).`,
+        );
+      }
       setSubscribed(true);
       setState("granted");
-    } catch {
+    } catch (err) {
+      // This used to swallow every failure and silently reset the button, so a
+      // failed subscribe looked exactly like never having pressed it — while
+      // the category checkboxes below still saved happily, making it look
+      // opted-in with nothing actually subscribed.
+      setError(err instanceof Error ? err.message : "Couldn't turn on push alerts.");
       setState("granted");
       setSubscribed(false);
     }
@@ -163,6 +176,11 @@ export function PushToggle({ vapidPublicKey, initiallySubscribed, initialPrefere
         >
           {state === "busy" ? "…" : "Get push alerts"}
         </button>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
       )}
     </div>
   );
