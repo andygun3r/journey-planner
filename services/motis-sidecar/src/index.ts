@@ -39,10 +39,23 @@ const IMPORT_MEMORY = process.env.MOTIS_IMPORT_MEMORY;
 // returns, so this can't drift from packages/routing-adapter/src/motis.ts.
 const DATASET_TAG = process.env.MOTIS_DATASET_TAG ?? "gb-railgtfs";
 
-const CONFIG_YML = `server:
+/**
+ * Street routing is opt-in, driven by whether an OSM extract has been
+ * uploaded (see /upload-osm). With `osm` set, motis builds a pedestrian
+ * network and can route door-to-door — walking legs get real geometry, and
+ * a plan can start or end at a coordinate rather than a station.
+ *
+ * It's kept optional because the import cost is real: a GB extract needs
+ * substantially more memory and time than the timetable alone. A deployment
+ * that never uploads an extract behaves exactly as it did before.
+ */
+const OSM_PATH = "/input/osm-extract.osm.pbf";
+
+function configYml(withOsm: boolean): string {
+  return `server:
   web_folder: /ui
   n_threads: 4
-timetable:
+${withOsm ? `osm: ${OSM_PATH}\nstreet_routing: true\n` : ""}timetable:
   first_day: TODAY
   num_days: 365
   datasets:
@@ -50,6 +63,7 @@ timetable:
       path: /input/gb-rail.gtfs.zip
       default_bikes_allowed: false
 `;
+}
 
 /**
  * motis's own image has no bootstrap step that creates /data/config.yml —
@@ -67,7 +81,31 @@ timetable:
  * something to serve"; only /data/data/config.yml means the latter. The
  * motis container's start command waits on the latter (see README step 5).
  */
-async function ensureConfig(): Promise<void> {
+/**
+ * Whether an OSM extract is already sitting in motis's input volume. The
+ * config has to match reality: naming an `osm:` path that doesn't exist makes
+ * `motis import` fail outright, so street routing is enabled only once the
+ * file is actually there.
+ */
+async function osmExtractPresent(): Promise<boolean> {
+  try {
+    await exec("docker", [
+      "run",
+      "--rm",
+      "--volumes-from",
+      MOTIS_CONTAINER,
+      MOTIS_IMAGE,
+      "sh",
+      "-c",
+      `test -s ${OSM_PATH}`,
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureConfig(withOsm: boolean): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn("docker", [
       "run",
@@ -94,13 +132,16 @@ async function ensureConfig(): Promise<void> {
     child.on("exit", (code) =>
       code === 0 ? resolve() : reject(new Error(`docker run (write config.yml) exited ${code}${stderr ? `: ${stderr.trim()}` : ""}`)),
     );
-    child.stdin.end(CONFIG_YML);
+    child.stdin.end(configYml(withOsm));
   });
 }
 
 async function reimport(): Promise<void> {
-  console.log("[motis-sidecar] writing config.yml into motis (separate container)…");
-  await ensureConfig();
+  const withOsm = await osmExtractPresent();
+  console.log(
+    `[motis-sidecar] writing config.yml into motis (street routing ${withOsm ? "ON" : "off — no OSM extract uploaded"})…`,
+  );
+  await ensureConfig(withOsm);
 
   console.log("[motis-sidecar] reimporting GTFS into motis (separate container)…");
   await exec("docker", [
@@ -124,8 +165,12 @@ async function reimport(): Promise<void> {
   await exec("docker", ["restart", MOTIS_CONTAINER]);
 }
 
-/** Streams `body` into /input/gb-rail.gtfs.zip inside motis's own gtfs-data volume via a throwaway container. */
-async function writeGtfsZip(body: NodeJS.ReadableStream): Promise<void> {
+/**
+ * Streams `body` to `destPath` inside motis's own input volume via a
+ * throwaway container. Shared by the GTFS and OSM uploads — an OSM extract is
+ * far larger than a GTFS zip, so the EPIPE guard below matters more, not less.
+ */
+async function writeToMotisVolume(body: NodeJS.ReadableStream, destPath: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn("docker", [
       "run",
@@ -136,7 +181,10 @@ async function writeGtfsZip(body: NodeJS.ReadableStream): Promise<void> {
       MOTIS_IMAGE,
       "sh",
       "-c",
-      "cat > /input/gb-rail.gtfs.zip",
+      // Write to a temp name and move it into place, so an interrupted
+      // upload can't leave a truncated file that the next import treats as
+      // valid input.
+      `cat > ${destPath}.partial && mv ${destPath}.partial ${destPath}`,
     ]);
     let stderr = "";
     child.stderr.on("data", (c: Buffer) => {
@@ -148,7 +196,9 @@ async function writeGtfsZip(body: NodeJS.ReadableStream): Promise<void> {
     child.stdin.on("error", () => {});
     child.on("error", reject);
     child.on("exit", (code) =>
-      code === 0 ? resolve() : reject(new Error(`docker run (write gtfs) exited ${code}${stderr ? `: ${stderr.trim()}` : ""}`)),
+      code === 0
+        ? resolve()
+        : reject(new Error(`docker run (write ${destPath}) exited ${code}${stderr ? `: ${stderr.trim()}` : ""}`)),
     );
     body.pipe(child.stdin);
   });
@@ -182,7 +232,12 @@ const server = createServer((req, res) => {
         await reimport();
         send(res, 200, { ok: true });
       } else if (req.url === "/upload-gtfs") {
-        await writeGtfsZip(req);
+        await writeToMotisVolume(req, "/input/gb-rail.gtfs.zip");
+        send(res, 200, { ok: true });
+      } else if (req.url === "/upload-osm") {
+        // Uploading an extract is what switches street routing on: the next
+        // reimport sees the file and writes an `osm:` config.
+        await writeToMotisVolume(req, OSM_PATH);
         send(res, 200, { ok: true });
       } else {
         send(res, 404, { error: "not found" });

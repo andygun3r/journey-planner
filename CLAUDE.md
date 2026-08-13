@@ -39,6 +39,8 @@ pnpm build | lint | typecheck  # via turbo
 pnpm db:generate               # drizzle-kit generate (after schema.ts edits)
 pnpm db:migrate                # apply migrations
 pnpm etl:timetable             # run the timetable ETL
+# One-off, to enable walking directions (see §6a) — not part of the nightly job:
+pnpm --filter @signaller/etl exec tsx src/index.ts osm
 
 pnpm dev:up                    # postgres/redis (plain docker containers, host ports 5434/6380) + web + darwin-ingest + nr-ingest
 pnpm dev:down                  # stop everything dev:up started
@@ -192,6 +194,54 @@ Batch bulk data driving the routing engine and fares, **not** RDM APIs. Download
   The same etl image also runs as a one-off `docker run --rm etl <command>` for manual
   invocations of any single step.
 
+### 6a. OpenStreetMap extract — street routing *(Geofabrik, not RDG)*
+MOTIS routes **transit only** until an OSM extract is imported. With one it builds a
+pedestrian network, which is what makes journeys door-to-door: plans can start/end at a
+raw coordinate, and walk legs carry real geometry plus distance/duration.
+
+- **Source**: Geofabrik daily `.osm.pbf`. Default is Great Britain (~1.5GB);
+  `OSM_EXTRACT_URL` overrides it — start with a region (e.g. greater-london, ~90MB) to
+  prove the pipeline and measure import cost before going national.
+- **Pipeline**: `etl osm` → `services/etl/src/osm-download.ts` (cached, `OSM_MAX_AGE_DAYS`,
+  temp-file-then-rename so a broken download can't look complete) → `POST /upload-osm` on
+  the motis sidecar. **Deliberately NOT part of the nightly timetable job**: the footpath
+  network barely changes and the file is huge.
+- **The sidecar decides**: `services/motis-sidecar/src/index.ts` checks whether the
+  extract exists in motis's input volume and writes `osm:`/`street_routing: true` into
+  `config.yml` only if it does — naming a path that isn't there makes `motis import` fail
+  outright.
+- **Env**: `OSM_ENABLED=1` (or just `OSM_EXTRACT_URL`) and `OSM_CACHE_DIR` on etl;
+  `MOTIS_STREET_ROUTING=1` on web, which switches `planFlexible` from the
+  "nearest station + walking note" fallback to planning straight to the coordinate.
+  All unset ⇒ prior behaviour exactly.
+- **Gotcha**: a coordinate passed to `plan()` must **not** get the dataset-tag prefix — it
+  isn't a stop id. See `toEnginePlace` in `packages/routing-adapter/src/motis.ts`, and the
+  test in `apps/web/lib/plan-place.test.ts`.
+
+### 7. Geocoding — postcodes.io + OS Places *(neither is RDG)*
+Two complementary lookups turning what a user types into coordinates. Both degrade to
+null/empty rather than throwing, so search still works when either is down.
+
+- **postcodes.io** — free, keyless, **postcodes and outcodes only**. "SW1A 1AA" resolves;
+  "The Shard" does not. Client: `apps/web/lib/geocoding.ts`. A real 404 is distinguished
+  from a transient failure (which gets one retry), so "couldn't find that postcode" is
+  never shown for what was actually a network blip. **Env**: `POSTCODES_IO_BASE_URL`
+  (optional; only for self-hosting).
+- **OS Places (Ordnance Survey)** — authoritative UK address search down to property
+  level, and the **only** free-text path: "The Shard", "14 Baker Street". Client:
+  `apps/web/lib/os-places.ts`. Requests `output_srs=EPSG:4326` so coordinates arrive as
+  WGS84 and never need the BNG reprojection in `packages/shared/src/bng.ts`. Results are
+  identified by **UPRN**, which is what the `place:<uprn>` journey endpoint carries; it's
+  re-resolved at plan time so shared links keep working. **Env**: `OS_PLACES_API_KEY`
+  (from https://osdatahub.os.uk — free tier, then metered).
+  **Unset is a supported state**: place rows simply don't appear and search falls back to
+  stations + postcodes.
+
+Search results are **rail-first**: `/api/stations?q=…&places=1` returns `{ stations,
+places }` as separate arrays, and `destination-input.tsx` renders stations above places
+above the postcode row. They are never merged into one ranked list — a station must not
+lose its position to a similarly-named shop.
+
 ## B. Network Rail Open Data (NROD) feeds
 
 Different account and auth model from RDG. **No API key** — use your
@@ -238,6 +288,7 @@ named signals/aspects.
 | Capability | Feed(s) |
 |------------|---------|
 | Journey routing / planning | DTD Timetable (RJTTF) → GTFS → MOTIS |
+| Walking directions / door-to-door | OpenStreetMap extract → MOTIS street routing |
 | Fares | DTD Fares (RJFAF) |
 | Live departure board | **LDBWS** (primary) |
 | Per-train calling pattern | Service Details |
@@ -246,6 +297,9 @@ named signals/aspects.
 | Disruptions & TOC service status | Disruptions API |
 | Signalling diagram (aspects) | Network Rail TD S-class + SOP maps |
 | Station facilities/accessibility, planned engineering works, operator reference detail | Knowledgebase |
+| Postcode → coordinates | postcodes.io |
+| Free-text address/place search ("The Shard") | OS Places |
+| Basemap under the rail overlay | OpenFreeMap (see `packages/shared/src/map-style.ts`) |
 
 ## Licensing
 

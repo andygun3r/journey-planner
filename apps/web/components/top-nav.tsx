@@ -6,9 +6,11 @@ import { AccountMenu } from "@/components/account-menu";
 
 const LINKS = [
   { href: "/", label: "Dashboard" },
+  // Second, not last: the map is where journeys get planned now, not just a
+  // live-trains view — hence "Map & plan" rather than "Live map".
+  { href: "/map", label: "Map & plan" },
   { href: "/boards", label: "Live departures" },
   { href: "/status", label: "Network status" },
-  { href: "/map", label: "Live map" },
 ];
 
 /** True when `href` is the active section (exact for "/", prefix otherwise). */

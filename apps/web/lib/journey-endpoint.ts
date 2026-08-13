@@ -10,7 +10,9 @@ export type JourneyEndpoint =
   | { type: "crs"; crs: string }
   | { type: "naptan"; naptanId: string }
   | { type: "geo"; lat: number; lon: number }
-  | { type: "postcode"; text: string };
+  | { type: "postcode"; text: string }
+  /** An OS Places UPRN — a free-text place/address search result. */
+  | { type: "place"; uprn: string };
 
 /** Parse a `from`/`to` query param value. Returns null if it's not a recognised shape. */
 export function parseEndpoint(raw: string): JourneyEndpoint | null {
@@ -28,6 +30,12 @@ export function parseEndpoint(raw: string): JourneyEndpoint | null {
   if (value.startsWith("postcode:")) {
     const text = value.slice("postcode:".length).trim();
     return text ? { type: "postcode", text } : null;
+  }
+
+  if (value.startsWith("place:")) {
+    const uprn = value.slice("place:".length).trim();
+    // UPRNs are numeric; anything else is a malformed or hand-edited URL.
+    return /^\d+$/.test(uprn) ? { type: "place", uprn } : null;
   }
 
   if (value.startsWith("naptan:")) {
@@ -54,5 +62,7 @@ export function encodeEndpoint(e: JourneyEndpoint): string {
       return `geo:${e.lat},${e.lon}`;
     case "postcode":
       return `postcode:${e.text}`;
+    case "place":
+      return `place:${e.uprn}`;
   }
 }

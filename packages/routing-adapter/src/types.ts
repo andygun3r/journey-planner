@@ -7,14 +7,29 @@
  * layered on by the web app's journey pipeline.
  */
 
+/**
+ * A journey endpoint the engine can route from/to: either a stop, or a raw
+ * coordinate. Coordinates only work when the engine has street routing
+ * (an OSM extract imported) — without it, MOTIS can't get from a point on a
+ * street to a platform.
+ */
+export type PlanPlace = string | { lat: number; lon: number };
+
 export interface PlanQuery {
-  /** GTFS stop id of the origin (CRS-derived for GB rail). */
-  from: string;
-  to: string;
+  /** GTFS stop id (CRS-derived for GB rail), or a coordinate for door-to-door. */
+  from: PlanPlace;
+  to: PlanPlace;
   /** ISO datetime; defaults to now. */
   when?: string;
   arriveBy?: boolean;
   numItineraries?: number;
+  /**
+   * How the traveller gets to/from transit. Defaults to walking. Only
+   * meaningful with street routing enabled; ignored by a transit-only engine.
+   */
+  accessModes?: Array<"WALK" | "BIKE" | "CAR">;
+  /** Max minutes of walking at either end, when the engine supports it. */
+  maxAccessMinutes?: number;
 }
 
 export interface RawCall {
@@ -23,6 +38,9 @@ export interface RawCall {
   scheduled: string;
   /** Realtime-adjusted time when the engine has one. */
   live?: string;
+  /** WGS84 position of the stop, when the engine reports one. */
+  lat?: number;
+  lon?: number;
 }
 
 export interface RawLeg {
@@ -36,6 +54,17 @@ export interface RawLeg {
   /** Engine marked this as a stay-seated continuation (split/join portion). */
   staySeated: boolean;
   cancelled: boolean;
+  /**
+   * Shape of the leg as [lon, lat] pairs — the order MapLibre wants, and the
+   * same convention as rail_corridor.geometry. Absent when the engine gives no
+   * shape for the leg; callers fall back to the precomputed rail corridor
+   * rather than drawing a straight chord across country.
+   */
+  geometry?: [number, number][];
+  /** Metres covered on a street (walk/bike) leg, when the engine reports it. */
+  distanceMeters?: number;
+  /** Leg duration in seconds, when the engine reports it. */
+  durationSeconds?: number;
 }
 
 export interface RawItinerary {

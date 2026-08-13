@@ -47,12 +47,14 @@ export interface TflJourneyLeg {
   mode: string;
   lineId?: string;
   lineName?: string;
-  departurePoint: { naptanId?: string; name: string };
-  arrivalPoint: { naptanId?: string; name: string };
+  departurePoint: { naptanId?: string; name: string; lat?: number; lon?: number };
+  arrivalPoint: { naptanId?: string; name: string; lat?: number; lon?: number };
   departureTime?: string;
   arrivalTime?: string;
   instruction?: string;
   isDisrupted: boolean;
+  /** Leg shape as [lon, lat] pairs (MapLibre order), when TfL supplies a path. */
+  geometry?: [number, number][];
 }
 
 export interface TflJourney {
@@ -221,12 +223,13 @@ export async function stopPointsByMode(mode: string): Promise<TflStopPoint[]> {
 interface RawJourneyLeg {
   mode?: { id?: string; name?: string };
   routeOptions?: Array<{ lineIdentifier?: { id?: string; name?: string } }>;
-  departurePoint?: { naptanId?: string; commonName?: string };
-  arrivalPoint?: { naptanId?: string; commonName?: string };
+  departurePoint?: { naptanId?: string; commonName?: string; lat?: number; lon?: number };
+  arrivalPoint?: { naptanId?: string; commonName?: string; lat?: number; lon?: number };
   departureTime?: string;
   arrivalTime?: string;
   instruction?: { summary?: string };
   isDisrupted?: boolean;
+  path?: { lineString?: string };
 }
 
 interface RawJourney {
@@ -234,6 +237,29 @@ interface RawJourney {
   arrivalDateTime?: string;
   duration?: number;
   legs?: RawJourneyLeg[];
+}
+
+/**
+ * TfL journey legs carry their shape as a JSON-encoded string of [lat, lon]
+ * pairs — the opposite order to the [lon, lat] MapLibre and the rest of
+ * Signaller use, so it gets flipped here rather than at every call site.
+ * Malformed paths yield undefined; a leg without a shape is still a valid leg.
+ */
+function parseLineString(lineString: string | undefined): [number, number][] | undefined {
+  if (!lineString) return undefined;
+  try {
+    const parsed = JSON.parse(lineString) as unknown;
+    if (!Array.isArray(parsed)) return undefined;
+    const coords: [number, number][] = [];
+    for (const point of parsed) {
+      if (!Array.isArray(point) || point.length < 2) continue;
+      const [lat, lon] = point as [unknown, unknown];
+      if (typeof lat === "number" && typeof lon === "number") coords.push([lon, lat]);
+    }
+    return coords.length >= 2 ? coords : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function toJourney(raw: RawJourney): TflJourney {
@@ -246,15 +272,20 @@ function toJourney(raw: RawJourney): TflJourney {
       departurePoint: {
         naptanId: leg.departurePoint?.naptanId,
         name: leg.departurePoint?.commonName ?? "",
+        lat: leg.departurePoint?.lat,
+        lon: leg.departurePoint?.lon,
       },
       arrivalPoint: {
         naptanId: leg.arrivalPoint?.naptanId,
         name: leg.arrivalPoint?.commonName ?? "",
+        lat: leg.arrivalPoint?.lat,
+        lon: leg.arrivalPoint?.lon,
       },
       departureTime: leg.departureTime,
       arrivalTime: leg.arrivalTime,
       instruction: leg.instruction?.summary,
       isDisrupted: leg.isDisrupted === true,
+      geometry: parseLineString(leg.path?.lineString),
     };
   });
 

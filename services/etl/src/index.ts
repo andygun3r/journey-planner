@@ -8,7 +8,7 @@ import { syncTocOperators } from "./kb-tocs.js";
 import { snapStations } from "./snap-stations.js";
 import { trackModel } from "./track-model.js";
 import { syncTrackModelFromSftp } from "./track-model-sftp.js";
-import { fares, packageCommand, postprocessOnly, timetable } from "./commands.js";
+import { fares, osmCommand, packageCommand, postprocessOnly, timetable } from "./commands.js";
 import { startServer } from "./server.js";
 
 // HTTP_PORT set (etl-cron / etl app in standing-service mode) starts the
@@ -88,13 +88,22 @@ if (httpPort) {
       // Re-load fares from the MariaDB scratch DB into Postgres (skips download/import).
       await guarded("etl-fares", "fares", () => loadFares());
       break;
+    case "osm":
+      // Download an OSM extract and push it to the motis sidecar, enabling
+      // street routing (real walking legs, door-to-door plans) from the next
+      // reimport. Deliberately NOT part of the nightly timetable job: the
+      // footpath network barely changes and the file is large. Run it when
+      // first enabling street routing, then occasionally to refresh.
+      // `etl osm --force` re-downloads even if the cached extract is fresh.
+      await osmCommand(process.argv.includes("--force"));
+      break;
     case "server":
       // Explicit alternative to HTTP_PORT for local/manual runs.
       startServer(Number(process.argv[3] ?? 4000));
       break;
     default:
       console.error(
-        "Usage: etl <timetable|package|fares|load-fares|postprocess|snap-stations|orm-signals|rail-corridors|track-model|track-model-sftp|kb-facilities|kb-incidents|kb-tocs|server>",
+        "Usage: etl <timetable|package|fares|load-fares|postprocess|snap-stations|orm-signals|rail-corridors|track-model|track-model-sftp|kb-facilities|kb-incidents|kb-tocs|osm|server>",
       );
       process.exit(1);
   }

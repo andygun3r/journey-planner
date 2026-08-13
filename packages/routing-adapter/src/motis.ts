@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type {
   DepartureBoardQuery,
+  PlanPlace,
   PlanQuery,
   RawDeparture,
   RawItinerary,
@@ -25,6 +26,20 @@ const MotisPlace = z
     scheduledArrival: z.string().optional(),
     /** Platform / track code; MOTIS surfaces the GTFS platform_code here. */
     description: z.string().optional(),
+    lat: z.number().optional(),
+    lon: z.number().optional(),
+  })
+  .loose();
+
+/**
+ * MOTIS returns leg shapes as an encoded polyline (the Google format), with a
+ * `precision` telling us the decimal places used — 5 in the classic format, but
+ * MOTIS commonly emits 6, so never assume.
+ */
+const MotisLegGeometry = z
+  .object({
+    points: z.string(),
+    precision: z.number().default(5),
   })
   .loose();
 
@@ -37,6 +52,11 @@ const MotisLeg = z
     routeShortName: z.string().optional(),
     headsign: z.string().optional(),
     intermediateStops: z.array(MotisPlace).default([]),
+    legGeometry: MotisLegGeometry.optional(),
+    /** Metres walked/cycled — MOTIS sets this on street legs. */
+    distance: z.number().optional(),
+    /** Leg duration in seconds. */
+    duration: z.number().optional(),
     interlineWithPreviousLeg: z.boolean().default(false),
     cancelled: z.boolean().default(false),
     realTime: z.boolean().default(false),
@@ -82,6 +102,14 @@ function toEngineStopId(crs: string): string {
   return crs.includes("_") ? crs : `${DATASET_TAG}_${crs}`;
 }
 
+/**
+ * MOTIS accepts either a stop id or a bare "lat,lon" for fromPlace/toPlace.
+ * A coordinate must NOT get the dataset-tag prefix — it isn't a stop id.
+ */
+function toEnginePlace(place: PlanPlace): string {
+  return typeof place === "string" ? toEngineStopId(place) : `${place.lat},${place.lon}`;
+}
+
 function fromEngineStopId(stopId: string): string {
   return stopId.startsWith(`${DATASET_TAG}_`) ? stopId.slice(DATASET_TAG.length + 1) : stopId;
 }
@@ -98,6 +126,44 @@ export function gtfsTripIdFromEngine(tripId: string): string {
   return at >= 0 ? tripId.slice(at + marker.length) : tripId;
 }
 
+/**
+ * Decode an encoded polyline into [lon, lat] pairs. The format stores signed
+ * offsets from the previous point as zigzag-encoded, 5-bit chunked base64-ish
+ * characters. Latitude comes first in the wire format; we emit [lon, lat] so
+ * the result drops straight into MapLibre.
+ */
+export function decodePolyline(points: string, precision = 5): [number, number][] {
+  const factor = 10 ** precision;
+  const out: [number, number][] = [];
+  let index = 0;
+  let lat = 0;
+  let lon = 0;
+
+  while (index < points.length) {
+    // Each coordinate is two varints in a row: latitude delta, then longitude.
+    const deltas: number[] = [];
+    for (let d = 0; d < 2; d += 1) {
+      let result = 0;
+      let shift = 0;
+      let byte: number;
+      do {
+        if (index >= points.length) return out; // truncated input — keep what decoded cleanly
+        byte = points.charCodeAt(index) - 63;
+        index += 1;
+        result |= (byte & 0x1f) << shift;
+        shift += 5;
+      } while (byte >= 0x20);
+      // Low bit is the sign flag (zigzag), so odd values are negative.
+      deltas.push(result & 1 ? ~(result >> 1) : result >> 1);
+    }
+    lat += deltas[0]!;
+    lon += deltas[1]!;
+    out.push([lon / factor, lat / factor]);
+  }
+
+  return out;
+}
+
 function toCall(place: z.infer<typeof MotisPlace>, kind: "departure" | "arrival") {
   const scheduled =
     kind === "departure"
@@ -109,11 +175,16 @@ function toCall(place: z.infer<typeof MotisPlace>, kind: "departure" | "arrival"
     name: place.name,
     scheduled: scheduled ?? "",
     live: live && live !== scheduled ? live : undefined,
+    lat: place.lat,
+    lon: place.lon,
   };
 }
 
 function toRawLeg(leg: z.infer<typeof MotisLeg>): RawLeg {
   const rail = leg.mode !== "WALK" && leg.mode.toLowerCase() !== "walk";
+  const shape = leg.legGeometry
+    ? decodePolyline(leg.legGeometry.points, leg.legGeometry.precision)
+    : [];
   return {
     mode: rail ? "rail" : "walk",
     origin: toCall(leg.from, "departure"),
@@ -124,6 +195,9 @@ function toRawLeg(leg: z.infer<typeof MotisLeg>): RawLeg {
     intermediateCalls: leg.intermediateStops.map((s) => toCall(s, "departure")),
     staySeated: leg.interlineWithPreviousLeg,
     cancelled: leg.cancelled,
+    geometry: shape.length >= 2 ? shape : undefined,
+    distanceMeters: leg.distance,
+    durationSeconds: leg.duration,
   };
 }
 
@@ -141,13 +215,24 @@ export class MotisEngine implements RoutingEngine {
   }
 
   async plan(query: PlanQuery): Promise<RawItinerary[]> {
-    const json = await this.get("/api/v1/plan", {
-      fromPlace: toEngineStopId(query.from),
-      toPlace: toEngineStopId(query.to),
+    const params: Record<string, string> = {
+      fromPlace: toEnginePlace(query.from),
+      toPlace: toEnginePlace(query.to),
       time: query.when ?? new Date().toISOString(),
       arriveBy: String(query.arriveBy ?? false),
       numItineraries: String(query.numItineraries ?? 5),
-    });
+    };
+    // Only sent when asked for: a transit-only engine (no OSM imported)
+    // rejects or ignores these, and the default behaviour is what we had.
+    if (query.accessModes?.length) {
+      params.preTransitModes = query.accessModes.join(",");
+      params.postTransitModes = query.accessModes.join(",");
+    }
+    if (query.maxAccessMinutes !== undefined) {
+      params.maxPreTransitTime = String(query.maxAccessMinutes * 60);
+      params.maxPostTransitTime = String(query.maxAccessMinutes * 60);
+    }
+    const json = await this.get("/api/v1/plan", params);
     const parsed = MotisPlanResponse.parse(json);
     return parsed.itineraries.map((it) => ({
       legs: it.legs.map(toRawLeg),

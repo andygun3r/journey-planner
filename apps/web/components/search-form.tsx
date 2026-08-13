@@ -99,8 +99,11 @@ export function SearchForm({ stations, initialFrom = null, initialTo = null }: P
       fromLabel = "Your location";
     }
 
-    const toParam = to.kind === "station" ? to.crs : `postcode:${to.text}`;
-    const toLabel = to.kind === "station" ? to.name : to.text;
+    // Mirrors encodeEndpoint in lib/journey-endpoint.ts — kept as a literal
+    // here because that module is server-side.
+    const toParam =
+      to.kind === "station" ? to.crs : to.kind === "place" ? `place:${to.uprn}` : `postcode:${to.text}`;
+    const toLabel = to.kind === "postcode" ? to.text : to.name;
 
     setSubmitting(true);
     recordRecent({ from: fromParam, fromName: fromLabel, to: toParam, toName: toLabel });

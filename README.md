@@ -57,6 +57,25 @@ project, wired to `web` purely over HTTP env vars (`NEXT_PUBLIC_TILES_URL`/
 `ORM_PUBLIC_HOST`), the same pattern as `MOTIS_URL` or `ETL_URL`. See "Map
 stack" under Deploying.
 
+**Basemap.** OpenRailwayMap-vector is a rail-only overlay — 460+ layers of
+track and signals, but no land, water or place labels. `packages/shared/src/map-style.ts`
+merges it over [OpenFreeMap](https://openfreemap.org/)'s free, keyless vector
+basemap and retints that basemap to the Platform White palette, so the map
+matches the rest of the app rather than competing with it. Both `apps/web` and
+`apps/mobile` use this one module. Two constraints shape the merge and are
+worth knowing before editing it:
+
+- A MapLibre style may declare only **one** `glyphs` URL, and neither font
+  server carries the other's fonts. OpenRailwayMap's glyphs win (its label
+  layers name `OpenRailwayMap-Regular`/`-Bold` directly) and the basemap's
+  `Noto Sans` references are remapped onto them.
+- Basemap sources and layers are **prefixed** (`basemap-`) so they can never
+  collide with OpenRailwayMap's 21 sources / 464 layers, and are prepended so
+  every rail feature draws on top.
+
+If OpenFreeMap is unreachable the rail overlay still renders, on a plain
+Platform White ground.
+
 ## Getting started
 
 ```sh

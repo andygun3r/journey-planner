@@ -18,6 +18,7 @@ import { TrainDetailPanel } from "./train-detail-panel";
 import { BusStopPanel } from "./bus-stop-panel";
 import { BusRoutePanel } from "./bus-route-panel";
 import { addSignallingLayers, SignallingMapLayer } from "./signalling-map-layer";
+import { addJourneyLayers } from "./journey-map-layer";
 import {
   addMapIcons,
   arrowOffsetEms,
@@ -193,8 +194,21 @@ function routeToGeoJSON(train: LiveTrain | null): FeatureCollection<LineString> 
   return { type: "FeatureCollection", features };
 }
 
-export function LiveMap() {
+interface LiveMapProps {
+  /**
+   * Called once the map is created and its style has loaded. Lets a parent
+   * (map-shell.tsx) attach its own layers without this component having to
+   * know about them. Optional — /map's plain live view passes nothing.
+   */
+  onMapReady?: (map: maplibregl.Map) => void;
+}
+
+export function LiveMap({ onMapReady }: LiveMapProps = {}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Held in a ref so a parent passing a new inline callback each render can't
+  // re-trigger the map-creation effect and rebuild the whole canvas.
+  const onMapReadyRef = useRef(onMapReady);
+  onMapReadyRef.current = onMapReady;
   const mapRef = useRef<maplibregl.Map | null>(null);
   // Keyed by train id rather than a whole-array replace, because the stream
   // sends what changed rather than resending every train each tick.
@@ -520,8 +534,8 @@ export function LiveMap() {
       });
       // TfL static backdrop: small neutral dots, well below trains/buses visually.
       // A light stroke (rather than the dark-navy one used elsewhere) keeps
-      // these legible against both the light and dark CARTO basemap variants —
-      // a dark stroke on bus stops was reading as near-invisible in dark mode.
+      // these legible against the pale basemap without competing with the rail
+      // overlay for attention.
       map.addLayer({
         id: `${TFL_STOPS_SOURCE}-circle`,
         type: "circle",
@@ -737,6 +751,11 @@ export function LiveMap() {
       map.on("mouseleave", `${TFL_BUSES_SOURCE}-icon`, () => {
         busPopup.remove();
       });
+
+      // Added last so a planned route draws above the live/TfL layers — the
+      // journey you asked for should never be hidden under a bus stop.
+      addJourneyLayers(map);
+      onMapReadyRef.current?.(map);
     });
 
     map.on("moveend", () => fetchBusesRef.current());

@@ -9,7 +9,8 @@ import { postprocessGtfs } from "./postprocess-gtfs.js";
 import { loadFares } from "./load-fares.js";
 import { loadIntoPostgres } from "./load-postgres.js";
 import { packageBundle } from "./package-bundle.js";
-import { pushGtfsAndReimport } from "./motis-reimport.js";
+import { pushGtfsAndReimport, pushOsmExtract } from "./motis-reimport.js";
+import { downloadOsmExtract } from "./osm-download.js";
 
 /**
  * Pipeline commands shared by the CLI dispatcher (index.ts) and the HTTP
@@ -157,4 +158,28 @@ export async function fares(source?: string): Promise<void> {
   } else {
     await importFaresZip(await downloadFeed("fares", ARCHIVE_DIR));
   }
+}
+
+/**
+ * Download an OSM extract and push it to the motis sidecar, which switches
+ * street routing on from the next reimport — real walking legs with geometry,
+ * and plans that can start or end at a coordinate rather than a station.
+ *
+ * Standalone rather than part of `timetable`: the footpath network changes
+ * slowly and the extract is large, so re-uploading it nightly alongside the
+ * timetable would cost a great deal for almost nothing. Run it when enabling
+ * street routing, and occasionally after that.
+ */
+export async function osmCommand(force = false): Promise<void> {
+  const extract = await downloadOsmExtract(force);
+  if (!extract) return; // not enabled — downloadOsmExtract already explained why
+
+  // Only claim success if the upload actually happened; without the sidecar
+  // configured, the extract is merely sitting on this machine's disk.
+  const uploaded = await pushOsmExtract(extract);
+  console.log(
+    uploaded
+      ? "OSM extract uploaded. Run `etl timetable` (or wait for the nightly job) to reimport with street routing."
+      : `OSM extract downloaded to ${extract}, but not uploaded — set MOTIS_REIMPORT_URL/MOTIS_REIMPORT_KEY to push it to motis.`,
+  );
 }

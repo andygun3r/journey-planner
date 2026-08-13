@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { searchPlaces } from "@/lib/os-places";
 import { getStations } from "@/lib/stations";
 
 export const dynamic = "force-dynamic";
@@ -28,10 +29,32 @@ export async function GET(req: NextRequest) {
     const q = req.nextUrl.searchParams.get("q");
     // With ?q=, return a ranked shortlist (typeahead). Without, the full list
     // (kept for callers that still embed it), cached for 5 min.
-    const body = q != null ? rank(stations, q) : stations;
-    return NextResponse.json(body, {
-      headers: { "Cache-Control": "public, max-age=300" },
-    });
+    if (q == null) {
+      return NextResponse.json(stations, {
+        headers: { "Cache-Control": "public, max-age=300" },
+      });
+    }
+
+    const ranked = rank(stations, q);
+
+    // `?places=1` opts a caller into free-text place/address results as well.
+    // They're returned in a separate array, never merged into the station
+    // list: rail comes first in this app, and a station must never lose its
+    // place in the list to a similarly-named shop.
+    if (req.nextUrl.searchParams.get("places") !== "1") {
+      return NextResponse.json(ranked, { headers: { "Cache-Control": "public, max-age=300" } });
+    }
+
+    // Fewer place rows once stations already fill the list, so the dropdown
+    // stays a glanceable length either way.
+    const places = await searchPlaces(q, ranked.length >= 4 ? 3 : 5).catch(() => []);
+
+    return NextResponse.json(
+      { stations: ranked, places },
+      // Places come from a metered API — cache a little longer than the
+      // station list, which is served from memory anyway.
+      { headers: { "Cache-Control": "public, max-age=600" } },
+    );
   } catch {
     return NextResponse.json([], { status: 503 });
   }
