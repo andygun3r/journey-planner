@@ -72,11 +72,6 @@ export function trackRoleName(trackId: string): string {
   return TRACK_ROLE_NAMES[trackId] ?? `Line ${trackId}`;
 }
 
-/** Whether a running line carries up-direction traffic (toward London). */
-export function isUpTrack(trackId: string): boolean {
-  return trackId.startsWith("2");
-}
-
 function s(crs: string, name: string, junction?: boolean): CorridorStation {
   return junction ? { crs, name, junction: true } : { crs, name };
 }

@@ -1,0 +1,45 @@
+// Copy this file to Signaller.xcconfig and fill in your own values.
+// Signaller.xcconfig is gitignored — it holds your signing identity and the
+// backend host, neither of which should be committed.
+
+// Your Apple Developer team id. Find it at
+// developer.apple.com/account → Membership.
+SIGNALLER_DEV_TEAM = XXXXXXXXXX
+
+// Personal/free Apple teams cannot create profiles with Associated Domains or
+// Push Notifications. Keep Debug blank for local device installs with a
+// Personal Team. If you have a paid Apple Developer Program team and want to
+// test those capabilities in Debug, set this to Signaller/App/Signaller.entitlements.
+SIGNALLER_CODE_SIGN_ENTITLEMENTS_DEBUG =
+
+// Release keeps the production entitlements. This requires a paid Apple
+// Developer Program team with Associated Domains and Push Notifications enabled
+// on the App ID.
+SIGNALLER_CODE_SIGN_ENTITLEMENTS_RELEASE = Signaller/App/Signaller.entitlements
+
+// Where the Next.js web app lives.
+//
+// GOTCHA: xcconfig treats "//" as a comment, even inside a value — writing
+// http://localhost:3000 here silently truncates to "http:". SLASHES works
+// around that: the two slashes are only adjacent after substitution, so the
+// comment stripper never sees them. Always build URLs as
+// scheme:$(SLASHES)host.
+SLASHES = /
+
+// Debug points at your dev server. On the simulator plain http://localhost
+// works as-is; on a physical device localhost is the *phone*, so use your
+// Mac's LAN IP (e.g. http:$(SLASHES)192.168.1.20:3000) or a tunnel.
+SIGNALLER_API_BASE_URL_DEBUG = http:$(SLASHES)/localhost:3000
+
+// Release must be a real host, e.g. https:$(SLASHES)signaller.yourdomain.com
+// Left blank on purpose: a blank value trips the "Check API base URL" build
+// phase, which is the point — the previous placeholder
+// (https://signaller.example) shipped a build that could never reach a backend.
+SIGNALLER_API_BASE_URL_RELEASE =
+
+// Bare hostname (no scheme, no trailing slash) of the Release backend, e.g.
+// signaller.yourdomain.com. Used by Signaller.entitlements for the
+// webcredentials:/applinks: associated domains that passkey sign-in and
+// magic-link deep links need. Must match BETTER_AUTH_URL's host on the server,
+// since Better Auth derives its passkey rpID from it.
+SIGNALLER_ASSOCIATED_DOMAIN =

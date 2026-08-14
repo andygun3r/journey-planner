@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { magicLink } from "better-auth/plugins";
+import { bearer, magicLink } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { apiKey } from "@better-auth/api-key";
 import { Resend } from "resend";
@@ -67,6 +67,12 @@ export const auth = betterAuth({
       rpName: "Signaller",
       origin: appUrl,
     }),
+    // Lets the native iOS app authenticate with `Authorization: Bearer <token>`
+    // instead of a session cookie. Cookies are the wrong shape on iOS: they're
+    // invisible to the Live Activity extension and can't answer "am I signed
+    // in?" offline. Every existing session-guarded route keeps working
+    // unchanged — getSession() accepts either credential.
+    bearer(),
     apiKey(),
   ],
 });

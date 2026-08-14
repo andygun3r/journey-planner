@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BLUEPRINT_TOP,
+  CRS_COLUMN_X,
   LABEL_GUTTER,
   TRACK_PITCH,
   buildBlueprint,
+  waterlooPlatformGroup,
   type BlueprintModel,
   type BlueprintTrack,
   type StationPosition,
@@ -77,6 +79,14 @@ interface CorridorDiagram extends DiagramState {
 }
 
 const BLUEPRINT_LABEL_X = 20;
+/**
+ * Where Waterloo's platform stubs start, and how far apart they sit.
+ *
+ * 24 stubs have to fit in the label gutter to the left of the running lines,
+ * so the pitch is deliberately tight — these are markers, not tracks to scale.
+ */
+const THROAT_LEFT = 14;
+const THROAT_PITCH = 7;
 
 function numericPlatform(platform: string | undefined): number | undefined {
   const match = platform?.match(/\d+/);
@@ -97,16 +107,28 @@ function numericPlatform(platform: string | undefined): number | undefined {
 function trackForTrain(
   tracks: BlueprintTrack[],
   platform: string | undefined,
+  y: number,
 ): { track: BlueprintTrack; inferred: boolean } | undefined {
   const n = numericPlatform(platform);
   if (!n || tracks.length === 0) return undefined;
 
-  // SMART gives a platform, not a line. Odd/even platform numbering does track
-  // up/down direction at most SWML stations, so this is a real signal — but it
-  // is an inference, and the renderer marks trains placed this way.
+  // Only lines that exist at this point on the corridor — past Worting Junction
+  // there is no slow pair to put anything on.
+  const live = tracks.filter((t) => y >= t.fromY && y <= t.toY);
+  if (live.length === 0) return undefined;
+
+  // SMART gives a platform, not a line. Odd/even platform numbering tracks
+  // up/down direction at most SWML stations, so direction is a real signal —
+  // but which of that direction's lines (fast or slow) is not, so low platform
+  // numbers go to the fast line and higher ones to the slow, matching the usual
+  // layout. Every train placed this way is marked as inferred.
   const wantUp = n % 2 === 1;
-  const candidates = tracks.filter((t) => t.trackId.startsWith(wantUp ? "2" : "1"));
-  const chosen = candidates[0] ?? tracks[0];
+  const sameDirection = live.filter((t) => t.trackId.startsWith(wantUp ? "2" : "1"));
+  const candidates = sameDirection.length ? sameDirection : live;
+  // "100" lines are the fast/main pair, "200" the slow — see trackRoleName.
+  const fast = candidates.find((t) => t.trackId.endsWith("100"));
+  const slow = candidates.find((t) => t.trackId.endsWith("200"));
+  const chosen = (n <= 2 ? fast : slow) ?? fast ?? candidates[0];
   return chosen ? { track: chosen, inferred: true } : undefined;
 }
 
@@ -120,7 +142,7 @@ function trackForTrain(
  * All geometry comes from lib/blueprint-layout.ts so it can be tested without
  * a DOM; this function only draws.
  */
-function CorridorBlueprint({
+export function CorridorBlueprint({
   model,
   trainsByStation,
   signalCounts,
@@ -136,26 +158,94 @@ function CorridorBlueprint({
   const trackRight = tracks.length ? Math.max(...tracks.map((t) => t.x)) : LABEL_GUTTER;
   const unknownX = trackRight + TRACK_PITCH;
 
-  // Mileage runs one way or the other along the ELR; map it to y using the two
-  // outermost stations we actually placed, so track spans line up with ticks.
   const placed = stations.filter((s) => s.mile !== undefined);
-  const yForMile = (mile: number): number => {
-    const first = placed[0];
-    const last = placed.at(-1);
-    if (!first || !last || first.mile === last.mile) return firstY;
-    const span = (last.mile as number) - (first.mile as number);
-    const ratio = (mile - (first.mile as number)) / span;
-    return first.y + ratio * (last.y - first.y);
-  };
+
+  /**
+   * London Waterloo's 24-platform throat, when this corridor starts there.
+   *
+   * Each platform is a short stub above the first station tick, curving into
+   * the running lines. The grouping is the real one — 1-4 and 20-24 feed the
+   * Windsor lines, 5-19 the main lines — rather than the old renderer's
+   * `(platform - 1) % laneCount`, which dealt platforms out to lanes in
+   * rotation and so put adjacent platforms on unrelated running lines.
+   *
+   * Platforms whose group has no matching running line in this corridor's
+   * track data (the Windsor lines are a separate ELR) still get drawn as
+   * stubs — they exist at Waterloo — but fan into the nearest column rather
+   * than claiming to join a line the data does not show here.
+   */
+  const terminal = stations[0]?.crs === "WAT" ? stations[0] : undefined;
+  // Centre the fan of stubs over the running lines rather than in the label
+  // gutter, so it reads as the throat feeding those lines and never collides
+  // with the station names to its left.
+  const throatWidth = 23 * THROAT_PITCH;
+  const throatLeft = trackLeft + (trackRight - trackLeft) / 2 - throatWidth / 2;
+  const throat = terminal
+    ? Array.from({ length: 24 }, (_, i) => i + 1).map((platform) => {
+        const group = waterlooPlatformGroup(platform);
+        // Contiguous blocks in platform order: platforms next to each other
+        // feed the same line, and the blocks run left to right, so the fan
+        // converges cleanly. A round-robin assignment made every stub cross its
+        // neighbours into a lattice — a real throat does cross, but not like
+        // that, and inventing crossings on a signalling diagram implies
+        // conflicting moves that are not in the data.
+        //
+        // Which platform truly feeds which line is a property of the throat's
+        // pointwork, and Track Model does not record it; the honest claim here
+        // is the group (see waterlooPlatformGroup), which the tooltip states.
+        const block = Math.floor(((platform - 1) / 24) * (tracks.length || 1));
+        const target = tracks[Math.min(block, tracks.length - 1)];
+        return {
+          platform,
+          group,
+          x: throatLeft + (platform - 1) * THROAT_PITCH,
+          targetX: target?.x ?? trackLeft,
+        };
+      })
+    : [];
+  // Clear of the rotated running-line labels, which sit just above the first
+  // station tick; the throat occupies the band above those.
+  const throatTop = BLUEPRINT_TOP - 190;
 
   return (
     <>
       <rect x={0} y={0} width={model.width} height={model.height} className="sig-blueprint-paper" />
 
+      {terminal && (
+        <g className="sig-blueprint-waterloo" aria-label="London Waterloo platform throat">
+          {throat.map((p) => (
+            <g key={p.platform}>
+              <path
+                d={`M ${p.x} ${throatTop} L ${p.x} ${throatTop + 30} C ${p.x} ${
+                  throatTop + 78
+                }, ${p.targetX} ${throatTop + 88}, ${p.targetX} ${terminal.y}`}
+                className="sig-blueprint-platform-fan"
+              />
+              <text
+                x={p.x}
+                y={throatTop - 6}
+                className="sig-blueprint-platform-number"
+                textAnchor="start"
+                transform={`rotate(-90 ${p.x} ${throatTop - 6})`}
+              >
+                {p.platform}
+                <title>
+                  {`Waterloo platform ${p.platform} — ${
+                    p.group === "windsor" ? "Windsor lines" : "main lines"
+                  }`}
+                </title>
+              </text>
+            </g>
+          ))}
+        </g>
+      )}
+
       <g className="sig-blueprint-lanes">
         {tracks.map((track) => {
-          const top = placed.length ? Math.max(firstY, yForMile(track.fromMile)) : firstY;
-          const bottom = placed.length ? Math.min(lastY, yForMile(track.toMile)) : lastY;
+          // Each line knows the first and last station y it exists at, so a
+          // line that ends partway down the corridor simply stops there.
+          const top = track.fromY;
+          const bottom = track.toY;
           return (
             <g key={track.trackId}>
               <line
@@ -165,12 +255,19 @@ function CorridorBlueprint({
                 y2={Math.max(top, bottom) + 14}
                 className="sig-blueprint-road"
               />
+              {/*
+                Written upright immediately above the first station tick. The
+                labels used to be rotated -52°, which put them inside Waterloo's
+                platform fan where the two overlapped illegibly; vertical text
+                along each column keeps them clear and is easier to read than a
+                diagonal anyway.
+              */}
               <text
-                x={track.x}
-                y={BLUEPRINT_TOP - 26}
+                x={track.x - 4}
+                y={firstY - 12}
                 className="sig-blueprint-road-label"
                 textAnchor="start"
-                transform={`rotate(-52 ${track.x} ${BLUEPRINT_TOP - 26})`}
+                transform={`rotate(-90 ${track.x - 4} ${firstY - 12})`}
               >
                 {track.label}
               </text>
@@ -203,30 +300,30 @@ function CorridorBlueprint({
                 {station.name}
                 {station.estimated && (
                   <title>
-                    {station.name}: position estimated — no Track Model match, so this station is
-                    spaced evenly rather than by real mileage.
+                    {`${station.name}: position estimated — no Track Model match, so this station is spaced evenly rather than by real mileage.`}
                   </title>
                 )}
               </text>
-              <text x={LABEL_GUTTER - 34} y={station.y + 3.5} className="sig-blueprint-chainage">
+              <text x={CRS_COLUMN_X} y={station.y + 3.5} className="sig-blueprint-chainage" textAnchor="end">
                 {station.crs}
               </text>
               {station.estimated && (
                 <circle
-                  cx={LABEL_GUTTER - 14}
+                  cx={CRS_COLUMN_X + 8}
                   cy={station.y}
                   r={2}
                   className="sig-blueprint-estimated"
                 >
-                  <title>Position estimated — no Track Model match for {station.name}.</title>
+                  <title>{`Position estimated — no Track Model match for ${station.name}.`}</title>
                 </circle>
               )}
               {platformCount > 0 && (
                 <text x={trackRight + 18} y={station.y + 3} className="sig-blueprint-platform-count">
                   {platformCount}p
                   <title>
-                    {station.name}: {platformCount} platform{platformCount === 1 ? "" : "s"} in
-                    matched berth data
+                    {`${station.name}: ${platformCount} platform${
+                      platformCount === 1 ? "" : "s"
+                    } in matched berth data`}
                   </title>
                 </text>
               )}
@@ -249,13 +346,13 @@ function CorridorBlueprint({
               {signals.map((aspect, i) => (
                 <circle
                   key={`${station.crs}-${aspect}-${i}`}
-                  cx={trackLeft - 22}
-                  cy={station.y - 8 + i * 4.2}
-                  r={2.6}
+                  cx={trackLeft - 26 + i * 6}
+                  cy={station.y - 11}
+                  r={2.4}
                   className={`sig-signal-head sig-signal-${aspect}`}
                 >
                   <title>
-                    {station.name}: {counts.red} red, {counts.off} off, {counts.unknown} unknown
+                    {`${station.name}: ${counts.red} red, ${counts.off} off, ${counts.unknown} unknown`}
                   </title>
                 </circle>
               ))}
@@ -266,25 +363,25 @@ function CorridorBlueprint({
 
       <g className="sig-blueprint-branches">
         {branches.map((branch, i) => {
-          const right = branch.side === "down";
-          const stubX = right ? trackRight + 46 : trackLeft - 46;
-          const endX = right ? stubX + 34 : stubX - 34;
+          // Every branch hangs to the right, where the gutter is. `side` says
+          // which running line it physically leaves from (up or down), which
+          // sets where the spur starts, not which edge of the page it sits on —
+          // putting some labels on the left ran them straight through the
+          // station names in the left gutter.
+          const startX = branch.side === "up" ? trackLeft : trackRight;
+          const stubX = unknownX + 26;
+          const endX = stubX + 30;
           // Stagger branches leaving the same station so their labels don't stack.
           const sameStation = branches.slice(0, i).filter((b) => b.atCrs === branch.atCrs).length;
-          const y = branch.y + sameStation * 13;
+          const y = branch.y + sameStation * 15;
           return (
             <a key={branch.id} href={`/signalling/${branch.id}`} className="sig-blueprint-branch-link">
               <path
-                d={`M ${right ? trackRight : trackLeft} ${branch.y} C ${stubX} ${branch.y}, ${stubX} ${y}, ${endX} ${y}`}
+                d={`M ${startX} ${branch.y} C ${stubX - 20} ${branch.y}, ${stubX - 10} ${y}, ${endX} ${y}`}
                 className="sig-blueprint-branch-road"
               />
               <circle cx={endX} cy={y} r={4} className="sig-blueprint-branch-node" />
-              <text
-                x={right ? endX + 9 : endX - 9}
-                y={y + 3.5}
-                className="sig-blueprint-branch-label"
-                textAnchor={right ? "start" : "end"}
-              >
+              <text x={endX + 9} y={y + 3.5} className="sig-blueprint-branch-label" textAnchor="start">
                 {branch.label}
               </text>
             </a>
@@ -295,21 +392,28 @@ function CorridorBlueprint({
       <g className="sig-blueprint-trains">
         {stations.flatMap((station) => {
           const trains = trainsByStation.get(station.crs) ?? [];
-          return trains.slice(0, 4).map((train, i) => {
-            const placement = trackForTrain(tracks, train.berth.platform);
+          // Group by the column each train lands in, so two trains only get
+          // spread apart when they would actually overlap. Spreading every
+          // train at a station pushed Waterloo's down over Vauxhall.
+          const byColumn = new Map<number, number>();
+          return trains.slice(0, 4).map((train) => {
+            const placement = trackForTrain(tracks, train.berth.platform, station.y);
             const x = placement ? placement.track.x : unknownX;
-            // Several trains at one station would land on top of each other;
-            // step them down a few pixels each so all of them stay readable.
-            const y = station.y + (i - Math.min(trains.length, 4) / 2 + 0.5) * 13;
+            const nth = byColumn.get(x) ?? 0;
+            byColumn.set(x, nth + 1);
+            // Alternate above/below the tick rather than always downward, so a
+            // busy station stays centred on its own row.
+            const offset = nth === 0 ? 0 : nth % 2 === 1 ? Math.ceil(nth / 2) * 14 : -Math.ceil(nth / 2) * 14;
+            const y = station.y + offset;
             return (
               <g
                 key={`${train.headcode}-${train.berthId}`}
                 className={train.focus ? "sig-train-focus" : ""}
               >
                 <rect
-                  x={x - 17}
+                  x={x - 16}
                   y={y - 6}
-                  width={34}
+                  width={32}
                   height={12}
                   rx={2}
                   className={`sig-berth-occupied${train.focus ? " sig-berth-focus" : ""}${
@@ -317,11 +421,13 @@ function CorridorBlueprint({
                   }`}
                 >
                   <title>
-                    {train.headcode} at {station.name}, berth {train.berth.tdArea}{" "}
-                    {train.berth.berth}
-                    {placement
-                      ? ` — line inferred from platform ${train.berth.platform}`
-                      : " — running line unknown, shown outside the running lines"}
+                    {`${train.headcode} at ${station.name}, berth ${train.berth.tdArea} ${
+                      train.berth.berth
+                    }${
+                      placement
+                        ? ` — line inferred from platform ${train.berth.platform}`
+                        : " — running line unknown, shown outside the running lines"
+                    }`}
                   </title>
                 </rect>
                 <text
@@ -340,7 +446,13 @@ function CorridorBlueprint({
       </g>
 
       <g className="sig-blueprint-unknown-key">
-        <text x={unknownX} y={BLUEPRINT_TOP - 26} className="sig-blueprint-road-label-muted" textAnchor="start" transform={`rotate(-52 ${unknownX} ${BLUEPRINT_TOP - 26})`}>
+        <text
+          x={unknownX - 4}
+          y={firstY - 12}
+          className="sig-blueprint-road-label-muted"
+          textAnchor="start"
+          transform={`rotate(-90 ${unknownX - 4} ${firstY - 12})`}
+        >
           Line unknown
         </text>
       </g>
@@ -692,9 +804,9 @@ export function SignallingDiagram({
                       className={`sig-signal-head sig-signal-${s.aspect}`}
                     >
                       <title>
-                        {s.itemId ? `Signal ${s.itemId}: ` : "Signal: "}
-                        {s.aspect === "unknown" ? "no data" : s.aspect}
-                        {s.routeSet ? " · route set" : ""}
+                        {`${s.itemId ? `Signal ${s.itemId}: ` : "Signal: "}${
+                          s.aspect === "unknown" ? "no data" : s.aspect
+                        }${s.routeSet ? " · route set" : ""}`}
                       </title>
                     </circle>
                     {s.mapped && s.itemId && (
@@ -718,9 +830,9 @@ export function SignallingDiagram({
                     className="sig-berth"
                   >
                     <title>
-                      {b.place ? `${b.place} — ` : ""}
-                      {b.tdArea} berth {b.berth}
-                      {b.platform ? ` · platform ${b.platform}` : ""}
+                      {`${b.place ? `${b.place} — ` : ""}${b.tdArea} berth ${b.berth}${
+                        b.platform ? ` · platform ${b.platform}` : ""
+                      }`}
                     </title>
                   </rect>
                 ))}

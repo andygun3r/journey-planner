@@ -1,0 +1,245 @@
+import SwiftUI
+import Observation
+
+@Observable
+@MainActor
+final class ServiceModel {
+    enum Phase {
+        case loading
+        case loaded(ServiceDetail)
+        case failed(APIError)
+    }
+
+    private(set) var phase: Phase = .loading
+
+    func load(serviceId: String, using api: APIClient) async {
+        do {
+            let response = try await api.service(id: serviceId)
+            guard response.ok, let service = response.service else {
+                phase = .failed(.http(status: 404, reason: response.reason))
+                return
+            }
+            phase = .loaded(service)
+        } catch let error as APIError {
+            phase = .failed(error)
+        } catch {
+            phase = .failed(.transport(error.localizedDescription))
+        }
+    }
+}
+
+/// The calling pattern for one train, with live progress.
+///
+/// Reached by tapping a board row. There was no equivalent screen before — the
+/// board was a dead end.
+struct ServiceDetailView: View {
+    let departure: Departure
+
+    @State private var model = ServiceModel()
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        AppChrome(title: departure.destinationName) {
+            content
+        }
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func load() async {
+        // A rid is the better identifier when the live overlay has matched the
+        // trip; tripId is the timetable fallback.
+        guard let id = departure.rid.map({ "rid:\($0)" }) ?? departure.tripId else {
+            return
+        }
+        await model.load(serviceId: id, using: env.api)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.phase {
+        case .loading:
+            Card {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Loading service…").foregroundStyle(Palette.inkMuted)
+                }
+            }
+        case let .loaded(service):
+            headerCard(service)
+            progressCard(service.progress)
+            callsCard(service)
+            if !service.coaches.isEmpty { formationCard(service) }
+        case let .failed(error):
+            EmptyStateCard(
+                title: "Service details unavailable",
+                message: error.errorDescription ?? "Couldn't load this train.",
+                systemImage: "exclamationmark.triangle",
+                retry: error.isRetryable ? { Task { await load() } } : nil
+            )
+        }
+    }
+
+    private func headerCard(_ service: ServiceDetail) -> some View {
+        Card {
+            HStack {
+                Text(service.stationName).font(.title3.weight(.bold))
+                Spacer()
+                if let platform = service.platform {
+                    Text("Plat \(platform)").font(.callout.weight(.semibold))
+                }
+            }
+            if let operatorName = service.operatorName {
+                Text(operatorName).font(.callout).foregroundStyle(Palette.inkMuted)
+            }
+            if service.cancelled {
+                StatusPill("Cancelled", tone: .bad)
+                if let reason = service.cancelReason {
+                    Text(reason).font(.caption).foregroundStyle(Palette.signalRed)
+                }
+            } else if let reason = service.delayReason {
+                Text(reason).font(.caption).foregroundStyle(Palette.signalAmber)
+            }
+        }
+    }
+
+    /// Live tracking state, worded so "not tracked" never reads as "broken".
+    private func progressCard(_ progress: ServiceProgress) -> some View {
+        Card {
+            LabelText("Live tracking")
+            switch progress.positionState {
+            case .tracked:
+                if let last = progress.lastStopName {
+                    Text("Last seen at \(last)").font(.body.weight(.medium))
+                }
+                if let next = progress.nextStopName {
+                    Text("Next stop \(next)").font(.callout).foregroundStyle(Palette.inkMuted)
+                }
+                if let location = progress.nrLastLocation {
+                    HStack(spacing: 4) {
+                        Image(systemName: "location.fill").font(.caption2)
+                        Text(location).font(.caption)
+                        if let ago = progress.nrReportedAgoSeconds {
+                            Text("· \(StatusFormatting.reportedAgo(seconds: ago))").font(.caption2)
+                        }
+                    }
+                    .foregroundStyle(Palette.signalGreen)
+                }
+            case .awaitingReport:
+                // The important distinction: running, but nothing reported yet.
+                Text("Running — no position reported yet")
+                    .font(.callout)
+                    .foregroundStyle(Palette.inkMuted)
+            case .notTracked:
+                Text("This train isn't being tracked live.")
+                    .font(.callout)
+                    .foregroundStyle(Palette.inkMuted)
+            }
+
+            if progress.arrived {
+                StatusPill("Arrived", tone: .good)
+            }
+        }
+    }
+
+    private func callsCard(_ service: ServiceDetail) -> some View {
+        Card {
+            LabelText("Calling at")
+            ForEach(service.calls) { call in
+                CallRow(call: call)
+            }
+        }
+    }
+
+    private func formationCard(_ service: ServiceDetail) -> some View {
+        Card {
+            LabelText("Formation")
+            if let length = service.length {
+                Text("\(length) coaches").font(.callout).foregroundStyle(Palette.inkMuted)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(service.coaches) { coach in
+                        VStack(spacing: 2) {
+                            Text(coach.number).font(.caption.weight(.bold))
+                            if coach.first {
+                                Text("1st").font(.caption2).foregroundStyle(Palette.inkMuted)
+                            }
+                            if let loading = coach.loading {
+                                Text("\(loading)%").font(.caption2).foregroundStyle(loadingTone(loading))
+                            }
+                        }
+                        .frame(width: 46, height: 54)
+                        .background(Palette.railNavyTint)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+        }
+    }
+
+    private func loadingTone(_ loading: Int) -> Color {
+        switch loading {
+        case ..<50: return Palette.signalGreen
+        case ..<80: return Palette.signalAmber
+        default: return Palette.signalRed
+        }
+    }
+}
+
+private struct CallRow: View {
+    let call: ServiceCall
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            // Progress dot: filled for stops already passed.
+            Image(systemName: symbolName)
+                .font(.caption)
+                .foregroundStyle(symbolColor)
+                .frame(width: 14)
+
+            Text(call.name)
+                .font(.body.weight(call.progress == .current ? .bold : .regular))
+                .strikethrough(call.cancelled)
+                .foregroundStyle(call.cancelled ? Palette.signalRed : Palette.ink)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+
+            if let platform = call.platform {
+                Text("Plat \(platform)").font(.caption).foregroundStyle(Palette.inkMuted)
+            }
+
+            // `expected` is display text, not always a time — it may read
+            // "On time" or "Delayed". Show it verbatim.
+            Text(call.actual ?? call.expected ?? call.scheduled ?? "--:--")
+                .font(.callout.weight(.medium))
+                .monospacedDigit()
+                .foregroundStyle(timeColor)
+        }
+        .padding(.vertical, 3)
+        .opacity(call.progress == .departed ? 0.55 : 1)
+    }
+
+    private var symbolName: String {
+        switch call.progress {
+        case .departed: return "checkmark.circle.fill"
+        case .current: return "location.circle.fill"
+        default: return "circle"
+        }
+    }
+
+    private var symbolColor: Color {
+        switch call.progress {
+        case .departed: return Palette.signalGreen
+        case .current: return Palette.railNavy
+        default: return Palette.inkMuted
+        }
+    }
+
+    private var timeColor: Color {
+        if call.cancelled { return Palette.signalRed }
+        if call.actual != nil { return Palette.signalGreen }
+        return Palette.ink
+    }
+}

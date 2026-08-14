@@ -41,8 +41,22 @@ async function fetchBasemap(): Promise<MapStyle> {
   }
 }
 
+/** Bare basemap, no rail overlay — used when the ORM tile server (self-hosted,
+ * `NEXT_PUBLIC_TILES_URL`) can't be reached. Keeps the map usable for
+ * planning/search even though signalling/rail-line detail is missing. */
+async function fetchRailStyle(): Promise<MapStyle | null> {
+  try {
+    const res = await fetch(STYLE_URL);
+    if (!res.ok) throw new Error(`rail style ${res.status}`);
+    return absolutizeStyle((await res.json()) as MapStyle, TILES_URL);
+  } catch (err) {
+    console.error(`Rail map style unavailable at ${STYLE_URL}; showing basemap only.`, err);
+    return null;
+  }
+}
+
 export async function loadAbsoluteStyle(): Promise<maplibregl.StyleSpecification> {
-  const [railRes, basemap] = await Promise.all([fetch(STYLE_URL), fetchBasemap()]);
-  const rail = absolutizeStyle((await railRes.json()) as MapStyle, TILES_URL);
+  const [rail, basemap] = await Promise.all([fetchRailStyle(), fetchBasemap()]);
+  if (!rail) return basemap as unknown as maplibregl.StyleSpecification;
   return compositeStyle(rail, basemap) as unknown as maplibregl.StyleSpecification;
 }

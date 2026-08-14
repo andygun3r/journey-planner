@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Push notifications for commute alerts (Phase 6). "development" here;
+	     the App Store build gets "production" automatically on export. -->
+	<key>aps-environment</key>
+	<string>development</string>
+
+	<!-- Associated domains, for two things (Phase 3):
+	       webcredentials: — lets the passkey sign-in flow work. Better Auth
+	         derives its rpID from BETTER_AUTH_URL's hostname, so this must be
+	         that same host.
+	       applinks:      — lets magic-link emails open the app directly.
+	     Both read the host from the build setting so dev and prod differ
+	     without editing this file. Serving /.well-known/apple-app-site-association
+	     from that host is what makes them work; see the web route added in Phase 3. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>webcredentials:$(SIGNALLER_ASSOCIATED_DOMAIN)</string>
+		<string>applinks:$(SIGNALLER_ASSOCIATED_DOMAIN)</string>
+	</array>
+</dict>
+</plist>

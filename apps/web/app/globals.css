@@ -3796,6 +3796,24 @@ a.map-tip-anchor:hover .map-tip {
   stroke-width: 1;
   stroke-dasharray: 1 1;
 }
+/* London Waterloo's 24-platform throat, above the first station tick. */
+.sig-blueprint-platform-fan {
+  fill: none;
+  stroke: color-mix(in oklch, var(--ink) 55%, transparent);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+.sig-blueprint-platform-number-box {
+  fill: var(--surface);
+  stroke: color-mix(in oklch, var(--ink) 55%, transparent);
+  stroke-width: 0.8;
+}
+.sig-blueprint-platform-number {
+  font-family: var(--font-time, monospace);
+  font-size: 7px;
+  font-weight: 850;
+  fill: var(--ink);
+}
 /* A train whose running line is unknown — drawn outside the running lines. */
 .sig-berth-unplaced {
   opacity: 0.72;

@@ -1,0 +1,14 @@
+# Per-user Xcode state — never useful to anyone else.
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+
+# Local signing + backend config. Copy Signaller.xcconfig.example to
+# Signaller.xcconfig and fill in your own values.
+Signaller.xcconfig
+
+# Build output
+DerivedData/
+build/
+
+.DS_Store

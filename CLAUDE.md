@@ -179,6 +179,18 @@ Batch bulk data driving the routing engine and fares, **not** RDM APIs. Download
   pulls `NWR_TrackModel*`, imports it into `track_model_line` /
   `station_track_model_position`, then deletes the remote files after a successful
   load. It uses `NR_SFTP_*` credentials, falling back to `DTD_SFTP_*`.
+- **Track sections**: `pnpm --filter @signaller/etl exec tsx src/index.ts track-sections`
+  reads `track_model_line` and works out how many running lines each stretch of
+  railway has, into `corridor_track_section`. Run it after `track-model`. This is
+  what lets the signalling blueprint narrow from four tracks to two at Worting
+  Junction instead of drawing four lines the whole way to Weymouth. The
+  derivation is in `packages/shared/src/track-sections.ts` (shared, because the
+  web app reads the result back and needs the same thresholds); note Track Model
+  records **miles and chains**, so 53.15 is 53m 15ch, not 53.15 miles — use
+  `milesAndChainsToMiles` before doing arithmetic. Track Model has **no name
+  field for a running line**, only a numeric `TRACK_ID`, so "Up Fast"/"Down Slow"
+  come from a small hand-written map in `apps/web/lib/signalling-corridors.ts`;
+  anything unmapped renders as `Line <id>` rather than being guessed at.
 - **Nightly cron (2am)**: the `etl-cron` Coolify app (the etl image running in
   standing-service mode, `ETL_CRON=1`) runs `services/etl/cron/run-and-reload-motis.sh` via a
   baked-in busybox crontab. One run does four SFTP pulls in sequence, each deleting its
@@ -296,6 +308,7 @@ named signals/aspects.
 | Between-station positioning / moving-train icon | Network Rail TRUST + TD (with CORPUS/SMART) |
 | Disruptions & TOC service status | Disruptions API |
 | Signalling diagram (aspects) | Network Rail TD S-class + SOP maps |
+| Signalling diagram (track layout, station spacing) | NWR Track Model → `corridor_track_section` + `station_track_model_position` |
 | Station facilities/accessibility, planned engineering works, operator reference detail | Knowledgebase |
 | Postcode → coordinates | postcodes.io |
 | Free-text address/place search ("The Shard") | OS Places |

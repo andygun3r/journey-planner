@@ -8,13 +8,34 @@
 
 /* Begin PBXBuildFile section */
 		0A0000010000000000000001 /* Signaller/App/SignallerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000011 /* Signaller/App/SignallerApp.swift */; };
-		0A0000010000000000000002 /* Signaller/App/ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000012 /* Signaller/App/ContentView.swift */; };
-		0A0000010000000000000003 /* Signaller/App/APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000013 /* Signaller/App/APIClient.swift */; };
 		0A0000010000000000000004 /* Signaller/App/LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000014 /* Signaller/App/LiveActivityController.swift */; };
 		0A0000010000000000000005 /* Signaller/Shared/JourneyActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000015 /* Signaller/Shared/JourneyActivityAttributes.swift */; };
 		0A0000010000000000000006 /* Signaller/LiveActivity/SignallerLiveActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000016 /* Signaller/LiveActivity/SignallerLiveActivityBundle.swift */; };
 		0A0000010000000000000007 /* Signaller/Shared/JourneyActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000015 /* Signaller/Shared/JourneyActivityAttributes.swift */; };
 		0A0000010000000000000008 /* SignallerLiveActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000022 /* SignallerLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		0A0000010000000000000151 /* Signaller/Models/ISO8601.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000101 /* Signaller/Models/ISO8601.swift */; };
+		0A0000010000000000000152 /* Signaller/Models/Journey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000102 /* Signaller/Models/Journey.swift */; };
+		0A0000010000000000000153 /* Signaller/Models/Board.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000103 /* Signaller/Models/Board.swift */; };
+		0A0000010000000000000154 /* Signaller/Models/Station.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000104 /* Signaller/Models/Station.swift */; };
+		0A0000010000000000000155 /* Signaller/Models/ServiceDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000105 /* Signaller/Models/ServiceDetail.swift */; };
+		0A0000010000000000000156 /* Signaller/Models/Health.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000106 /* Signaller/Models/Health.swift */; };
+		0A0000010000000000000157 /* Signaller/Networking/APIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000107 /* Signaller/Networking/APIError.swift */; };
+		0A0000010000000000000158 /* Signaller/Networking/APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000108 /* Signaller/Networking/APIClient.swift */; };
+		0A0000010000000000000159 /* Signaller/Networking/AuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000109 /* Signaller/Networking/AuthStore.swift */; };
+		0A0000010000000000000160 /* Signaller/App/AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000110 /* Signaller/App/AppEnvironment.swift */; };
+		0A0000010000000000000161 /* Signaller/App/RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000111 /* Signaller/App/RootView.swift */; };
+		0A0000010000000000000162 /* Signaller/DesignSystem/Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */; };
+		0A0000010000000000000163 /* Signaller/DesignSystem/Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */; };
+		0A0000010000000000000164 /* Signaller/DesignSystem/StatusFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000114 /* Signaller/DesignSystem/StatusFormatting.swift */; };
+		0A0000010000000000000165 /* Signaller/Features/Stations/StationSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000115 /* Signaller/Features/Stations/StationSearchField.swift */; };
+		0A0000010000000000000166 /* Signaller/Features/Plan/PlanModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000116 /* Signaller/Features/Plan/PlanModel.swift */; };
+		0A0000010000000000000167 /* Signaller/Features/Plan/PlanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000117 /* Signaller/Features/Plan/PlanView.swift */; };
+		0A0000010000000000000168 /* Signaller/Features/Plan/JourneyRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000118 /* Signaller/Features/Plan/JourneyRow.swift */; };
+		0A0000010000000000000169 /* Signaller/Features/Plan/JourneyDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000119 /* Signaller/Features/Plan/JourneyDetailView.swift */; };
+		0A000001000000000000016A /* Signaller/Features/Boards/BoardsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011A /* Signaller/Features/Boards/BoardsView.swift */; };
+		0A000001000000000000016B /* Signaller/Features/Boards/DepartureRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011B /* Signaller/Features/Boards/DepartureRow.swift */; };
+		0A000001000000000000016C /* Signaller/Features/Service/ServiceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011C /* Signaller/Features/Service/ServiceDetailView.swift */; };
+		0A000001000000000000016D /* Signaller/Features/Status/StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011D /* Signaller/Features/Status/StatusView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,15 +64,38 @@
 
 /* Begin PBXFileReference section */
 		0A0000010000000000000011 /* Signaller/App/SignallerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/App/SignallerApp.swift; sourceTree = "<group>"; };
-		0A0000010000000000000012 /* Signaller/App/ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/App/ContentView.swift; sourceTree = "<group>"; };
-		0A0000010000000000000013 /* Signaller/App/APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/App/APIClient.swift; sourceTree = "<group>"; };
 		0A0000010000000000000014 /* Signaller/App/LiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/App/LiveActivityController.swift; sourceTree = "<group>"; };
 		0A0000010000000000000015 /* Signaller/Shared/JourneyActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Shared/JourneyActivityAttributes.swift; sourceTree = "<group>"; };
 		0A0000010000000000000016 /* Signaller/LiveActivity/SignallerLiveActivityBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/LiveActivity/SignallerLiveActivityBundle.swift; sourceTree = "<group>"; };
 		0A0000010000000000000017 /* Signaller/App/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Signaller/App/Info.plist; sourceTree = "<group>"; };
 		0A0000010000000000000018 /* Signaller/LiveActivity/Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Signaller/LiveActivity/Info.plist; sourceTree = "<group>"; };
+		0A0000010000000000000019 /* Signaller.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signaller.xcconfig; sourceTree = "<group>"; };
+		0A000001000000000000001A /* Signaller/App/Signaller.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Signaller/App/Signaller.entitlements; sourceTree = "<group>"; };
 		0A0000010000000000000021 /* Signaller.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Signaller.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0A0000010000000000000022 /* SignallerLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SignallerLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		0A0000010000000000000101 /* Signaller/Models/ISO8601.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/ISO8601.swift; sourceTree = "<group>"; };
+		0A0000010000000000000102 /* Signaller/Models/Journey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/Journey.swift; sourceTree = "<group>"; };
+		0A0000010000000000000103 /* Signaller/Models/Board.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/Board.swift; sourceTree = "<group>"; };
+		0A0000010000000000000104 /* Signaller/Models/Station.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/Station.swift; sourceTree = "<group>"; };
+		0A0000010000000000000105 /* Signaller/Models/ServiceDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/ServiceDetail.swift; sourceTree = "<group>"; };
+		0A0000010000000000000106 /* Signaller/Models/Health.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/Health.swift; sourceTree = "<group>"; };
+		0A0000010000000000000107 /* Signaller/Networking/APIError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Networking/APIError.swift; sourceTree = "<group>"; };
+		0A0000010000000000000108 /* Signaller/Networking/APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Networking/APIClient.swift; sourceTree = "<group>"; };
+		0A0000010000000000000109 /* Signaller/Networking/AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Networking/AuthStore.swift; sourceTree = "<group>"; };
+		0A0000010000000000000110 /* Signaller/App/AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/App/AppEnvironment.swift; sourceTree = "<group>"; };
+		0A0000010000000000000111 /* Signaller/App/RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/App/RootView.swift; sourceTree = "<group>"; };
+		0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/Palette.swift; sourceTree = "<group>"; };
+		0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/Components.swift; sourceTree = "<group>"; };
+		0A0000010000000000000114 /* Signaller/DesignSystem/StatusFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/StatusFormatting.swift; sourceTree = "<group>"; };
+		0A0000010000000000000115 /* Signaller/Features/Stations/StationSearchField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Stations/StationSearchField.swift; sourceTree = "<group>"; };
+		0A0000010000000000000116 /* Signaller/Features/Plan/PlanModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Plan/PlanModel.swift; sourceTree = "<group>"; };
+		0A0000010000000000000117 /* Signaller/Features/Plan/PlanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Plan/PlanView.swift; sourceTree = "<group>"; };
+		0A0000010000000000000118 /* Signaller/Features/Plan/JourneyRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Plan/JourneyRow.swift; sourceTree = "<group>"; };
+		0A0000010000000000000119 /* Signaller/Features/Plan/JourneyDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Plan/JourneyDetailView.swift; sourceTree = "<group>"; };
+		0A000001000000000000011A /* Signaller/Features/Boards/BoardsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Boards/BoardsView.swift; sourceTree = "<group>"; };
+		0A000001000000000000011B /* Signaller/Features/Boards/DepartureRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Boards/DepartureRow.swift; sourceTree = "<group>"; };
+		0A000001000000000000011C /* Signaller/Features/Service/ServiceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Service/ServiceDetailView.swift; sourceTree = "<group>"; };
+		0A000001000000000000011D /* Signaller/Features/Status/StatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Status/StatusView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -76,8 +120,13 @@
 			isa = PBXGroup;
 			children = (
 				0A0000010000000000000062 /* App */,
+				0A0000010000000000000068 /* DesignSystem */,
+				0A0000010000000000000069 /* Features */,
+				0A0000010000000000000066 /* Models */,
+				0A0000010000000000000067 /* Networking */,
 				0A0000010000000000000063 /* Shared */,
 				0A0000010000000000000064 /* LiveActivity */,
+				0A0000010000000000000019 /* Signaller.xcconfig */,
 				0A0000010000000000000065 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -86,10 +135,11 @@
 			isa = PBXGroup;
 			children = (
 				0A0000010000000000000011 /* Signaller/App/SignallerApp.swift */,
-				0A0000010000000000000012 /* Signaller/App/ContentView.swift */,
-				0A0000010000000000000013 /* Signaller/App/APIClient.swift */,
 				0A0000010000000000000014 /* Signaller/App/LiveActivityController.swift */,
+				0A0000010000000000000110 /* Signaller/App/AppEnvironment.swift */,
+				0A0000010000000000000111 /* Signaller/App/RootView.swift */,
 				0A0000010000000000000017 /* Signaller/App/Info.plist */,
+				0A000001000000000000001A /* Signaller/App/Signaller.entitlements */,
 			);
 			name = App;
 			sourceTree = "<group>";
@@ -120,6 +170,55 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		0A0000010000000000000066 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				0A0000010000000000000101 /* Signaller/Models/ISO8601.swift */,
+				0A0000010000000000000102 /* Signaller/Models/Journey.swift */,
+				0A0000010000000000000103 /* Signaller/Models/Board.swift */,
+				0A0000010000000000000104 /* Signaller/Models/Station.swift */,
+				0A0000010000000000000105 /* Signaller/Models/ServiceDetail.swift */,
+				0A0000010000000000000106 /* Signaller/Models/Health.swift */,
+			);
+			name = Models;
+			sourceTree = "<group>";
+		};
+		0A0000010000000000000067 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				0A0000010000000000000107 /* Signaller/Networking/APIError.swift */,
+				0A0000010000000000000108 /* Signaller/Networking/APIClient.swift */,
+				0A0000010000000000000109 /* Signaller/Networking/AuthStore.swift */,
+			);
+			name = Networking;
+			sourceTree = "<group>";
+		};
+		0A0000010000000000000068 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */,
+				0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */,
+				0A0000010000000000000114 /* Signaller/DesignSystem/StatusFormatting.swift */,
+			);
+			name = DesignSystem;
+			sourceTree = "<group>";
+		};
+		0A0000010000000000000069 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				0A0000010000000000000115 /* Signaller/Features/Stations/StationSearchField.swift */,
+				0A0000010000000000000116 /* Signaller/Features/Plan/PlanModel.swift */,
+				0A0000010000000000000117 /* Signaller/Features/Plan/PlanView.swift */,
+				0A0000010000000000000118 /* Signaller/Features/Plan/JourneyRow.swift */,
+				0A0000010000000000000119 /* Signaller/Features/Plan/JourneyDetailView.swift */,
+				0A000001000000000000011A /* Signaller/Features/Boards/BoardsView.swift */,
+				0A000001000000000000011B /* Signaller/Features/Boards/DepartureRow.swift */,
+				0A000001000000000000011C /* Signaller/Features/Service/ServiceDetailView.swift */,
+				0A000001000000000000011D /* Signaller/Features/Status/StatusView.swift */,
+			);
+			name = Features;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -127,6 +226,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 0A0000010000000000000301 /* Build configuration list for PBXNativeTarget "Signaller" */;
 			buildPhases = (
+				0A0000010000000000000081 /* Check API base URL */,
 				0A0000010000000000000071 /* Sources */,
 				0A0000010000000000000051 /* Frameworks */,
 				0A0000010000000000000041 /* Embed App Extensions */,
@@ -195,16 +295,55 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		0A0000010000000000000081 /* Check API base URL */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Check API base URL";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$CONFIGURATION\" != \"Release\" ]; then exit 0; fi\ncase \"$SIGNALLER_API_BASE_URL\" in\n  \"\"|*signaller.example*|http:|https:)\n    echo \"error: SIGNALLER_API_BASE_URL is not usable in a Release build (got: [$SIGNALLER_API_BASE_URL]).\"\n    echo \"note: set SIGNALLER_API_BASE_URL_RELEASE in apps/ios/Signaller.xcconfig to a real https host\"\n    echo \"note: a double-slash starts a comment in xcconfig - build URLs via the SLASHES variable\"\n    exit 1 ;;\nesac\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		0A0000010000000000000071 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				0A0000010000000000000001 /* Signaller/App/SignallerApp.swift in Sources */,
-				0A0000010000000000000002 /* Signaller/App/ContentView.swift in Sources */,
-				0A0000010000000000000003 /* Signaller/App/APIClient.swift in Sources */,
 				0A0000010000000000000004 /* Signaller/App/LiveActivityController.swift in Sources */,
 				0A0000010000000000000005 /* Signaller/Shared/JourneyActivityAttributes.swift in Sources */,
+				0A0000010000000000000160 /* Signaller/App/AppEnvironment.swift in Sources */,
+				0A0000010000000000000161 /* Signaller/App/RootView.swift in Sources */,
+				0A0000010000000000000162 /* Signaller/DesignSystem/Palette.swift in Sources */,
+				0A0000010000000000000163 /* Signaller/DesignSystem/Components.swift in Sources */,
+				0A0000010000000000000164 /* Signaller/DesignSystem/StatusFormatting.swift in Sources */,
+				0A0000010000000000000165 /* Signaller/Features/Stations/StationSearchField.swift in Sources */,
+				0A0000010000000000000166 /* Signaller/Features/Plan/PlanModel.swift in Sources */,
+				0A0000010000000000000167 /* Signaller/Features/Plan/PlanView.swift in Sources */,
+				0A0000010000000000000168 /* Signaller/Features/Plan/JourneyRow.swift in Sources */,
+				0A0000010000000000000169 /* Signaller/Features/Plan/JourneyDetailView.swift in Sources */,
+				0A000001000000000000016A /* Signaller/Features/Boards/BoardsView.swift in Sources */,
+				0A000001000000000000016B /* Signaller/Features/Boards/DepartureRow.swift in Sources */,
+				0A000001000000000000016C /* Signaller/Features/Service/ServiceDetailView.swift in Sources */,
+				0A000001000000000000016D /* Signaller/Features/Status/StatusView.swift in Sources */,
+				0A0000010000000000000151 /* Signaller/Models/ISO8601.swift in Sources */,
+				0A0000010000000000000152 /* Signaller/Models/Journey.swift in Sources */,
+				0A0000010000000000000153 /* Signaller/Models/Board.swift in Sources */,
+				0A0000010000000000000154 /* Signaller/Models/Station.swift in Sources */,
+				0A0000010000000000000155 /* Signaller/Models/ServiceDetail.swift in Sources */,
+				0A0000010000000000000156 /* Signaller/Models/Health.swift in Sources */,
+				0A0000010000000000000157 /* Signaller/Networking/APIError.swift in Sources */,
+				0A0000010000000000000158 /* Signaller/Networking/APIClient.swift in Sources */,
+				0A0000010000000000000159 /* Signaller/Networking/AuthStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -230,6 +369,7 @@
 /* Begin XCBuildConfiguration section */
 		0A0000010000000000000401 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0A0000010000000000000019 /* Signaller.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -278,7 +418,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -290,6 +430,7 @@
 		};
 		0A0000010000000000000402 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 0A0000010000000000000019 /* Signaller.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -332,7 +473,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
@@ -345,12 +486,13 @@
 		0A0000010000000000000403 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "$(SIGNALLER_CODE_SIGN_ENTITLEMENTS_DEBUG)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = XHN88XRA3T;
+				DEVELOPMENT_TEAM = "$(SIGNALLER_DEV_TEAM)";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Signaller/App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -358,21 +500,22 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.signaller.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SIGNALLER_API_BASE_URL = "http://localhost:3000";
+				SIGNALLER_API_BASE_URL = "$(SIGNALLER_API_BASE_URL_DEBUG)";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
 		0A0000010000000000000404 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "$(SIGNALLER_CODE_SIGN_ENTITLEMENTS_RELEASE)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = XHN88XRA3T;
+				DEVELOPMENT_TEAM = "$(SIGNALLER_DEV_TEAM)";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Signaller/App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -380,9 +523,9 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = uk.signaller.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SIGNALLER_API_BASE_URL = "https://signaller.example";
+				SIGNALLER_API_BASE_URL = "$(SIGNALLER_API_BASE_URL_RELEASE)";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -391,10 +534,10 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = XHN88XRA3T;
+				DEVELOPMENT_TEAM = "$(SIGNALLER_DEV_TEAM)";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Signaller/LiveActivity/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -405,7 +548,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -414,10 +557,10 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = XHN88XRA3T;
+				DEVELOPMENT_TEAM = "$(SIGNALLER_DEV_TEAM)";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Signaller/LiveActivity/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -428,7 +571,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};

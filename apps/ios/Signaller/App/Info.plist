@@ -18,17 +18,62 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>uk.signaller.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>signaller</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Scoped to localhost only, so a dev build can talk to `pnpm --filter web dev`
+	     over plain http. Deliberately NOT NSAllowsArbitraryLoads: production
+	     traffic must stay on TLS. Note this covers the simulator only — on a
+	     physical device "localhost" is the phone itself, so point
+	     SIGNALLER_API_BASE_URL_DEBUG at your Mac's LAN IP or a tunnel. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>SIGNALLER_API_BASE_URL</key>
 	<string>$(SIGNALLER_API_BASE_URL)</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
-	<key>UISupportedInterfaceOrientations</key>
+	<!-- iPhone: no upside-down, which is the platform convention.
+	     iPad: all four, required once TARGETED_DEVICE_FAMILY includes iPad
+	     unless the app opts out of multitasking. -->
+	<key>UISupportedInterfaceOrientations~iphone</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 </dict>
 </plist>
