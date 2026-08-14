@@ -7,5 +7,3 @@ allowBuilds:
   esbuild: true
   sharp: true
   ssh2: true
-minimumReleaseAgeExclude:
-  - react-native-screens@4.27.0

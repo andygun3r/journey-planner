@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@better-auth/api-key": "1.7.0-rc.4",
-    "@better-auth/expo": "1.7.0-rc.4",
     "@better-auth/passkey": "1.7.0-rc.4",
     "@signaller/db": "workspace:*",
     "@signaller/routing-adapter": "workspace:*",

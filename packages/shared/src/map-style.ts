@@ -6,8 +6,8 @@
  * It has to sit over a general basemap. This module fetches both styles and
  * merges them into the single style object MapLibre wants.
  *
- * Previously each app kept its own copy of this logic (apps/web/lib/orm-style.ts
- * and apps/mobile/lib/orm-style.ts) with a CARTO *raster* basemap underneath.
+ * Previously app-local copies of this logic used a CARTO *raster* basemap
+ * underneath.
  * Raster was chosen to dodge the sprite/glyph problem described below; the cost
  * was blurry labels at every zoom and a basemap whose colours fought the
  * Platform White ground. This does the real merge instead, so the basemap is

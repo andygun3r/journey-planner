@@ -128,6 +128,18 @@ function startKbIncidentPollIfConfigured(): void {
   setInterval(run, KB_INCIDENT_POLL_MS);
 }
 
+// A Coolify redeploy can briefly overlap the outgoing container's shutdown
+// with the incoming one's startup, so the new process finds the old one
+// still holding the port (EADDRINUSE) — this crashed the whole nightly sweep
+// on 2026-08-13. Retry a few times with a short delay before giving up for
+// real, rather than treating one transient clash as fatal.
+const LISTEN_RETRY_ATTEMPTS = 5;
+const LISTEN_RETRY_DELAY_MS = 3000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function startServer(port: number): void {
   startCronIfRequested();
   startKbIncidentPollIfConfigured();
@@ -159,7 +171,28 @@ export function startServer(port: number): void {
     })();
   });
 
+  listenWithRetry(server, port, LISTEN_RETRY_ATTEMPTS);
+}
+
+function listenWithRetry(
+  server: ReturnType<typeof createServer>,
+  port: number,
+  attemptsLeft: number,
+): void {
+  const onError = (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE" && attemptsLeft > 1) {
+      console.error(
+        `[etl] port :${port} in use, retrying in ${LISTEN_RETRY_DELAY_MS}ms (${attemptsLeft - 1} attempts left)`,
+      );
+      server.removeListener("error", onError);
+      void delay(LISTEN_RETRY_DELAY_MS).then(() => listenWithRetry(server, port, attemptsLeft - 1));
+      return;
+    }
+    throw err;
+  };
+  server.once("error", onError);
   server.listen(port, () => {
+    server.removeListener("error", onError);
     console.log(`[etl] HTTP server listening on :${port}`);
   });
 }

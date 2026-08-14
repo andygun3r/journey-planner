@@ -15,8 +15,8 @@ import type maplibregl from "maplibre-gl";
  * OpenFreeMap vector basemap. Used by both the full live map (/map) and the
  * service-detail position map, so every map in the app shares one cartography.
  *
- * The merge itself lives in packages/shared/src/map-style.ts, shared with
- * apps/mobile — this file is only the web-side fetch and typing.
+ * The merge itself lives in packages/shared/src/map-style.ts; this file is only
+ * the web-side fetch and typing.
  */
 
 // An empty NEXT_PUBLIC_TILES_URL must not silently degrade to "": that turns

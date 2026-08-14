@@ -61,9 +61,10 @@ stack" under Deploying.
 track and signals, but no land, water or place labels. `packages/shared/src/map-style.ts`
 merges it over [OpenFreeMap](https://openfreemap.org/)'s free, keyless vector
 basemap and retints that basemap to the Platform White palette, so the map
-matches the rest of the app rather than competing with it. Both `apps/web` and
-`apps/mobile` use this one module. Two constraints shape the merge and are
-worth knowing before editing it:
+matches the rest of the app rather than competing with it. The web app uses
+this shared module, and the native app can reuse the same composition when its
+map view is wired up. Two constraints shape the merge and are worth knowing
+before editing it:
 
 - A MapLibre style may declare only **one** `glyphs` URL, and neither font
   server carries the other's fonts. OpenRailwayMap's glyphs win (its label
