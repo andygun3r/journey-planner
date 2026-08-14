@@ -232,6 +232,13 @@
       "when": 1786196569323,
       "tag": "0032_clean_korvac",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786736490341,
+      "tag": "0033_broad_black_queen",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import {
+  corridorTrackSection,
   nrCorpus,
   ormSignal,
   nrSignallingState,
@@ -10,7 +11,7 @@ import {
 } from "@signaller/db";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { namedSignallingCorridor } from "./signalling-corridors";
+import { corridorStationCrs, namedSignallingCorridor } from "./signalling-corridors";
 import {
   layoutBerths,
   layoutBerthsByArea,
@@ -148,12 +149,13 @@ async function resolveAreasForCorridor(corridorId: string): Promise<string[]> {
   if (!corridor) return [];
 
   const db = getDb();
+  const stationCrs = corridorStationCrs(corridor);
   const corpusRows = await db
     .select({ crs: nrCorpus.crs, stanox: nrCorpus.stanox })
     .from(nrCorpus)
-    .where(inArray(nrCorpus.crs, corridor.stationCrs));
+    .where(inArray(nrCorpus.crs, stationCrs));
   const orderByStanox = new Map<string, number>();
-  const orderByCrs = new Map(corridor.stationCrs.map((crs, i) => [crs, i]));
+  const orderByCrs = new Map(stationCrs.map((crs, i) => [crs, i]));
   const stanoxes = corpusRows
     .map((r) => {
       if (r.stanox) {
@@ -313,6 +315,59 @@ async function applyMileageAnchors(layout: DiagramLayout): Promise<DiagramLayout
   }
 
   return reorderByMileage(layout, anchors);
+}
+
+/**
+ * Where a corridor's stations actually sit on the railway, and how many running
+ * lines each stretch has.
+ *
+ * This is the geometry the blueprint draws against, and it is deliberately
+ * separate from the live state: it changes when someone re-runs the Track Model
+ * ETL, not every eight seconds, so the page fetches it once on the server
+ * rather than pushing it down the SSE stream.
+ *
+ * Every field is optional-by-absence rather than faked. A station with no
+ * station_track_model_position row gets no mileage and the renderer spaces it
+ * evenly between its neighbours, marked as estimated — the same "honest to the
+ * data" rule the rest of this file follows.
+ */
+export interface CorridorGeometry {
+  /** CRS → position on the railway, for stations Track Model could place. */
+  stations: Array<{ crs: string; elr: string; mileage: number }>;
+  /** Track sections for the ELRs this corridor runs over. */
+  sections: Array<{ elr: string; startMileage: number; endMileage: number; trackIds: string[] }>;
+}
+
+export async function getCorridorGeometry(corridorId: string): Promise<CorridorGeometry> {
+  const corridor = namedSignallingCorridor(corridorId);
+  if (!corridor) return { stations: [], sections: [] };
+
+  const db = getDb();
+  const stationCrs = corridorStationCrs(corridor);
+  const positions = await db
+    .select({
+      crs: stationTrackModelPosition.crs,
+      elr: stationTrackModelPosition.elr,
+      mileage: stationTrackModelPosition.mileage,
+    })
+    .from(stationTrackModelPosition)
+    .where(inArray(stationTrackModelPosition.crs, stationCrs));
+
+  if (positions.length === 0) return { stations: [], sections: [] };
+
+  // Only the ELRs this corridor actually touches — the table is national.
+  const elrs = [...new Set(positions.map((p) => p.elr))];
+  const sections = await db
+    .select({
+      elr: corridorTrackSection.elr,
+      startMileage: corridorTrackSection.startMileage,
+      endMileage: corridorTrackSection.endMileage,
+      trackIds: corridorTrackSection.trackIds,
+    })
+    .from(corridorTrackSection)
+    .where(inArray(corridorTrackSection.elr, elrs));
+
+  return { stations: positions, sections };
 }
 
 /**

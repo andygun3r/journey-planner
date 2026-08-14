@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { SIGNALLING_CORRIDORS } from "@/lib/signalling-corridors";
+import {
+  BLUEPRINT_TOP,
+  LABEL_GUTTER,
+  TRACK_PITCH,
+  buildBlueprint,
+  type BlueprintModel,
+  type BlueprintTrack,
+  type StationPosition,
+} from "@/lib/blueprint-layout";
+import { namedSignallingCorridor, trackRoleName } from "@/lib/signalling-corridors";
+import type { TrackSection } from "@signaller/shared";
 
 /**
  * Traksy-style corridor signalling board. Draws the berth graph (auto-laid-out
@@ -66,415 +76,158 @@ interface CorridorDiagram extends DiagramState {
   layout: DiagramLayout;
 }
 
-const SWML_STATION_NAMES: Record<string, string> = {
-  WAT: "London Waterloo",
-  VXH: "Vauxhall",
-  QRB: "Queenstown Road",
-  CLJ: "Clapham Junction",
-  EAD: "Earlsfield",
-  WIM: "Wimbledon",
-  RAY: "Raynes Park",
-  NEM: "New Malden",
-  BRS: "Berrylands",
-  SUR: "Surbiton",
-  ESH: "Esher",
-  HER: "Hersham",
-  WAL: "Walton-on-Thames",
-  WYB: "Weybridge",
-  BFN: "Byfleet & New Haw",
-  WBY: "West Byfleet",
-  WOK: "Woking",
-  BKO: "Brookwood",
-  FNB: "Farnborough",
-  FLE: "Fleet",
-  WNF: "Winchfield",
-  HOK: "Hook",
-  BSK: "Basingstoke",
-  MIC: "Micheldever",
-  WIN: "Winchester",
-  SHW: "Shawford",
-  ESL: "Eastleigh",
-  SOA: "Southampton Airport",
-  SOU: "Southampton Central",
-  MBK: "Millbrook",
-  RDB: "Redbridge",
-  TTN: "Totton",
-  ANF: "Ashurst New Forest",
-  BEU: "Beaulieu Road",
-  BCU: "Brockenhurst",
-  SWY: "Sway",
-  NWM: "New Milton",
-  HNA: "Hinton Admiral",
-  CHR: "Christchurch",
-  POK: "Pokesdown",
-  BMH: "Bournemouth",
-  BSM: "Branksome",
-  PKS: "Parkstone",
-  POO: "Poole",
-  HAM: "Hamworthy",
-  WRM: "Wareham",
-  WOO: "Wool",
-  MTN: "Moreton",
-  DCH: "Dorchester South",
-  UPW: "Upwey",
-  WEY: "Weymouth",
-};
-
-const BLUEPRINT_LANES = [
-  { id: "uf", label: "Up fast", y: 72 },
-  { id: "df", label: "Down fast", y: 106 },
-  { id: "us", label: "Up slow", y: 156 },
-  { id: "ds", label: "Down slow", y: 190 },
-] as const;
-const WATERLOO_BRANCH_LANES = [
-  { id: "wr-uf", label: "Windsor / Reading up fast", y: 232 },
-  { id: "wr-df", label: "Windsor / Reading down fast", y: 258 },
-  { id: "wr-us", label: "Windsor / Reading up slow", y: 284 },
-  { id: "wr-ds", label: "Windsor / Reading down slow", y: 310 },
-] as const;
-const WATERLOO_THROAT_WIDTH = 250;
-const BLUEPRINT_MARGIN_X = 54 + WATERLOO_THROAT_WIDTH;
-const BLUEPRINT_STEP_X = 74;
-const BLUEPRINT_TOP = 28;
-const BLUEPRINT_HEIGHT = 450;
-const WATERLOO_PLATFORMS = Array.from({ length: 24 }, (_, i) => i + 1);
-const WATERLOO_PLATFORM_TOP = 34;
-const WATERLOO_PLATFORM_STEP = 10;
-
-const SWML_BRANCH_LINKS = [
-  { crs: "CLJ", label: "Windsor / Reading / Richmond", href: "/signalling/windsor-reading" },
-  { crs: "RAY", label: "Epsom / Dorking", href: "/signalling/epsom" },
-  { crs: "RAY", label: "Chessington South", href: "/signalling/chessington" },
-  { crs: "NEM", label: "Kingston loop / Shepperton", href: "/signalling/kingston-shepperton" },
-  { crs: "SUR", label: "Hampton Court", href: "/signalling/hampton-court" },
-  { crs: "SUR", label: "Guildford via Cobham", href: "/signalling/guildford-cobham" },
-  { crs: "WYB", label: "Chertsey / Staines", href: "/signalling/chertsey" },
-  { crs: "WOK", label: "Portsmouth Direct", href: "/signalling/portsmouth-direct" },
-  { crs: "BKO", label: "Alton / Ascot", href: "/signalling/alton-ascot" },
-  { crs: "BSK", label: "Salisbury / Exeter", href: "/signalling/west-of-england" },
-  { crs: "BSK", label: "Reading / Berks & Hants", href: "/signalling/reading-basingstoke" },
-  { crs: "ESL", label: "Portsmouth via Fareham", href: "/signalling/fareham" },
-  { crs: "ESL", label: "Romsey / Netley", href: "/signalling/romsey-netley" },
-  { crs: "BCU", label: "Lymington branch", href: "/signalling/lymington" },
-];
-
-function laneIndexForBerth(berth: string): number {
-  const digits = berth.match(/\d/g)?.join("");
-  if (digits) return Number(digits.slice(-1)) % BLUEPRINT_LANES.length;
-  let hash = 0;
-  for (const c of berth) hash += c.charCodeAt(0);
-  return hash % BLUEPRINT_LANES.length;
-}
-
-function readableStationName(crs: string, berths: LaidBerth[]): string {
-  const fromData = berths.find((b) => b.crs === crs && b.place)?.place;
-  return fromData ?? SWML_STATION_NAMES[crs] ?? crs;
-}
+const BLUEPRINT_LABEL_X = 20;
 
 function numericPlatform(platform: string | undefined): number | undefined {
   const match = platform?.match(/\d+/);
   return match ? Number(match[0]) : undefined;
 }
 
-function waterlooPlatformY(platform: string | undefined): number | undefined {
-  const n = numericPlatform(platform);
-  if (!n || n < 1 || n > WATERLOO_PLATFORMS.length) return undefined;
-  return WATERLOO_PLATFORM_TOP + (n - 1) * WATERLOO_PLATFORM_STEP;
-}
-
-function laneForPlatform(
-  crs: string,
+/**
+ * Which running line a train sits on.
+ *
+ * Returns undefined rather than guessing. The previous renderer fell back to
+ * `laneIndexForBerth`, which summed the character codes of the berth name and
+ * took a modulo to pick a lane — so a train whose line was genuinely unknown
+ * was still drawn confidently on a specific running line, and the line it got
+ * was an artefact of how its berth happened to be spelled. On a signalling
+ * diagram that is worse than showing nothing, so unknowns now go to their own
+ * gutter column and are labelled as unplaced.
+ */
+function trackForTrain(
+  tracks: BlueprintTrack[],
   platform: string | undefined,
-  fallbackSeed: string,
-): (typeof BLUEPRINT_LANES)[number] | (typeof WATERLOO_BRANCH_LANES)[number] {
+): { track: BlueprintTrack; inferred: boolean } | undefined {
   const n = numericPlatform(platform);
-  const [upFast, downFast, upSlow, downSlow] = BLUEPRINT_LANES;
-  const [windsorUpFast, windsorDownFast, windsorUpSlow, windsorDownSlow] = WATERLOO_BRANCH_LANES;
+  if (!n || tracks.length === 0) return undefined;
 
-  if (crs === "CLJ" && n) {
-    if (n <= 6) return n % 2 === 0 ? windsorDownFast : windsorUpFast;
-    if (n <= 8) return n % 2 === 0 ? downFast ?? upFast : upFast;
-    if (n <= 11) return n % 2 === 0 ? downSlow ?? downFast ?? upFast : upSlow ?? upFast;
-    return n % 2 === 0 ? windsorDownSlow : windsorUpSlow;
-  }
-
-  if (n) {
-    if (n <= 2) return n % 2 === 0 ? downFast ?? upFast : upFast;
-    return n % 2 === 0 ? downSlow ?? downFast ?? upFast : upSlow ?? upFast;
-  }
-
-  return BLUEPRINT_LANES[laneIndexForBerth(fallbackSeed)] ?? upFast;
+  // SMART gives a platform, not a line. Odd/even platform numbering does track
+  // up/down direction at most SWML stations, so this is a real signal — but it
+  // is an inference, and the renderer marks trains placed this way.
+  const wantUp = n % 2 === 1;
+  const candidates = tracks.filter((t) => t.trackId.startsWith(wantUp ? "2" : "1"));
+  const chosen = candidates[0] ?? tracks[0];
+  return chosen ? { track: chosen, inferred: true } : undefined;
 }
 
-function trainYForBerth(
-  crs: string,
-  berth: LaidBerth,
-  fallbackLane: (typeof BLUEPRINT_LANES)[number] | (typeof WATERLOO_BRANCH_LANES)[number],
-): number {
-  const waterlooY = crs === "WAT" ? waterlooPlatformY(berth.platform) : undefined;
-  if (waterlooY !== undefined) return waterlooY;
-  return fallbackLane.y;
-}
-
-interface BlueprintStation {
-  crs: string;
-  name: string;
-  x: number;
-  berthCount: number;
-  platforms: Set<string>;
-  tdAreas: Set<string>;
-}
-
-interface SwmlBlueprintModel {
-  stations: BlueprintStation[];
-  trainsByStation: Map<string, Array<DiagramTrain & { berth: LaidBerth }>>;
-  signalCounts: Map<
-    string,
-    { off: number; red: number; unknown: number; mapped: number; routeSet: number }
-  >;
-  areaBands: Array<{ area: string; x1: number; x2: number }>;
-  width: number;
-  height: number;
-}
-
-function SwmlBlueprint({
-  blueprint,
+/**
+ * The vertical corridor blueprint.
+ *
+ * Reads top-to-bottom: running lines are vertical columns, stations are ticks
+ * across them spaced by real track mileage, and names sit upright in the left
+ * gutter. Branches hang off their junction station to either side.
+ *
+ * All geometry comes from lib/blueprint-layout.ts so it can be tested without
+ * a DOM; this function only draws.
+ */
+function CorridorBlueprint({
+  model,
+  trainsByStation,
+  signalCounts,
 }: {
-  blueprint: SwmlBlueprintModel;
-  data: DiagramState;
+  model: BlueprintModel;
+  trainsByStation: Map<string, Array<DiagramTrain & { berth: LaidBerth }>>;
+  signalCounts: Map<string, { off: number; red: number; unknown: number; routeSet: number }>;
 }) {
-  const firstX = blueprint.stations[0]?.x ?? BLUEPRINT_MARGIN_X;
-  const lastX = blueprint.stations.at(-1)?.x ?? firstX;
-  const [upFast, downFast, upSlow, downSlow] = BLUEPRINT_LANES;
-  if (!upFast || !downFast || !upSlow || !downSlow) return null;
-  const junctions = new Set(["WAT", "CLJ", "WOK", "BSK", "ESL", "SOU", "BCU", "BMH", "POO"]);
-  const waterlooX = blueprint.stations.find((station) => station.crs === "WAT")?.x ?? firstX;
-  const claphamX = blueprint.stations.find((station) => station.crs === "CLJ")?.x ?? waterlooX + 3 * BLUEPRINT_STEP_X;
-  const waterlooFanInX = waterlooX - 28;
-  const waterlooPlatformEndX = waterlooX - 102;
-  const waterlooPlatformStartX = 34;
-  const laneTargets = [
-    upFast.y,
-    downFast.y,
-    upSlow.y,
-    downSlow.y,
-    WATERLOO_BRANCH_LANES[0]?.y ?? downSlow.y,
-    WATERLOO_BRANCH_LANES[1]?.y ?? downSlow.y,
-    WATERLOO_BRANCH_LANES[2]?.y ?? downSlow.y,
-    WATERLOO_BRANCH_LANES[3]?.y ?? downSlow.y,
-  ];
+  const { stations, tracks, branches } = model;
+  const firstY = stations[0]?.y ?? BLUEPRINT_TOP;
+  const lastY = stations.at(-1)?.y ?? firstY;
+  const trackLeft = tracks.length ? Math.min(...tracks.map((t) => t.x)) : LABEL_GUTTER;
+  const trackRight = tracks.length ? Math.max(...tracks.map((t) => t.x)) : LABEL_GUTTER;
+  const unknownX = trackRight + TRACK_PITCH;
+
+  // Mileage runs one way or the other along the ELR; map it to y using the two
+  // outermost stations we actually placed, so track spans line up with ticks.
+  const placed = stations.filter((s) => s.mile !== undefined);
+  const yForMile = (mile: number): number => {
+    const first = placed[0];
+    const last = placed.at(-1);
+    if (!first || !last || first.mile === last.mile) return firstY;
+    const span = (last.mile as number) - (first.mile as number);
+    const ratio = (mile - (first.mile as number)) / span;
+    return first.y + ratio * (last.y - first.y);
+  };
 
   return (
     <>
-      <rect
-        x={0}
-        y={0}
-        width={blueprint.width}
-        height={blueprint.height}
-        className="sig-blueprint-paper"
-      />
-
-      <g className="sig-blueprint-areas" aria-hidden="true">
-        {blueprint.areaBands.map((band, i) => (
-          <g key={band.area}>
-            <rect
-              x={Math.max(0, band.x1)}
-              y={BLUEPRINT_TOP}
-              width={Math.max(22, band.x2 - band.x1)}
-              height={BLUEPRINT_HEIGHT - BLUEPRINT_TOP - 62}
-              className={i % 2 === 0 ? "sig-blueprint-area" : "sig-blueprint-area-alt"}
-            />
-            <text x={band.x1 + 8} y={BLUEPRINT_TOP + 14} className="sig-blueprint-area-label">
-              {band.area}
-            </text>
-          </g>
-        ))}
-      </g>
+      <rect x={0} y={0} width={model.width} height={model.height} className="sig-blueprint-paper" />
 
       <g className="sig-blueprint-lanes">
-        {BLUEPRINT_LANES.map((lane) => (
-          <g key={lane.id}>
-            <line
-              x1={lane.id.startsWith("u") ? waterlooFanInX : firstX - 28}
-              y1={lane.y}
-              x2={lastX + 28}
-              y2={lane.y}
-              className="sig-blueprint-road"
-            />
-            <text x={16} y={lane.y + 4} className="sig-blueprint-road-label">
-              {lane.label}
-            </text>
-          </g>
-        ))}
-        {WATERLOO_BRANCH_LANES.map((lane) => (
-          <g key={lane.id}>
-            <line
-              x1={waterlooFanInX}
-              y1={lane.y}
-              x2={claphamX + 28}
-              y2={lane.y}
-              className="sig-blueprint-road sig-blueprint-road-branch"
-            />
-            <text x={16} y={lane.y + 4} className="sig-blueprint-road-label">
-              {lane.label}
-            </text>
-          </g>
-        ))}
-      </g>
-
-      <g className="sig-blueprint-waterloo" aria-label="London Waterloo platform throat">
-        <text x={waterlooPlatformStartX} y={20} className="sig-blueprint-terminal-title">
-          London Waterloo
-        </text>
-        <rect
-          x={waterlooPlatformStartX - 4}
-          y={WATERLOO_PLATFORM_TOP - 11}
-          width={waterlooPlatformEndX - waterlooPlatformStartX + 10}
-          height={(WATERLOO_PLATFORMS.length - 1) * WATERLOO_PLATFORM_STEP + 22}
-          rx={4}
-          className="sig-blueprint-terminal-box"
-        />
-        {WATERLOO_PLATFORMS.map((platform) => {
-          const y = WATERLOO_PLATFORM_TOP + (platform - 1) * WATERLOO_PLATFORM_STEP;
-          const targetY = laneTargets[(platform - 1) % laneTargets.length] ?? downFast.y;
+        {tracks.map((track) => {
+          const top = placed.length ? Math.max(firstY, yForMile(track.fromMile)) : firstY;
+          const bottom = placed.length ? Math.min(lastY, yForMile(track.toMile)) : lastY;
           return (
-            <g key={platform}>
+            <g key={track.trackId}>
               <line
-                x1={waterlooPlatformStartX + 28}
-                y1={y}
-                x2={waterlooPlatformEndX}
-                y2={y}
-                className="sig-blueprint-platform-road"
-              />
-              <path
-                d={`M ${waterlooPlatformEndX} ${y} C ${waterlooPlatformEndX + 42} ${y}, ${waterlooFanInX - 34} ${targetY}, ${waterlooFanInX} ${targetY}`}
-                className="sig-blueprint-platform-fan"
-              />
-              <rect
-                x={waterlooPlatformStartX + 2}
-                y={y - 4}
-                width={20}
-                height={8}
-                rx={1.5}
-                className="sig-blueprint-platform-number-box"
+                x1={track.x}
+                y1={Math.min(top, bottom) - 14}
+                x2={track.x}
+                y2={Math.max(top, bottom) + 14}
+                className="sig-blueprint-road"
               />
               <text
-                x={waterlooPlatformStartX + 12}
-                y={y + 2.5}
-                className="sig-blueprint-platform-number"
-                textAnchor="middle"
+                x={track.x}
+                y={BLUEPRINT_TOP - 26}
+                className="sig-blueprint-road-label"
+                textAnchor="start"
+                transform={`rotate(-52 ${track.x} ${BLUEPRINT_TOP - 26})`}
               >
-                {platform}
+                {track.label}
               </text>
             </g>
-          );
-        })}
-      </g>
-
-      <g className="sig-blueprint-junctions" aria-hidden="true">
-        {blueprint.stations
-          .filter((station) => junctions.has(station.crs))
-          .map((station) => (
-            <g key={station.crs}>
-              <line
-                x1={station.x - 20}
-                y1={upFast.y}
-                x2={station.x + 20}
-                y2={upSlow.y}
-                className="sig-blueprint-crossover"
-              />
-              <line
-                x1={station.x - 20}
-                y1={downFast.y}
-                x2={station.x + 20}
-                y2={downSlow.y}
-                className="sig-blueprint-crossover"
-              />
-            </g>
-          ))}
-      </g>
-
-      <g className="sig-blueprint-branches">
-        {SWML_BRANCH_LINKS.map((branch, i) => {
-          const station = blueprint.stations.find((s) => s.crs === branch.crs);
-          if (!station) return null;
-          const isWindsorReading = branch.crs === "CLJ";
-          const sameStationIndex = SWML_BRANCH_LINKS.slice(0, i).filter((b) => b.crs === branch.crs).length;
-          const y = isWindsorReading
-            ? WATERLOO_BRANCH_LANES[3]?.y ?? downSlow.y
-            : i % 2 === 0
-              ? upFast.y - 38 - sameStationIndex * 18
-              : downSlow.y + 34 + sameStationIndex * 18;
-          const joinY = isWindsorReading ? y : i % 2 === 0 ? upFast.y : downSlow.y;
-          const labelY = isWindsorReading ? y + 24 : y + 4;
-          return (
-            <a key={branch.href} href={branch.href} className="sig-blueprint-branch-link">
-              <path
-                d={
-                  isWindsorReading
-                    ? `M ${claphamX + 28} ${joinY} C ${claphamX + 52} ${joinY}, ${claphamX + 62} ${joinY + 22}, ${claphamX + 96} ${joinY + 22}`
-                    : `M ${station.x} ${joinY} C ${station.x + 24} ${joinY}, ${station.x + 30} ${y}, ${station.x + 64} ${y}`
-                }
-                className="sig-blueprint-branch-road"
-              />
-              <circle
-                cx={isWindsorReading ? claphamX + 96 : station.x + 64}
-                cy={isWindsorReading ? joinY + 22 : y}
-                r={5}
-                className="sig-blueprint-branch-node"
-              />
-              <text
-                x={isWindsorReading ? claphamX + 106 : station.x + 74}
-                y={labelY}
-                className="sig-blueprint-branch-label"
-              >
-                {branch.label}
-              </text>
-            </a>
           );
         })}
       </g>
 
       <g className="sig-blueprint-stations">
-        {blueprint.stations.map((station, i) => {
-          const isMajor = station.berthCount > 28 || junctions.has(station.crs);
+        {stations.map((station) => {
           const platformCount = station.platforms.size;
           return (
             <g key={station.crs}>
               <line
-                x1={station.x}
-                y1={upFast.y - 18}
-                x2={station.x}
-                y2={downSlow.y + 18}
-                className={isMajor ? "sig-blueprint-station-major" : "sig-blueprint-station"}
+                x1={trackLeft - 12}
+                y1={station.y}
+                x2={trackRight + 12}
+                y2={station.y}
+                className={station.junction ? "sig-blueprint-station-major" : "sig-blueprint-station"}
               />
-              {platformCount > 0 && (
-                <rect
-                  x={station.x - 16}
-                  y={downFast.y + 12}
-                  width={32}
-                  height={28}
-                  rx={3}
-                  className="sig-blueprint-platforms"
+              <text
+                x={BLUEPRINT_LABEL_X}
+                y={station.y + 3.5}
+                className={
+                  station.junction
+                    ? "sig-blueprint-station-label-major"
+                    : "sig-blueprint-station-label"
+                }
+              >
+                {station.name}
+                {station.estimated && (
+                  <title>
+                    {station.name}: position estimated — no Track Model match, so this station is
+                    spaced evenly rather than by real mileage.
+                  </title>
+                )}
+              </text>
+              <text x={LABEL_GUTTER - 34} y={station.y + 3.5} className="sig-blueprint-chainage">
+                {station.crs}
+              </text>
+              {station.estimated && (
+                <circle
+                  cx={LABEL_GUTTER - 14}
+                  cy={station.y}
+                  r={2}
+                  className="sig-blueprint-estimated"
                 >
+                  <title>Position estimated — no Track Model match for {station.name}.</title>
+                </circle>
+              )}
+              {platformCount > 0 && (
+                <text x={trackRight + 18} y={station.y + 3} className="sig-blueprint-platform-count">
+                  {platformCount}p
                   <title>
                     {station.name}: {platformCount} platform{platformCount === 1 ? "" : "s"} in
                     matched berth data
                   </title>
-                </rect>
-              )}
-              <text
-                x={station.x}
-                y={386}
-                className={isMajor ? "sig-blueprint-station-label-major" : "sig-blueprint-station-label"}
-                textAnchor="end"
-                transform={`rotate(-35 ${station.x} 386)`}
-              >
-                {isMajor ? station.name : station.crs}
-              </text>
-              {i % 5 === 0 && (
-                <text x={station.x} y={420} className="sig-blueprint-chainage" textAnchor="middle">
-                  {station.crs}
                 </text>
               )}
             </g>
@@ -483,35 +236,23 @@ function SwmlBlueprint({
       </g>
 
       <g className="sig-blueprint-signals">
-        {blueprint.stations.map((station) => {
-          const counts = blueprint.signalCounts.get(station.crs);
+        {stations.map((station) => {
+          const counts = signalCounts.get(station.crs);
           if (!counts) return null;
           const signals = [
-            ...Array.from({ length: Math.min(counts.red, 3) }, (_, i) => ({ aspect: "red", i })),
-            ...Array.from({ length: Math.min(counts.off, 3) }, (_, i) => ({ aspect: "off", i })),
-            ...Array.from({ length: Math.min(counts.unknown, 3) }, (_, i) => ({
-              aspect: "unknown",
-              i,
-            })),
+            ...Array.from({ length: Math.min(counts.red, 3) }, () => "red"),
+            ...Array.from({ length: Math.min(counts.off, 3) }, () => "off"),
+            ...Array.from({ length: Math.min(counts.unknown, 3) }, () => "unknown"),
           ].slice(0, 5);
           return (
             <g key={station.crs}>
-              {counts.routeSet > 0 && (
-                <line
-                  x1={station.x - 18}
-                  y1={upFast.y - 10}
-                  x2={station.x + 18}
-                  y2={downFast.y + 10}
-                  className="sig-blueprint-route"
-                />
-              )}
-              {signals.map((signal, i) => (
+              {signals.map((aspect, i) => (
                 <circle
-                  key={`${station.crs}-${signal.aspect}-${i}`}
-                  cx={station.x - 20 + i * 9}
-                  cy={upFast.y - 18}
-                  r={3.2}
-                  className={`sig-signal-head sig-signal-${signal.aspect}`}
+                  key={`${station.crs}-${aspect}-${i}`}
+                  cx={trackLeft - 22}
+                  cy={station.y - 8 + i * 4.2}
+                  r={2.6}
+                  className={`sig-signal-head sig-signal-${aspect}`}
                 >
                   <title>
                     {station.name}: {counts.red} red, {counts.off} off, {counts.unknown} unknown
@@ -523,27 +264,64 @@ function SwmlBlueprint({
         })}
       </g>
 
+      <g className="sig-blueprint-branches">
+        {branches.map((branch, i) => {
+          const right = branch.side === "down";
+          const stubX = right ? trackRight + 46 : trackLeft - 46;
+          const endX = right ? stubX + 34 : stubX - 34;
+          // Stagger branches leaving the same station so their labels don't stack.
+          const sameStation = branches.slice(0, i).filter((b) => b.atCrs === branch.atCrs).length;
+          const y = branch.y + sameStation * 13;
+          return (
+            <a key={branch.id} href={`/signalling/${branch.id}`} className="sig-blueprint-branch-link">
+              <path
+                d={`M ${right ? trackRight : trackLeft} ${branch.y} C ${stubX} ${branch.y}, ${stubX} ${y}, ${endX} ${y}`}
+                className="sig-blueprint-branch-road"
+              />
+              <circle cx={endX} cy={y} r={4} className="sig-blueprint-branch-node" />
+              <text
+                x={right ? endX + 9 : endX - 9}
+                y={y + 3.5}
+                className="sig-blueprint-branch-label"
+                textAnchor={right ? "start" : "end"}
+              >
+                {branch.label}
+              </text>
+            </a>
+          );
+        })}
+      </g>
+
       <g className="sig-blueprint-trains">
-        {blueprint.stations.flatMap((station) => {
-          const trains = blueprint.trainsByStation.get(station.crs) ?? [];
+        {stations.flatMap((station) => {
+          const trains = trainsByStation.get(station.crs) ?? [];
           return trains.slice(0, 4).map((train, i) => {
-            const lane = laneForPlatform(station.crs, train.berth.platform, train.berth.berth);
-            const y = trainYForBerth(station.crs, train.berth, lane);
-            const terminalX = station.crs === "WAT" ? waterlooPlatformEndX - 22 : station.x;
-            const x = terminalX + (i - Math.min(trains.length, 4) / 2 + 0.5) * 42;
+            const placement = trackForTrain(tracks, train.berth.platform);
+            const x = placement ? placement.track.x : unknownX;
+            // Several trains at one station would land on top of each other;
+            // step them down a few pixels each so all of them stay readable.
+            const y = station.y + (i - Math.min(trains.length, 4) / 2 + 0.5) * 13;
             return (
-              <g key={`${train.headcode}-${train.berthId}`} className={train.focus ? "sig-train-focus" : ""}>
+              <g
+                key={`${train.headcode}-${train.berthId}`}
+                className={train.focus ? "sig-train-focus" : ""}
+              >
                 <rect
-                  x={x - 18}
-                  y={y - 8}
-                  width={36}
-                  height={16}
+                  x={x - 17}
+                  y={y - 6}
+                  width={34}
+                  height={12}
                   rx={2}
-                  className={`sig-berth-occupied${train.focus ? " sig-berth-focus" : ""}`}
+                  className={`sig-berth-occupied${train.focus ? " sig-berth-focus" : ""}${
+                    placement ? "" : " sig-berth-unplaced"
+                  }`}
                 >
                   <title>
                     {train.headcode} at {station.name}, berth {train.berth.tdArea}{" "}
                     {train.berth.berth}
+                    {placement
+                      ? ` — line inferred from platform ${train.berth.platform}`
+                      : " — running line unknown, shown outside the running lines"}
                   </title>
                 </rect>
                 <text
@@ -560,6 +338,12 @@ function SwmlBlueprint({
           });
         })}
       </g>
+
+      <g className="sig-blueprint-unknown-key">
+        <text x={unknownX} y={BLUEPRINT_TOP - 26} className="sig-blueprint-road-label-muted" textAnchor="start" transform={`rotate(-52 ${unknownX} ${BLUEPRINT_TOP - 26})`}>
+          Line unknown
+        </text>
+      </g>
     </>
   );
 }
@@ -569,12 +353,21 @@ export function SignallingDiagram({
   title,
   mode = "modal",
   variant = "topology",
+  geometry,
   onClose,
 }: {
   query: string; // e.g. "trainId=TD:1A23" or "rid=..."
   title: string;
   mode?: "modal" | "inline";
   variant?: "topology" | "blueprint";
+  /**
+   * Where this corridor's stations sit on the railway, and how many running
+   * lines each stretch has. Fetched once on the server and passed in, rather
+   * than streamed: it changes when the Track Model ETL re-runs, not every eight
+   * seconds like the live state does. Absent means "no Track Model coverage",
+   * and the diagram falls back to even spacing and says so.
+   */
+  geometry?: { stations: StationPosition[]; sections: TrackSection[] };
   onClose?: () => void;
 }) {
   const [layout, setLayout] = useState<DiagramLayout | null>(null);
@@ -728,48 +521,37 @@ export function SignallingDiagram({
     return spaced;
   }, [layout]);
 
-  const swmlBlueprint = useMemo(() => {
-    if (variant !== "blueprint" || !layout || !data || !query.includes("corridor=swml")) {
-      return null;
-    }
+  /**
+   * The corridor id this diagram is drawing, if any.
+   *
+   * Parsed properly rather than the old `query.includes("corridor=swml")`
+   * substring check, which hardcoded the one corridor that existed and would
+   * have matched any query string that merely contained that text.
+   */
+  const corridorId = useMemo(() => {
+    const value = new URLSearchParams(query).get("corridor");
+    return value ? value.toLowerCase() : undefined;
+  }, [query]);
 
-    const stationCrs = SIGNALLING_CORRIDORS.swml.stationCrs;
-    const stationIndex = new Map(stationCrs.map((crs, i) => [crs, i]));
-    const stationStats = new Map<
-      string,
-      {
-        crs: string;
-        name: string;
-        x: number;
-        berthCount: number;
-        platforms: Set<string>;
-        tdAreas: Set<string>;
-      }
-    >();
-    for (const crs of stationCrs) {
-      const i = stationIndex.get(crs) ?? 0;
-      stationStats.set(crs, {
-        crs,
-        name: readableStationName(crs, layout.berths),
-        x: BLUEPRINT_MARGIN_X + i * BLUEPRINT_STEP_X,
-        berthCount: 0,
-        platforms: new Set(),
-        tdAreas: new Set(),
-      });
-    }
-    for (const berth of layout.berths) {
-      if (!berth.crs) continue;
-      const stat = stationStats.get(berth.crs);
-      if (!stat) continue;
-      stat.berthCount += 1;
-      if (berth.platform) stat.platforms.add(berth.platform);
-      stat.tdAreas.add(berth.tdArea);
-    }
+  const blueprint = useMemo(() => {
+    if (variant !== "blueprint" || !layout || !data || !corridorId) return null;
+    const corridor = namedSignallingCorridor(corridorId);
+    if (!corridor) return null;
+
+    const model = buildBlueprint({
+      corridor,
+      positions: geometry?.stations ?? [],
+      sections: geometry?.sections ?? [],
+      berths: layout.berths,
+      nameFor: trackRoleName,
+    });
+
+    const onCorridor = new Set(corridor.stations.map((s) => s.crs));
 
     const trainsByStation = new Map<string, Array<DiagramTrain & { berth: LaidBerth }>>();
     for (const train of data.trains) {
       const berth = berthById.get(train.berthId);
-      if (!berth?.crs || !stationStats.has(berth.crs)) continue;
+      if (!berth?.crs || !onCorridor.has(berth.crs)) continue;
       const list = trainsByStation.get(berth.crs);
       if (list) list.push({ ...train, berth });
       else trainsByStation.set(berth.crs, [{ ...train, berth }]);
@@ -777,48 +559,33 @@ export function SignallingDiagram({
 
     const signalCounts = new Map<
       string,
-      { off: number; red: number; unknown: number; mapped: number; routeSet: number }
+      { off: number; red: number; unknown: number; routeSet: number }
     >();
     for (const signal of data.signals) {
       const berth = signal.berthAhead ? berthById.get(signal.berthAhead) : undefined;
-      if (!berth?.crs || !stationStats.has(berth.crs)) continue;
-      const counts =
-        signalCounts.get(berth.crs) ?? { off: 0, red: 0, unknown: 0, mapped: 0, routeSet: 0 };
+      if (!berth?.crs || !onCorridor.has(berth.crs)) continue;
+      const counts = signalCounts.get(berth.crs) ?? { off: 0, red: 0, unknown: 0, routeSet: 0 };
       counts[signal.aspect] += 1;
-      if (signal.mapped) counts.mapped += 1;
       if (signal.routeSet) counts.routeSet += 1;
       signalCounts.set(berth.crs, counts);
     }
 
-    const areaBands = data.areas.map((area) => {
-      const xs = [...stationStats.values()]
-        .filter((station) => station.tdAreas.has(area))
-        .map((station) => station.x);
-      if (!xs.length) return null;
-      return { area, x1: Math.min(...xs) - 28, x2: Math.max(...xs) + 28 };
-    }).filter((band): band is { area: string; x1: number; x2: number } => Boolean(band));
+    return { model, trainsByStation, signalCounts };
+  }, [berthById, corridorId, data, geometry, layout, variant]);
 
-    return {
-      stations: [...stationStats.values()],
-      trainsByStation,
-      signalCounts,
-      areaBands,
-      width: BLUEPRINT_MARGIN_X * 2 + (stationCrs.length - 1) * BLUEPRINT_STEP_X,
-      height: BLUEPRINT_HEIGHT,
-    };
-  }, [berthById, data, layout, query, variant]);
 
   const hasBerths = (layout?.berths.length ?? 0) > 0;
   const LABEL_BAND = 70;
-  const isBlueprint = Boolean(swmlBlueprint);
-  const viewBoxWidth = swmlBlueprint?.width ?? layout?.width ?? 0;
-  const viewBoxHeight = isBlueprint
-    ? BLUEPRINT_HEIGHT
+  const isBlueprint = Boolean(blueprint);
+  const viewBoxWidth = blueprint?.model.width ?? layout?.width ?? 0;
+  const viewBoxHeight = blueprint
+    ? blueprint.model.height
     : (layout?.height ?? 0) + (placeLabels.length ? LABEL_BAND : 0);
-  // Render close to native size (viewBox units are already pixel-scale, e.g.
-  // 90px per berth column) rather than stretching to the modal's width — a
-  // wide/tall corridor stays legible and the board scrolls instead of
-  // squashing everything into the panel.
+  // Render close to native size (viewBox units are already pixel-scale) rather
+  // than stretching to the panel's width — a long corridor stays legible and
+  // the board scrolls instead of squashing everything into the panel. The
+  // blueprint is the tall one now, so it scrolls vertically; see
+  // .sig-board-blueprint in globals.css.
   const SCALE = isBlueprint ? 1 : mode === "inline" ? 0.85 : 1.5;
   const renderWidth = viewBoxWidth * SCALE;
   const renderHeight = viewBoxHeight * SCALE;
@@ -862,10 +629,11 @@ export function SignallingDiagram({
               role="img"
               aria-label="Corridor signalling diagram"
             >
-              {swmlBlueprint ? (
-                <SwmlBlueprint
-                  blueprint={swmlBlueprint}
-                  data={data}
+              {blueprint ? (
+                <CorridorBlueprint
+                  model={blueprint.model}
+                  trainsByStation={blueprint.trainsByStation}
+                  signalCounts={blueprint.signalCounts}
                 />
               ) : (
                 <>

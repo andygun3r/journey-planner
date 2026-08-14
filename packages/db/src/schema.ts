@@ -1115,6 +1115,36 @@ export const trackModelLine = pgTable(
   (t) => [index("track_model_line_elr_idx").on(t.elr)],
 );
 
+/**
+ * How many running lines exist along a stretch of railway, and which they are.
+ *
+ * Derived from track_model_line by `etl track-sections`: sweep along an ELR and
+ * emit a row wherever the set of live TRACK_IDs changes. That is what makes the
+ * signalling blueprint honest about shape — the SWML is four-track from Waterloo
+ * to Worting Junction and two-track beyond, and the diagram used to draw four
+ * lines the whole way to Weymouth regardless.
+ *
+ * Track Model carries no human name for a line (its only identifier is
+ * TRACK_ID), so `trackIds` stays raw here and the display names live in
+ * apps/web/lib/signalling-corridors.ts. Counting and locating tracks is data;
+ * calling one "Up Fast" is a convention, and the two are kept apart on purpose.
+ */
+export const corridorTrackSection = pgTable(
+  "corridor_track_section",
+  {
+    id: text("id").primaryKey(),
+    elr: text("elr").notNull(),
+    startMileage: real("start_mileage").notNull(),
+    endMileage: real("end_mileage").notNull(),
+    /** The TRACK_IDs live across this whole span, ascending. */
+    trackIds: text("track_ids").array().notNull(),
+    /** trackIds.length, denormalised so the renderer can pick a width cheaply. */
+    trackCount: integer("track_count").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("corridor_track_section_elr_idx").on(t.elr, t.startMileage)],
+);
+
 // ---------------------------------------------------------------------------
 // Auth (Better Auth) — signed-in users. Table shapes follow Better Auth's
 // Drizzle adapter conventions exactly (see apps/web/lib/auth.ts) — column

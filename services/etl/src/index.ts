@@ -7,6 +7,7 @@ import { syncKbIncidents } from "./kb-incidents.js";
 import { syncTocOperators } from "./kb-tocs.js";
 import { snapStations } from "./snap-stations.js";
 import { trackModel } from "./track-model.js";
+import { trackSections } from "./track-sections.js";
 import { syncTrackModelFromSftp } from "./track-model-sftp.js";
 import { fares, osmCommand, packageCommand, postprocessOnly, timetable } from "./commands.js";
 import { startServer } from "./server.js";
@@ -61,6 +62,12 @@ if (httpPort) {
       // coordinates, though falls back to station.lat/lon if not.
       await trackModel();
       break;
+    case "track-sections":
+      // Derive how many running lines exist along each stretch of railway, from
+      // the track_model_line rows `track-model` already loaded. Cheap and
+      // read-only against the Track Model, so it can be re-run freely.
+      await trackSections();
+      break;
     case "track-model-sftp":
       // Pull NWR_TrackModel* files from SFTP, import them, then delete the remote
       // files after a successful load.
@@ -103,7 +110,7 @@ if (httpPort) {
       break;
     default:
       console.error(
-        "Usage: etl <timetable|package|fares|load-fares|postprocess|snap-stations|orm-signals|rail-corridors|track-model|track-model-sftp|kb-facilities|kb-incidents|kb-tocs|osm|server>",
+        "Usage: etl <timetable|package|fares|load-fares|postprocess|snap-stations|orm-signals|rail-corridors|track-model|track-sections|track-model-sftp|kb-facilities|kb-incidents|kb-tocs|osm|server>",
       );
       process.exit(1);
   }

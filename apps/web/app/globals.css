@@ -3612,10 +3612,17 @@ a.map-tip-anchor:hover .map-tip {
 .sig-svg {
   display: block;
 }
+/*
+ * The blueprint is tall, not wide: it runs the length of the corridor and fits
+ * the panel's width. `height: 100%` used to be set here and fought the explicit
+ * height attribute the component renders; the SVG now keeps its natural height
+ * and the board scrolls down it.
+ */
 .sig-blueprint-svg {
-  height: 100%;
-  max-height: 100%;
-  background: #f7f8fb;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  background: var(--surface);
 }
 .sig-empty {
   color: var(--muted);
@@ -3695,79 +3702,34 @@ a.map-tip-anchor:hover .map-tip {
   font-size: 8px;
   fill: var(--muted);
 }
+/*
+ * Vertical corridor blueprint.
+ *
+ * The diagram reads top-to-bottom: running lines are vertical columns and
+ * stations are horizontal ticks spaced by real track mileage. Colours are
+ * theme tokens rather than the fixed #f7f8fb paper / #05070a ink this used to
+ * hardcode, so the board follows the rest of the app instead of staying light
+ * when nothing else does.
+ */
 .sig-blueprint-paper {
-  fill: #f7f8fb;
-}
-.sig-blueprint-area {
-  fill: color-mix(in oklch, var(--primary) 9%, transparent);
-}
-.sig-blueprint-area-alt {
-  fill: color-mix(in oklch, var(--accent) 8%, transparent);
-}
-.sig-blueprint-area-label {
-  font-family: var(--font-time, monospace);
-  font-size: 10px;
-  font-weight: 850;
-  fill: var(--primary);
+  fill: var(--surface);
 }
 .sig-blueprint-road {
-  stroke: #05070a;
-  stroke-width: 4;
-  stroke-linecap: square;
-}
-.sig-blueprint-road-branch {
-  stroke-width: 3;
-  stroke-dasharray: 0;
+  stroke: color-mix(in oklch, var(--ink) 78%, transparent);
+  stroke-width: 3.5;
+  stroke-linecap: round;
 }
 .sig-blueprint-road-label {
   font-family: var(--font-time, monospace);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   fill: var(--ink);
 }
-.sig-blueprint-crossover {
-  stroke: #05070a;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-}
-.sig-blueprint-route {
-  stroke: #0033a0;
-  stroke-width: 3;
-  stroke-linecap: round;
-}
-.sig-blueprint-terminal-title {
+.sig-blueprint-road-label-muted {
   font-family: var(--font-time, monospace);
-  font-size: 11px;
-  font-weight: 900;
-  fill: var(--ink);
-}
-.sig-blueprint-terminal-box {
-  fill: color-mix(in oklch, var(--surface) 46%, transparent);
-  stroke: color-mix(in oklch, var(--ink) 22%, transparent);
-  stroke-width: 1;
-  pointer-events: none;
-}
-.sig-blueprint-platform-road,
-.sig-blueprint-platform-fan {
-  fill: none;
-  stroke: #05070a;
-  stroke-width: 2;
-  stroke-linecap: square;
-}
-.sig-blueprint-platform-fan {
-  stroke-width: 1.6;
-  stroke-linecap: round;
-}
-.sig-blueprint-platform-number-box {
-  fill: #fff;
-  stroke: #05070a;
-  stroke-width: 0.8;
-}
-.sig-blueprint-platform-number {
-  font-family: var(--font-time, monospace);
-  font-size: 6px;
-  font-weight: 850;
-  fill: var(--ink);
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--muted);
 }
 .sig-blueprint-branch-link {
   color: var(--primary);
@@ -3778,33 +3740,29 @@ a.map-tip-anchor:hover .map-tip {
 }
 .sig-blueprint-branch-road {
   fill: none;
-  stroke: #0033a0;
-  stroke-width: 2.2;
+  stroke: var(--primary);
+  stroke-width: 2;
   stroke-linecap: round;
 }
 .sig-blueprint-branch-node {
-  fill: #fff;
-  stroke: #0033a0;
+  fill: var(--surface);
+  stroke: var(--primary);
   stroke-width: 2;
 }
 .sig-blueprint-branch-label {
   font-family: var(--font-time, monospace);
   font-size: 9px;
-  font-weight: 850;
-  fill: #0033a0;
+  font-weight: 800;
+  fill: var(--primary);
 }
 .sig-blueprint-station,
 .sig-blueprint-station-major {
-  stroke: color-mix(in oklch, var(--ink) 55%, transparent);
-  stroke-width: 1.4;
+  stroke: color-mix(in oklch, var(--ink) 42%, transparent);
+  stroke-width: 1.2;
 }
 .sig-blueprint-station-major {
-  stroke-width: 2.4;
-}
-.sig-blueprint-platforms {
-  fill: #fff;
-  stroke: #05070a;
-  stroke-width: 1.4;
+  stroke: color-mix(in oklch, var(--ink) 72%, transparent);
+  stroke-width: 2.2;
 }
 .sig-blueprint-station-label,
 .sig-blueprint-station-label-major,
@@ -3813,17 +3771,35 @@ a.map-tip-anchor:hover .map-tip {
   fill: var(--ink);
 }
 .sig-blueprint-station-label {
-  font-size: 9px;
-  font-weight: 750;
+  font-size: 9.5px;
+  font-weight: 650;
 }
 .sig-blueprint-station-label-major {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 900;
 }
 .sig-blueprint-chainage {
-  font-size: 8px;
+  font-size: 8.5px;
   font-weight: 800;
   fill: var(--muted);
+}
+.sig-blueprint-platform-count {
+  font-family: var(--font-time, monospace);
+  font-size: 8px;
+  font-weight: 700;
+  fill: var(--muted);
+}
+/* A station Track Model could not place: spaced evenly, and marked as such. */
+.sig-blueprint-estimated {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 1 1;
+}
+/* A train whose running line is unknown — drawn outside the running lines. */
+.sig-berth-unplaced {
+  opacity: 0.72;
+  stroke-dasharray: 3 2;
 }
 .sig-blueprint-headcode {
   font-size: 8px;
@@ -3898,13 +3874,18 @@ a.map-tip-anchor:hover .map-tip {
   height: 100%;
   min-height: 0;
 }
+/*
+ * Scrolls down the corridor, not across it. The diagram used to be ~4300px wide
+ * and 450px tall with overflow-y hidden, so reading Waterloo to Weymouth meant
+ * dragging sideways; it is now tall and fits the panel's width.
+ */
 .sig-inline .sig-board-blueprint {
   min-height: 0;
-  height: clamp(20rem, calc(100dvh - 17rem), 34rem);
+  height: clamp(24rem, calc(100dvh - 17rem), 46rem);
   max-height: none;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-inline: contain;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-block: contain;
 }
 .signal-blueprint-notes {
   display: grid;
@@ -3929,13 +3910,16 @@ a.map-tip-anchor:hover .map-tip {
     max-height: 64vh;
   }
   .sig-inline .sig-board-blueprint {
-    height: calc(100dvh - 18.5rem);
-    min-height: 19rem;
+    height: calc(100dvh - 16rem);
+    min-height: 22rem;
     max-height: none;
   }
-  .signal-blueprint-notes {
-    display: none;
-  }
+  /*
+   * The coverage caveat stays visible on mobile. It was hidden because the
+   * horizontal board needed every pixel of height; now that the page scrolls
+   * vertically it costs nothing, and PRODUCT.md requires the limits of
+   * signalling coverage be stated rather than implied.
+   */
 }
 
 .map-empty {
