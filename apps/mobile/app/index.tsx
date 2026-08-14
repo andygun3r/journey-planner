@@ -1,92 +1,190 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { colors, radii, spacing, textStyles } from "../theme/tokens";
+import { useState } from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
+import { AppShell, Card, EmptyState, PrimaryButton, StatusChip, commonStyles } from "../components/shell";
+import { Journey, JourneyResponse, planJourneys, timeLabel } from "../lib/api";
+import { colors, fonts, radii, spacing, textStyles } from "../theme/tokens";
 
-/**
- * Phase 0 scaffolding screen: exercises the design tokens (header band,
- * card, pill button, type hierarchy) end-to-end so the fonts -> tokens ->
- * render chain is actually proven on a device/simulator, not just
- * type-checked. Gets replaced by the real Plan screen in Phase 1.
- */
 export default function PlanScreen() {
+  const [from, setFrom] = useState("WAT");
+  const [to, setTo] = useState("VIC");
+  const [result, setResult] = useState<JourneyResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!from.trim() || !to.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      setResult(await planJourneys(from, to));
+    } catch {
+      setResult(null);
+      setError("Could not reach the Signaller backend. Check EXPO_PUBLIC_API_URL and try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.wordmark}>Signaller</Text>
+    <AppShell>
+      <View style={styles.shiftStrip}>
+        <Text style={textStyles.label}>Journey planner</Text>
+        <Text style={styles.apiHint}>Native companion app</Text>
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
+
+      <Card>
         <Text style={textStyles.h1}>Plan a journey</Text>
-        <Text style={[textStyles.body, styles.muted]}>
-          apps/mobile scaffolding — Phase 0 validation screen.
-        </Text>
-
-        <View style={styles.card}>
-          <Text style={textStyles.h2}>Next departure</Text>
-          <Text style={[textStyles.time, styles.time]}>10:42</Text>
-          <Text style={[textStyles.label, styles.label]}>On time</Text>
-        </View>
-
-        <SafeAreaView edges={["bottom"]}>
-          <View style={styles.pillButton}>
-            <Text style={styles.pillButtonText}>Search journeys</Text>
+        <Text style={styles.muted}>Use CRS station codes for this first mobile slice.</Text>
+        <View style={styles.inputGrid}>
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>From</Text>
+            <TextInput
+              autoCapitalize="characters"
+              autoCorrect={false}
+              value={from}
+              onChangeText={setFrom}
+              placeholder="WAT"
+              placeholderTextColor={colors.inkMuted}
+              style={styles.input}
+            />
           </View>
-        </SafeAreaView>
-      </ScrollView>
-    </View>
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>To</Text>
+            <TextInput
+              autoCapitalize="characters"
+              autoCorrect={false}
+              value={to}
+              onChangeText={setTo}
+              placeholder="VIC"
+              placeholderTextColor={colors.inkMuted}
+              style={styles.input}
+            />
+          </View>
+        </View>
+        <PrimaryButton label={loading ? "Planning..." : "Find trains"} onPress={submit} disabled={loading} />
+      </Card>
+
+      {error && <EmptyState title="Backend unavailable" body={error} />}
+
+      {result?.ok === false && (
+        <EmptyState
+          title={failureTitle(result.reason)}
+          body="The mobile app is wired correctly, but the backend could not return journeys for that request."
+        />
+      )}
+
+      {result?.ok === true && (
+        <View style={styles.results}>
+          {result.journeys.map((journey) => (
+            <JourneyCard key={journey.id} journey={journey} />
+          ))}
+        </View>
+      )}
+    </AppShell>
   );
 }
 
+function JourneyCard({ journey }: { journey: Journey }) {
+  const tone =
+    journey.status === "cancelled" ? "bad" : journey.status === "delayed" ? "warn" : "good";
+  const firstLeg = journey.legs[0];
+  const lastLeg = journey.legs[journey.legs.length - 1];
+  return (
+    <Card>
+      <View style={commonStyles.row}>
+        <View>
+          <Text style={styles.time}>{timeLabel(journey.liveDeparts ?? journey.departs)}</Text>
+          <Text style={styles.muted}>
+            Arrives {timeLabel(journey.liveArrives ?? journey.arrives)}
+          </Text>
+        </View>
+        <StatusChip label={statusLabel(journey)} tone={tone} />
+      </View>
+      <View style={styles.rule} />
+      <Text style={styles.route}>
+        {firstLeg?.originName ?? "Origin"} to {lastLeg?.destName ?? "destination"}
+      </Text>
+      <Text style={styles.muted}>
+        {journey.durationMinutes} min · {journey.changes} change{journey.changes === 1 ? "" : "s"}
+      </Text>
+      {journey.legs.slice(0, 3).map((leg, index) => (
+        <Text key={`${leg.originCrs}-${leg.destCrs}-${index}`} style={styles.leg}>
+          {timeLabel(leg.departs)} {leg.originName} → {leg.destName}
+        </Text>
+      ))}
+    </Card>
+  );
+}
+
+function statusLabel(journey: Journey): string {
+  if (journey.status === "cancelled") return "Cancelled";
+  if (journey.delayMinutes) return `${journey.delayMinutes} min late`;
+  if (journey.status === "on-time") return "On time";
+  return "Scheduled";
+}
+
+function failureTitle(reason: string): string {
+  if (reason === "engine-offline") return "Routing is offline";
+  if (reason === "no-journeys") return "No journeys found";
+  return "Check the station codes";
+}
+
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.platformWhite,
+  shiftStrip: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.rule,
+    paddingBottom: spacing.sm,
+    gap: 2,
   },
-  header: {
-    backgroundColor: colors.railNavy,
-    paddingTop: 56,
-    paddingBottom: spacing.md,
-    paddingHorizontal: spacing.md,
-  },
-  wordmark: {
-    fontFamily: "Archivo_700Bold",
-    fontSize: 22,
-    color: colors.onNavy,
-  },
-  content: {
-    padding: spacing.md,
-    gap: spacing.md,
-  },
-  muted: {
+  apiHint: {
+    fontFamily: fonts.inter.medium,
     color: colors.inkMuted,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    padding: spacing.md,
+  muted: {
+    ...textStyles.body,
+    color: colors.inkMuted,
+  },
+  inputGrid: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  field: {
+    flex: 1,
     gap: spacing.xs,
-    shadowColor: colors.railNavyDeep,
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+  },
+  fieldLabel: {
+    ...textStyles.label,
+  },
+  input: {
+    minHeight: 52,
+    borderRadius: radii.control,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.rule,
+    paddingHorizontal: spacing.md,
+    fontFamily: fonts.inter.semibold,
+    fontSize: 20,
+    color: colors.ink,
+  },
+  results: {
+    gap: spacing.md,
   },
   time: {
-    fontSize: 40,
+    ...textStyles.time,
+    fontSize: 38,
   },
-  label: {
-    color: colors.signalGreen,
+  rule: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.rule,
   },
-  pillButton: {
-    backgroundColor: colors.railNavy,
-    borderRadius: radii.pill,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
+  route: {
+    ...textStyles.h2,
+    fontSize: 20,
   },
-  pillButtonText: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 17,
-    color: colors.onNavy,
+  leg: {
+    fontFamily: fonts.inter.medium,
+    fontSize: 15,
+    lineHeight: 21,
+    color: colors.ink,
   },
 });

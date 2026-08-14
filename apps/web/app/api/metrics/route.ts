@@ -6,6 +6,7 @@ import { boardCacheStats } from "@/lib/board-cache";
 import { busStats } from "@/lib/live-bus";
 import { sourceStats } from "@/lib/live-source";
 import { timetableStatus } from "@/lib/timetable-status";
+import { checkEtlAuth } from "@/lib/etl-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -138,7 +139,10 @@ async function redisStats() {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const authError = await checkEtlAuth(req);
+  if (authError) return authError;
+
   const startedAt = Date.now();
   const [postgres, freshness, redis, timetable] = await Promise.all([
     postgresStats().catch(() => null),

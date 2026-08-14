@@ -9,6 +9,7 @@ import type { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
   name: "Signaller",
   slug: "signaller",
+  platforms: ["ios", "android"],
   version: "0.1.0",
   orientation: "portrait",
   icon: "./assets/icon.png",

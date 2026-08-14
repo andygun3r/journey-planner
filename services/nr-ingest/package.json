@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "reference": "tsx src/index.ts reference",
     "headcodes": "tsx src/index.ts headcodes",
+    "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run"

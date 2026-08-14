@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Camera, Map, type StyleSpecification } from "@maplibre/maplibre-react-native";
-import { colors, textStyles } from "../theme/tokens";
+import { AppShell, EmptyState } from "../components/shell";
 import { loadAbsoluteStyle } from "../lib/orm-style";
+import { colors, textStyles } from "../theme/tokens";
 
 /**
  * Phase 0 map spike: proves the OpenRailwayMap-vector style (same source
@@ -30,27 +31,29 @@ export default function MapScreen() {
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <Text style={textStyles.body}>Map failed to load: {error}</Text>
-      </View>
+      <AppShell>
+        <EmptyState title="Map failed to load" body={error} />
+      </AppShell>
     );
   }
 
   if (!style) {
     return (
-      <View style={styles.center}>
-        <Text style={textStyles.body}>Loading map…</Text>
-      </View>
+      <AppShell>
+        <View style={styles.center}>
+          <Text style={textStyles.body}>Loading map...</Text>
+        </View>
+      </AppShell>
     );
   }
 
   return (
-    <Map style={styles.map} mapStyle={style}>
-      {/* Waterloo — arbitrary starting view for the spike; real default
-          comes from geolocation-with-London-fallback in Phase 1/4, mirroring
-          apps/web/components/live-map.tsx. */}
-      <Camera initialViewState={{ center: [-0.1195, 51.5033], zoom: 12 }} />
-    </Map>
+    <AppShell scroll={false}>
+      <Map style={styles.map} mapStyle={style}>
+        {/* Waterloo — a useful first view for the native map slice. */}
+        <Camera initialViewState={{ center: [-0.1195, 51.5033], zoom: 12 }} />
+      </Map>
+    </AppShell>
   );
 }
 
@@ -59,7 +62,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   center: {
-    flex: 1,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.platformWhite,

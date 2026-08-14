@@ -7,7 +7,7 @@ import {
   type CommuteLegRecord,
   type CommuteRecord,
 } from "@signaller/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "./db";
 
 export interface CommuteWithLegs extends CommuteRecord {
@@ -64,10 +64,12 @@ export async function listCommutes(userId: string): Promise<CommuteWithLegs[]> {
   if (commutes.length === 0) return [];
 
   const ids = commutes.map((c) => c.id);
-  const legs = await db.select().from(commuteLeg);
-  const relevantLegs = legs.filter((l) => ids.includes(l.commuteId));
+  const relevantLegs = await db.select().from(commuteLeg).where(inArray(commuteLeg.commuteId, ids));
   const legIds = relevantLegs.map((l) => l.id);
-  const pins = legIds.length > 0 ? await db.select().from(commuteLegPin) : [];
+  const pins =
+    legIds.length > 0
+      ? await db.select().from(commuteLegPin).where(inArray(commuteLegPin.commuteLegId, legIds))
+      : [];
   const pinsByLeg = new Map<string, CommuteLegPinRecord[]>();
   for (const p of pins) {
     if (!legIds.includes(p.commuteLegId)) continue;
@@ -109,7 +111,10 @@ export async function getCommute(
   if (!c) return null;
   const legs = await db.select().from(commuteLeg).where(eq(commuteLeg.commuteId, id));
   const legIds = legs.map((l) => l.id);
-  const pins = legIds.length > 0 ? await db.select().from(commuteLegPin) : [];
+  const pins =
+    legIds.length > 0
+      ? await db.select().from(commuteLegPin).where(inArray(commuteLegPin.commuteLegId, legIds))
+      : [];
   const pinsByLeg = new Map<string, CommuteLegPinRecord[]>();
   for (const p of pins) {
     if (!legIds.includes(p.commuteLegId)) continue;
@@ -188,32 +193,34 @@ export async function createCommute(userId: string, input: CommuteInput): Promis
   const seedWindowEnd = first.am.end ?? first.pm.end ?? "09:00";
   const daysMask = input.legs.reduce((m: number, l: CommuteLegInput) => m | (1 << l.dayOfWeek), 0);
 
-  const inserted = await db
-    .insert(commute)
-    .values({
-      userId,
-      label: input.label,
-      homeCrs: input.homeCrs,
-      homeLabel: input.homeLabel,
-      priority: input.priority,
-      // legacy (unused by new code):
-      originCrs: input.homeCrs,
-      destCrs: first.workCrs,
-      daysMask,
-      windowStart: seedWindow,
-      windowEnd: seedWindowEnd,
-    })
-    .returning({ id: commute.id });
+  return db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(commute)
+      .values({
+        userId,
+        label: input.label,
+        homeCrs: input.homeCrs,
+        homeLabel: input.homeLabel,
+        priority: input.priority,
+        // legacy (unused by new code):
+        originCrs: input.homeCrs,
+        destCrs: first.workCrs,
+        daysMask,
+        windowStart: seedWindow,
+        windowEnd: seedWindowEnd,
+      })
+      .returning({ id: commute.id });
 
-  const id = inserted[0]!.id;
-  const insertedLegs = await db
-    .insert(commuteLeg)
-    .values(legValues(id, input))
-    .returning({ id: commuteLeg.id, dayOfWeek: commuteLeg.dayOfWeek });
-  const legIdByDow = new Map(insertedLegs.map((l) => [l.dayOfWeek, l.id]));
-  const pins = pinValues(input, legIdByDow);
-  if (pins.length > 0) await db.insert(commuteLegPin).values(pins);
-  return id;
+    const id = inserted[0]!.id;
+    const insertedLegs = await tx
+      .insert(commuteLeg)
+      .values(legValues(id, input))
+      .returning({ id: commuteLeg.id, dayOfWeek: commuteLeg.dayOfWeek });
+    const legIdByDow = new Map(insertedLegs.map((l) => [l.dayOfWeek, l.id]));
+    const pins = pinValues(input, legIdByDow);
+    if (pins.length > 0) await tx.insert(commuteLegPin).values(pins);
+    return id;
+  });
 }
 
 /**
@@ -235,21 +242,23 @@ export async function updateCommute(
     .limit(1);
   if (owned.length === 0) return false;
 
-  await db
-    .update(commute)
-    .set({ label: input.label, homeCrs: input.homeCrs, homeLabel: input.homeLabel, priority: input.priority })
-    .where(eq(commute.id, id));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(commute)
+      .set({ label: input.label, homeCrs: input.homeCrs, homeLabel: input.homeLabel, priority: input.priority })
+      .where(eq(commute.id, id));
 
-  // Replace-all semantics for the weekly grid. Deleting commute_leg cascades
-  // to commute_leg_pin, so old pins are cleaned up with it.
-  await db.delete(commuteLeg).where(eq(commuteLeg.commuteId, id));
-  const insertedLegs = await db
-    .insert(commuteLeg)
-    .values(legValues(id, input))
-    .returning({ id: commuteLeg.id, dayOfWeek: commuteLeg.dayOfWeek });
-  const legIdByDow = new Map(insertedLegs.map((l) => [l.dayOfWeek, l.id]));
-  const pins = pinValues(input, legIdByDow);
-  if (pins.length > 0) await db.insert(commuteLegPin).values(pins);
+    // Replace-all semantics for the weekly grid. Deleting commute_leg cascades
+    // to commute_leg_pin, so old pins are cleaned up with it.
+    await tx.delete(commuteLeg).where(eq(commuteLeg.commuteId, id));
+    const insertedLegs = await tx
+      .insert(commuteLeg)
+      .values(legValues(id, input))
+      .returning({ id: commuteLeg.id, dayOfWeek: commuteLeg.dayOfWeek });
+    const legIdByDow = new Map(insertedLegs.map((l) => [l.dayOfWeek, l.id]));
+    const pins = pinValues(input, legIdByDow);
+    if (pins.length > 0) await tx.insert(commuteLegPin).values(pins);
+  });
   return true;
 }
 

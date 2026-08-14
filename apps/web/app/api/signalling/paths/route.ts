@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, MultiLineString } from "geojson";
 import { NextResponse } from "next/server";
+import { parseBboxParam } from "@/lib/api-bbox";
 import { getRecentPathsInBbox } from "@/lib/signalling";
 
 export const dynamic = "force-dynamic";
@@ -16,18 +17,11 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const bboxParam = url.searchParams.get("bbox");
-  if (!bboxParam) {
-    return NextResponse.json({ error: "bbox required: minLon,minLat,maxLon,maxLat" }, { status: 400 });
-  }
-  const parts = bboxParam.split(",").map(Number);
-  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) {
-    return NextResponse.json({ error: "bbox must be minLon,minLat,maxLon,maxLat" }, { status: 400 });
-  }
-  const [minLon, minLat, maxLon, maxLat] = parts as [number, number, number, number];
+  const parsed = parseBboxParam(url.searchParams.get("bbox"), { maxAreaDeg2: 4 });
+  if (!parsed.ok) return parsed.response;
 
   try {
-    const paths = await getRecentPathsInBbox({ minLon, minLat, maxLon, maxLat });
+    const paths = await getRecentPathsInBbox(parsed.bbox);
     const features: Feature<MultiLineString>[] = paths.map((p) => ({
       type: "Feature",
       properties: { trainId: p.trainId, headcode: p.headcode },

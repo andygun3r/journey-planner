@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { parseBboxParam } from "@/lib/api-bbox";
 import { getApproxBuses } from "@/lib/tfl-buses";
 import { tflConfigured } from "@/lib/tfl";
 
 export const dynamic = "force-dynamic";
-
-function num(v: string | null): number | undefined {
-  if (v === null) return undefined;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : undefined;
-}
 
 export async function GET(req: NextRequest) {
   if (!tflConfigured()) {
@@ -18,13 +13,15 @@ export async function GET(req: NextRequest) {
     );
   }
   const params = req.nextUrl.searchParams;
-  const minLat = num(params.get("minLat"));
-  const maxLat = num(params.get("maxLat"));
-  const minLon = num(params.get("minLon"));
-  const maxLon = num(params.get("maxLon"));
-  if (minLat === undefined || maxLat === undefined || minLon === undefined || maxLon === undefined) {
-    return NextResponse.json({ error: "minLat/maxLat/minLon/maxLon required" }, { status: 400 });
-  }
+  const bbox = [
+    params.get("minLon"),
+    params.get("minLat"),
+    params.get("maxLon"),
+    params.get("maxLat"),
+  ].join(",");
+  const parsed = parseBboxParam(bbox.includes("null") ? null : bbox, { maxAreaDeg2: 0.5 });
+  if (!parsed.ok) return parsed.response;
+  const { minLat, maxLat, minLon, maxLon } = parsed.bbox;
 
   try {
     const buses = await getApproxBuses({ minLat, maxLat, minLon, maxLon });
