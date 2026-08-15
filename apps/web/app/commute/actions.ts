@@ -3,19 +3,14 @@
 import { CommuteInput, HolidayInput } from "@signaller/shared";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import {
-  createCommute,
-  deleteCommute,
-  getCommute,
-  updateCommute,
-} from "@/lib/commutes";
+import { createCommute, deleteCommute, updateCommute } from "@/lib/commutes";
 import {
   clearOverride,
   type OverrideInput,
   saveOverride,
   saveOverrideForFutureWeekdays,
 } from "@/lib/commute-overrides";
-import { endActiveRun, startRun } from "@/lib/commute-runs";
+import { endActiveRun, startRunChecked } from "@/lib/commute-runs";
 import { requireUser } from "@/lib/current-user";
 import { createHoliday, deleteHoliday } from "@/lib/holidays";
 import type { JourneyView } from "@/lib/journeys";
@@ -67,18 +62,11 @@ export async function startCommuteAction(input: {
 }): Promise<ActionResult> {
   const userId = await requireUser();
 
-  // commuteId arrives from the client, so prove it belongs to this user before
-  // writing a run against it.
-  const owned = await getCommute(userId, input.commuteId);
-  if (!owned) return { ok: false, error: "Commute not found" };
+  // Ownership checks live in the lib so this action and the native app's
+  // POST /api/commute/[id]/run share exactly one implementation.
+  const result = await startRunChecked(userId, input);
+  if (!result.ok) return { ok: false, error: result.error };
 
-  // Likewise the leg: an id from another commute would mis-attribute the run.
-  const legId =
-    input.commuteLegId && owned.legs.some((l) => l.id === input.commuteLegId)
-      ? input.commuteLegId
-      : null;
-
-  await startRun(userId, { ...input, commuteLegId: legId });
   revalidatePath("/commute");
   return { ok: true };
 }

@@ -1,6 +1,7 @@
 import { commuteRun } from "@signaller/db";
 import { londonDate } from "@signaller/shared";
 import { and, desc, eq, isNull, lt } from "drizzle-orm";
+import { getCommute } from "./commutes";
 import { getDb } from "./db";
 import type { JourneyView } from "./journeys";
 
@@ -100,6 +101,37 @@ export async function startRun(
     .returning();
 
   return toRun(inserted[0]!);
+}
+
+/**
+ * `startRun`, with the ownership checks every caller needs.
+ *
+ * Both `commuteId` and `commuteLegId` arrive from the client, so both have to
+ * be proven to belong to this user before a run is written against them: an id
+ * from someone else's commute would mis-attribute the run, and an id from a
+ * *different* commute of the same user would mis-attribute the leg.
+ *
+ * This lives here rather than in the server action because there are now two
+ * callers — the web action and the native app's POST route — and the checks
+ * are the kind of thing that quietly drifts apart when duplicated.
+ */
+export async function startRunChecked(
+  userId: string,
+  input: StartRunInput,
+  now = new Date(),
+): Promise<{ ok: true; run: CommuteRun } | { ok: false; error: string }> {
+  const owned = await getCommute(userId, input.commuteId);
+  if (!owned) return { ok: false, error: "Commute not found" };
+
+  // An id that isn't one of this commute's legs is dropped rather than
+  // rejected: the run itself is still valid, just not leg-attributed.
+  const commuteLegId =
+    input.commuteLegId && owned.legs.some((leg) => leg.id === input.commuteLegId)
+      ? input.commuteLegId
+      : null;
+
+  const run = await startRun(userId, { ...input, commuteLegId }, now);
+  return { ok: true, run };
 }
 
 /**
