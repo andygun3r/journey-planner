@@ -12,6 +12,35 @@ final class ServiceModel {
 
     private(set) var phase: Phase = .loading
 
+    /// The most recent live position, pushed by the SSE stream.
+    private(set) var livePosition: LivePosition?
+    private(set) var live: LiveChannel?
+
+    /// Opens the live stream for a resolved train. Only a rid can be tracked —
+    /// a timetable trip has nothing to correlate against.
+    func startLive(rid: String, api: APIClient, auth: AuthStore) {
+        guard live == nil else { return }
+        let channel = LiveChannel(
+            path: "/api/live/service",
+            query: [URLQueryItem(name: "rid", value: rid)],
+            api: api,
+            auth: auth
+        ) { [weak self] event in
+            guard event.name == "position" else { return }
+            // `data: null` is the documented "not correlated" case, not an
+            // error — clear the position rather than holding a stale one.
+            guard let data = event.data.data(using: .utf8) else { return }
+            self?.livePosition = try? JSONDecoder.signaller.decode(LivePosition.self, from: data)
+        }
+        live = channel
+        channel.start()
+    }
+
+    func stopLive() {
+        live?.stop()
+        live = nil
+    }
+
     func load(serviceId: String, using api: APIClient) async {
         do {
             let response = try await api.service(id: serviceId)
@@ -37,6 +66,7 @@ struct ServiceDetailView: View {
 
     @State private var model = ServiceModel()
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         AppChrome(title: departure.destinationName) {
@@ -44,6 +74,36 @@ struct ServiceDetailView: View {
         }
         .task { await load() }
         .refreshable { await load() }
+        .onDisappear { model.stopLive() }
+        // Stand the stream down in the background — a socket held open behind
+        // the lock screen drains battery for updates nobody can see — and pick
+        // it back up on return.
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active: startLiveIfPossible()
+            case .background, .inactive: model.stopLive()
+            @unknown default: break
+            }
+        }
+        // Keep the Live Activity in step with the stream. This is what makes
+        // activities app-driven: no push token, no server round-trip.
+        .onChange(of: model.livePosition) { _, position in
+            guard let position, env.liveActivities.hasActiveActivity else { return }
+            Task {
+                await env.liveActivities.update(
+                    status: position.statusText,
+                    currentStop: position.lastStopName ?? position.label ?? departure.originName ?? "",
+                    nextStop: position.nextStopName,
+                    eta: position.estimatedArrival ?? departure.effectiveTime,
+                    delayMinutes: position.latenessMinutes.map { Int($0.rounded()) }
+                )
+            }
+        }
+    }
+
+    private func startLiveIfPossible() {
+        guard let rid = departure.rid else { return }
+        model.startLive(rid: rid, api: env.api, auth: env.auth)
     }
 
     private func load() async {
@@ -53,6 +113,7 @@ struct ServiceDetailView: View {
             return
         }
         await model.load(serviceId: id, using: env.api)
+        startLiveIfPossible()
     }
 
     @ViewBuilder
@@ -106,7 +167,37 @@ struct ServiceDetailView: View {
     /// Live tracking state, worded so "not tracked" never reads as "broken".
     private func progressCard(_ progress: ServiceProgress) -> some View {
         Card {
-            LabelText("Live tracking")
+            HStack {
+                LabelText("Live tracking")
+                Spacer()
+                if model.live?.state == .live {
+                    // Says the data is streaming, not polled — the difference
+                    // between "this is current" and "this was current".
+                    HStack(spacing: 4) {
+                        Circle().fill(Palette.signalGreen).frame(width: 6, height: 6)
+                        Text("Live").font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(Palette.signalGreen)
+                }
+            }
+
+            // Streamed position wins over the snapshot fetched on load.
+            if let position = model.livePosition {
+                if let label = position.label {
+                    Text(label).font(.body.weight(.medium))
+                }
+                if let next = position.nextStopName {
+                    Text("Next stop \(next)").font(.callout).foregroundStyle(Palette.inkMuted)
+                }
+                HStack(spacing: 6) {
+                    Text(position.statusText).font(.caption.weight(.semibold))
+                    if position.stale == true, let ago = position.reportedAgoSeconds {
+                        Text("· \(StatusFormatting.reportedAgo(seconds: ago))").font(.caption2)
+                    }
+                }
+                .foregroundStyle(position.stale == true ? Palette.inkMuted : Palette.signalGreen)
+            }
+
             switch progress.positionState {
             case .tracked:
                 if let last = progress.lastStopName {

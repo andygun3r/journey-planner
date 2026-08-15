@@ -40,6 +40,9 @@
 		0A000001000000000000016F /* Signaller/Networking/AuthClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011F /* Signaller/Networking/AuthClient.swift */; };
 		0A0000010000000000000170 /* Signaller/Features/Account/SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000120 /* Signaller/Features/Account/SignInView.swift */; };
 		0A0000010000000000000171 /* Signaller/Features/Account/AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000121 /* Signaller/Features/Account/AccountView.swift */; };
+		0A0000010000000000000172 /* Signaller/Networking/SSEClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000122 /* Signaller/Networking/SSEClient.swift */; };
+		0A0000010000000000000173 /* Signaller/Networking/LiveChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000123 /* Signaller/Networking/LiveChannel.swift */; };
+		0A0000010000000000000174 /* Signaller/Models/LivePosition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000124 /* Signaller/Models/LivePosition.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -104,6 +107,9 @@
 		0A000001000000000000011F /* Signaller/Networking/AuthClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Networking/AuthClient.swift; sourceTree = "<group>"; };
 		0A0000010000000000000120 /* Signaller/Features/Account/SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Account/SignInView.swift; sourceTree = "<group>"; };
 		0A0000010000000000000121 /* Signaller/Features/Account/AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Account/AccountView.swift; sourceTree = "<group>"; };
+		0A0000010000000000000122 /* Signaller/Networking/SSEClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Networking/SSEClient.swift; sourceTree = "<group>"; };
+		0A0000010000000000000123 /* Signaller/Networking/LiveChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Networking/LiveChannel.swift; sourceTree = "<group>"; };
+		0A0000010000000000000124 /* Signaller/Models/LivePosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/LivePosition.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -182,6 +188,7 @@
 		0A0000010000000000000066 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				0A0000010000000000000124 /* Signaller/Models/LivePosition.swift */,
 				0A0000010000000000000101 /* Signaller/Models/ISO8601.swift */,
 				0A0000010000000000000102 /* Signaller/Models/Journey.swift */,
 				0A0000010000000000000103 /* Signaller/Models/Board.swift */,
@@ -195,6 +202,8 @@
 		0A0000010000000000000067 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
+				0A0000010000000000000122 /* Signaller/Networking/SSEClient.swift */,
+				0A0000010000000000000123 /* Signaller/Networking/LiveChannel.swift */,
 				0A0000010000000000000107 /* Signaller/Networking/APIError.swift */,
 				0A0000010000000000000108 /* Signaller/Networking/APIClient.swift */,
 				0A0000010000000000000109 /* Signaller/Networking/AuthStore.swift */,
@@ -333,6 +342,9 @@
 				0A0000010000000000000001 /* Signaller/App/SignallerApp.swift in Sources */,
 				0A0000010000000000000004 /* Signaller/App/LiveActivityController.swift in Sources */,
 				0A0000010000000000000005 /* Signaller/Shared/JourneyActivityAttributes.swift in Sources */,
+				0A0000010000000000000172 /* Signaller/Networking/SSEClient.swift in Sources */,
+				0A0000010000000000000173 /* Signaller/Networking/LiveChannel.swift in Sources */,
+				0A0000010000000000000174 /* Signaller/Models/LivePosition.swift in Sources */,
 				0A000001000000000000016E /* Signaller/App/DeepLink.swift in Sources */,
 				0A000001000000000000016F /* Signaller/Networking/AuthClient.swift in Sources */,
 				0A0000010000000000000170 /* Signaller/Features/Account/SignInView.swift in Sources */,

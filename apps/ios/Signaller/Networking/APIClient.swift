@@ -7,8 +7,14 @@ import Foundation
 /// answer" (4xx/5xx). Both used to arrive as the same generic failure because
 /// the status check accepted 200 through 599. They're separated now — see
 /// `send(_:)`.
-final class APIClient: Sendable {
-    let baseURL: URL
+/// Main-actor isolated rather than `Sendable`: it reads the token from
+/// `AuthStore`, which is `@Observable` main-actor state. Claiming `Sendable`
+/// while holding it was a data race the compiler flagged — every caller is a
+/// view or a view model on the main actor anyway, and the actual network I/O
+/// still happens off it inside `URLSession`.
+@MainActor
+final class APIClient {
+    nonisolated let baseURL: URL
     private let session: URLSession
     private let auth: AuthStore?
 
@@ -23,7 +29,7 @@ final class APIClient: Sendable {
     /// A Release build can't reach here with a bad value — the "Check API base
     /// URL" build phase fails first — so the localhost fallback only ever
     /// applies to a misconfigured Debug build.
-    private static func configuredBaseURL() -> URL {
+    nonisolated private static func configuredBaseURL() -> URL {
         let raw = (Bundle.main.object(forInfoDictionaryKey: "SIGNALLER_API_BASE_URL") as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let raw, !raw.isEmpty, let url = URL(string: raw) {
