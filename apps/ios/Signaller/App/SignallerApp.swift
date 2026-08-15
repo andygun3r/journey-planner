@@ -13,6 +13,14 @@ struct SignallerApp: App {
         WindowGroup {
             RootView()
                 .environment(env)
+                // Light-only by design — PRODUCT.md's One-Theme Rule. This
+                // pairs with `UIUserInterfaceStyle = Light` in Info.plist:
+                // the plist setting covers UIKit-owned chrome (tab bar,
+                // navigation bar, keyboard, sheets), this covers the SwiftUI
+                // hierarchy including anything presented in its own window.
+                // Both are needed, and without them the app's hardcoded light
+                // surfaces met the system's white Dark Mode label colour.
+                .preferredColorScheme(.light)
                 // Magic-link callbacks and notification taps both land here.
                 .onOpenURL { env.handle(url: $0) }
                 .task {

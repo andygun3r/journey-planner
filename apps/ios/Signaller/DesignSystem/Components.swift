@@ -46,7 +46,7 @@ struct StatusPill: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .foregroundStyle(tone.color)
-        .background(tone.color.opacity(tone == .neutral ? 0.12 : 0.10))
+        .background(tone.fillColor.opacity(tone == .neutral ? 0.12 : 0.10))
         .clipShape(Capsule())
         .accessibilityLabel(label)
     }
@@ -178,6 +178,18 @@ struct AppChrome<Content: View>: View {
         .toolbarBackground(Palette.railNavy, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        // The mark rides in the navigation bar's trailing corner: the brand is
+        // present on every screen without a second header band eating vertical
+        // space that belongs to departure times. Inverted, because the bar is
+        // Rail Navy — a navy arm on a navy ground merges with it and the mark
+        // stops reading as a signal.
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                SignalMark(inverted: true)
+                    .frame(width: 32, height: 32)
+                    .accessibilityHidden(true)
+            }
+        }
     }
 }
 

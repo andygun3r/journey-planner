@@ -57,8 +57,24 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<!-- Signaller is light-only by design (PRODUCT.md's One-Theme Rule), so the
+	     app declares that to the system rather than half-inheriting it. Without
+	     this, iOS in Dark Mode flips the default label colour to white while the
+	     app's own surfaces stay Platform White — every label that didn't set an
+	     explicit colour rendered white-on-white. -->
+	<key>UIUserInterfaceStyle</key>
+	<string>Light</string>
+	<!-- Rail Navy ground with the signal mark centred, so launch is the app's
+	     own header colour rather than a white flash. -->
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+		<key>UIImageName</key>
+		<string>LaunchMark</string>
+		<key>UIImageRespectsSafeAreaInsets</key>
+		<true/>
+	</dict>
 	<!-- iPhone: no upside-down, which is the platform convention.
 	     iPad: all four, required once TARGETED_DEVICE_FAMILY includes iPad
 	     unless the app opts out of multitasking. -->
