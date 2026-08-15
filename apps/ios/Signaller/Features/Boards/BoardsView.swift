@@ -125,7 +125,8 @@ struct BoardsView: View {
     @State private var pushedService: Departure?
 
     var body: some View {
-        AppChrome(title: "Departures", lazy: true) {
+        // No title: `TrainsView` owns the navigation bar for this tab.
+        AppChrome(title: nil, lazy: true) {
             searchSection
             content
         }

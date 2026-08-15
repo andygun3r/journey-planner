@@ -34,42 +34,20 @@ struct AccountView: View {
             notificationsCard
 
             Card {
-                row("Settings", systemImage: "gearshape") { SettingsView() }
-                Divider()
-                row("Network status", systemImage: "waveform.path.ecg") { StatusView() }
+                NavigationLink { SettingsView() } label: {
+                    NavRow(title: "Settings", systemImage: "gearshape")
+                }
+                .buttonStyle(.plain)
             }
 
-            Card {
-                Button("Sign out") {
-                    Task { await env.signOut() }
-                }
-                .buttonStyle(SecondaryButtonStyle())
+            // Not a card: a white shadowed panel wrapping one button gave
+            // signing out the same visual weight as a cancelled train.
+            Button("Sign out") {
+                Task { await env.signOut() }
             }
+            .buttonStyle(SecondaryButtonStyle())
         }
         .task { await env.push.refreshAuthorizationStatus() }
-    }
-
-    /// A navigation row with a 44pt target across its whole width.
-    private func row<Destination: View>(
-        _ title: String,
-        systemImage: String,
-        @ViewBuilder destination: @escaping () -> Destination
-    ) -> some View {
-        NavigationLink(destination: destination) {
-            HStack {
-                Label(title, systemImage: systemImage)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(Palette.ink)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Palette.inkMuted)
-                    .accessibilityHidden(true)
-            }
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     /// Notification permission, asked for here rather than on launch — an

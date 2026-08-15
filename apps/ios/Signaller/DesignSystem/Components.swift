@@ -178,6 +178,7 @@ struct StatusPill: View {
 
 struct LabelText: View {
     private let value: String
+    @Environment(\.onDarkGround) private var onDarkGround
 
     init(_ value: String) { self.value = value }
 
@@ -185,7 +186,10 @@ struct LabelText: View {
         Text(value.uppercased())
             .font(.caption.weight(.semibold))
             .tracking(1.3)
-            .foregroundStyle(Palette.inkMuted)
+            // `inkMuted` is 1.86:1 on Rail Navy — a clear AA failure, and one
+            // an outer `.foregroundStyle` can't fix, because the colour set
+            // here wins. So the label reads its ground instead.
+            .foregroundStyle(onDarkGround ? Palette.onNavy.opacity(0.75) : Palette.inkMuted)
     }
 }
 
@@ -281,8 +285,21 @@ struct SecondaryButtonStyle: ButtonStyle {
 
 /// Standard screen chrome: scrolling content on the platform background, with
 /// the navy navigation bar.
+/// Sets a navigation title only when there is one to set.
+private struct OptionalNavigationTitle: ViewModifier {
+    let title: String?
+
+    func body(content: Content) -> some View {
+        if let title {
+            content.navigationTitle(title)
+        } else {
+            content
+        }
+    }
+}
+
 struct AppChrome<Content: View>: View {
-    private let title: String
+    private let title: String?
     private let lazy: Bool
     private let content: Content
 
@@ -293,7 +310,10 @@ struct AppChrome<Content: View>: View {
     /// Opt-in rather than the default: `LazyVStack` changes when `onAppear`
     /// fires on children, which fixed-size screens don't need and shouldn't
     /// have to think about.
-    init(title: String = "Signaller", lazy: Bool = false, @ViewBuilder content: () -> Content) {
+    /// `title: nil` when an enclosing container owns the navigation title —
+    /// a child that sets its own would win over the parent, leaving the bar
+    /// reading "Departures" above a Departures/Journey segmented control.
+    init(title: String? = "Signaller", lazy: Bool = false, @ViewBuilder content: () -> Content) {
         self.title = title
         self.lazy = lazy
         self.content = content()
@@ -311,7 +331,9 @@ struct AppChrome<Content: View>: View {
             .padding(16)
         }
         .background(Palette.background)
-        .navigationTitle(title)
+        // Applied only when this screen owns the title. `navigationTitle("")`
+        // would still be a title, and would blank the container's.
+        .modifier(OptionalNavigationTitle(title: title))
         .toolbarBackground(Palette.railNavy, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)

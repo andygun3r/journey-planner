@@ -16,20 +16,21 @@ struct CommuteView: View {
             }
         }
         .navigationDestination(for: Journey.self) { JourneyDetailView(journey: $0) }
-        // "Go to work" / "go home" when nothing is scheduled: hand the pair to
-        // the planner rather than duplicating a search screen here.
-        .navigationDestination(for: JourneyQuery.self) { query in
-            PlanView(initialQuery: query)
-        }
     }
 
+    /// Signed out, this tab was a single card of text with nothing to tap —
+    /// the user had to work out for themselves that Account is where you sign
+    /// in. Now it says so and takes them there.
     private var signedOut: some View {
         AppChrome(title: "Commute") {
-            EmptyStateCard(
-                title: "Sign in to set up a commute",
-                message: "Save your regular journeys and get told when they're disrupted.",
-                systemImage: "person.crop.circle"
-            )
+            Card {
+                Text("Sign in to set up a commute")
+                    .font(.title3.weight(.bold))
+                Text("Save your regular journeys and get told when they're disrupted.")
+                    .foregroundStyle(Palette.inkMuted)
+                Button("Sign in") { selectTab(.account) }
+                    .buttonStyle(PrimaryButtonStyle())
+            }
         }
     }
 
@@ -278,18 +279,35 @@ struct CommuteView: View {
         }
     }
 
+    /// Hands a from→to pair to the planner in the Trains tab.
+    ///
+    /// This used to push a whole `PlanView` inside the Commute tab, so the app
+    /// ran two planners with separate state. Now there is one.
+    private func plan(from: String, to: String) {
+        env.pendingJourney = JourneyQuery(from: from, to: to)
+        selectTab(.trains)
+    }
+
+    private func selectTab(_ tab: RootView.Tab) {
+        env.requestedTab = tab
+    }
+
     private func quickStartCard(_ quick: QuickStart) -> some View {
         Card {
             LabelText("Plan anyway")
             Text("Nothing scheduled, but you can still check.")
                 .font(.callout).foregroundStyle(Palette.inkMuted)
             HStack(spacing: 10) {
-                NavigationLink(value: JourneyQuery(from: quick.homeCrs, to: quick.workCrs)) {
+                Button {
+                    plan(from: quick.homeCrs, to: quick.workCrs)
+                } label: {
                     Text("To \(quick.workLabel)").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(SecondaryButtonStyle())
 
-                NavigationLink(value: JourneyQuery(from: quick.workCrs, to: quick.homeCrs)) {
+                Button {
+                    plan(from: quick.workCrs, to: quick.homeCrs)
+                } label: {
                     Text("To \(quick.homeLabel)").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(SecondaryButtonStyle())
@@ -313,13 +331,21 @@ struct CommuteView: View {
                         .font(.caption.weight(.semibold))
                     }
                 }
-                ForEach(model.alerts.prefix(10)) { alert in
+                ForEach(model.alerts.prefix(5)) { alert in
                     AlertRow(alert: alert)
+                    if alert.id != model.alerts.prefix(5).last?.id { RowDivider() }
                 }
-                if model.alerts.count > 10 {
-                    NavigationLink("See all \(model.alerts.count) alerts") { AlertsView() }
-                        .font(.caption.weight(.semibold))
+                // Unconditional. This was gated on `count > 10`, so with ten
+                // or fewer alerts there was no route to the alerts screen
+                // anywhere in the app — and no other entry point exists.
+                NavigationLink { AlertsView() } label: {
+                    NavRow(
+                        title: model.alerts.count > 5
+                            ? "See all \(model.alerts.count) alerts"
+                            : "Alert history"
+                    )
                 }
+                .buttonStyle(.plain)
             }
         }
     }

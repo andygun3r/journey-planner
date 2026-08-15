@@ -1,16 +1,13 @@
 import SwiftUI
 
 struct PlanView: View {
-    /// Pre-filled endpoints, when arriving from a commute quick-start or a
-    /// saved journey. Nil for the normal tab.
-    var initialQuery: JourneyQuery?
-
     @State private var model = PlanModel()
     @State private var showingTimePicker = false
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        AppChrome(title: "Plan") {
+        // No title: `TrainsView` owns the navigation bar for this tab.
+        AppChrome(title: nil) {
             searchCard
             savedSection
             resultsSection
@@ -18,16 +15,28 @@ struct PlanView: View {
         .navigationDestination(for: Journey.self) { journey in
             JourneyDetailView(journey: journey)
         }
-        .task {
-            await env.favourites.load(using: env.api)
-            // Arriving with a pair means the user already chose — search
-            // rather than making them press the button again.
-            if let initialQuery, model.from == nil, model.to == nil {
-                model.from = .station(crs: initialQuery.from, name: initialQuery.from)
-                model.to = .station(crs: initialQuery.to, name: initialQuery.to)
-                await model.search(using: env.api)
-            }
+        .task { await env.favourites.load(using: env.api) }
+        // A pair handed over by the commute dashboard's quick-start. Arriving
+        // with both ends means the user already chose, so search rather than
+        // making them press the button again.
+        .onChange(of: env.pendingJourney, initial: true) { _, query in
+            guard let query else { return }
+            env.pendingJourney = nil
+            Task { await apply(query) }
         }
+    }
+
+    /// Fills both ends from a handed-over pair and searches.
+    ///
+    /// Names come from the bundled station index, so the fields read
+    /// "Clapham Junction" rather than "CLJ" — and still do with no signal.
+    private func apply(_ query: JourneyQuery) async {
+        func endpoint(_ crs: String) -> JourneyEndpoint {
+            .station(crs: crs, name: env.stations.stations.first { $0.crs == crs }?.name ?? crs)
+        }
+        model.from = endpoint(query.from)
+        model.to = endpoint(query.to)
+        await model.search(using: env.api)
     }
 
     /// Saved journeys, one tap from a fresh search.

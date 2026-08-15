@@ -34,6 +34,21 @@ final class AppEnvironment {
     /// stack. Same defect as `pendingBoardCRS`.
     var pendingServiceID: String?
 
+    /// A from→to pair to plan, set by the commute dashboard's quick-start.
+    ///
+    /// Commute used to *push* the whole planner inside its own tab, so the app
+    /// carried two `PlanModel`s with different state. Now it hands the pair
+    /// over and switches tab, and there is one planner.
+    var pendingJourney: JourneyQuery?
+
+    /// A tab a screen has asked the app to switch to.
+    ///
+    /// `selectedTab` in the environment is read-only by design — one owner of
+    /// the selection — so a child that needs to move the user (the signed-out
+    /// commute card sending them to sign in) posts the request here and
+    /// `RootView` performs it.
+    var requestedTab: RootView.Tab?
+
     /// Set when a magic link fails to complete, so the sign-in screen can say
     /// what went wrong rather than appearing to ignore the tap.
     var signInError: String?

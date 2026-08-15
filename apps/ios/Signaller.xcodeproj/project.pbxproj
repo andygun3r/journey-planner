@@ -47,6 +47,7 @@
 		0A0000010000000000000169 /* Signaller/Features/Plan/JourneyDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000119 /* Signaller/Features/Plan/JourneyDetailView.swift */; };
 		0A000001000000000000016A /* Signaller/Features/Boards/BoardsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011A /* Signaller/Features/Boards/BoardsView.swift */; };
 		0A000001000000000000016B /* Signaller/Features/Boards/DepartureLine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011B /* Signaller/Features/Boards/DepartureLine.swift */; };
+		0A000001000000000000040C /* Signaller/Features/Trains/TrainsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000040B /* Signaller/Features/Trains/TrainsView.swift */; };
 		0A000001000000000000040A /* Signaller/Features/Boards/NextDepartureHero.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000409 /* Signaller/Features/Boards/NextDepartureHero.swift */; };
 		0A000001000000000000016C /* Signaller/Features/Service/ServiceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011C /* Signaller/Features/Service/ServiceDetailView.swift */; };
 		0A000001000000000000016D /* Signaller/Features/Status/StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011D /* Signaller/Features/Status/StatusView.swift */; };
@@ -162,6 +163,7 @@
 		0A0000010000000000000119 /* Signaller/Features/Plan/JourneyDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Plan/JourneyDetailView.swift; sourceTree = "<group>"; };
 		0A000001000000000000011A /* Signaller/Features/Boards/BoardsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Boards/BoardsView.swift; sourceTree = "<group>"; };
 		0A000001000000000000011B /* Signaller/Features/Boards/DepartureLine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Boards/DepartureLine.swift; sourceTree = "<group>"; };
+		0A000001000000000000040B /* Signaller/Features/Trains/TrainsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Trains/TrainsView.swift; sourceTree = "<group>"; };
 		0A0000010000000000000409 /* Signaller/Features/Boards/NextDepartureHero.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Boards/NextDepartureHero.swift; sourceTree = "<group>"; };
 		0A000001000000000000011C /* Signaller/Features/Service/ServiceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Service/ServiceDetailView.swift; sourceTree = "<group>"; };
 		0A000001000000000000011D /* Signaller/Features/Status/StatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Status/StatusView.swift; sourceTree = "<group>"; };
@@ -357,6 +359,7 @@
 				0A0000010000000000000119 /* Signaller/Features/Plan/JourneyDetailView.swift */,
 				0A000001000000000000011A /* Signaller/Features/Boards/BoardsView.swift */,
 				0A000001000000000000011B /* Signaller/Features/Boards/DepartureLine.swift */,
+				0A000001000000000000040B /* Signaller/Features/Trains/TrainsView.swift */,
 				0A0000010000000000000409 /* Signaller/Features/Boards/NextDepartureHero.swift */,
 				0A000001000000000000011C /* Signaller/Features/Service/ServiceDetailView.swift */,
 				0A000001000000000000011D /* Signaller/Features/Status/StatusView.swift */,
@@ -570,6 +573,7 @@
 				0A0000010000000000000169 /* Signaller/Features/Plan/JourneyDetailView.swift in Sources */,
 				0A000001000000000000016A /* Signaller/Features/Boards/BoardsView.swift in Sources */,
 				0A000001000000000000016B /* Signaller/Features/Boards/DepartureLine.swift in Sources */,
+				0A000001000000000000040C /* Signaller/Features/Trains/TrainsView.swift in Sources */,
 				0A000001000000000000040A /* Signaller/Features/Boards/NextDepartureHero.swift in Sources */,
 				0A000001000000000000016C /* Signaller/Features/Service/ServiceDetailView.swift in Sources */,
 				0A000001000000000000016D /* Signaller/Features/Status/StatusView.swift in Sources */,

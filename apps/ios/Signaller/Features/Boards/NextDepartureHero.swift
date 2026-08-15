@@ -16,7 +16,6 @@ struct NextDepartureHero: View {
             HeroCard {
                 HStack(alignment: .firstTextBaseline) {
                     LabelText("Next departure")
-                        .foregroundStyle(Palette.onNavy.opacity(0.75))
                     Spacer()
                     StatusPill(
                         StatusFormatting.departureLabel(
