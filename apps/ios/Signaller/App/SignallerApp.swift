@@ -10,6 +10,8 @@ struct SignallerApp: App {
         WindowGroup {
             RootView()
                 .environment(env)
+                // Magic-link callbacks and notification taps both land here.
+                .onOpenURL { env.handle(url: $0) }
         }
     }
 }

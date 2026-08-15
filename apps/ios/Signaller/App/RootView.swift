@@ -19,6 +19,11 @@ struct RootView: View {
                 StatusView()
             }
             .tabItem { Label("Status", systemImage: "waveform.path.ecg") }
+
+            NavigationStack {
+                AccountView()
+            }
+            .tabItem { Label("Account", systemImage: "person.crop.circle") }
         }
         .tint(Palette.railNavy)
     }

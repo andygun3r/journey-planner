@@ -44,7 +44,14 @@ struct StatusView: View {
                     StatusRow(label: "Redis", ok: health.redis)
                     StatusRow(label: "Schema", ok: health.schema)
                     if let timetable = health.timetable {
-                        StatusRow(label: "Timetable", ok: timetable)
+                        StatusRow(label: "Timetable", ok: timetable.ok)
+                        if let summary = timetable.summary {
+                            Text(summary)
+                                .font(.caption)
+                                .foregroundStyle(
+                                    timetable.stale == true ? Palette.signalAmber : Palette.inkMuted
+                                )
+                        }
                     }
                 } else if model.loading {
                     HStack(spacing: 10) {

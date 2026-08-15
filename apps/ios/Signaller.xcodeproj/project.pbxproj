@@ -36,6 +36,10 @@
 		0A000001000000000000016B /* Signaller/Features/Boards/DepartureRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011B /* Signaller/Features/Boards/DepartureRow.swift */; };
 		0A000001000000000000016C /* Signaller/Features/Service/ServiceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011C /* Signaller/Features/Service/ServiceDetailView.swift */; };
 		0A000001000000000000016D /* Signaller/Features/Status/StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011D /* Signaller/Features/Status/StatusView.swift */; };
+		0A000001000000000000016E /* Signaller/App/DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011E /* Signaller/App/DeepLink.swift */; };
+		0A000001000000000000016F /* Signaller/Networking/AuthClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000011F /* Signaller/Networking/AuthClient.swift */; };
+		0A0000010000000000000170 /* Signaller/Features/Account/SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000120 /* Signaller/Features/Account/SignInView.swift */; };
+		0A0000010000000000000171 /* Signaller/Features/Account/AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000121 /* Signaller/Features/Account/AccountView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -96,6 +100,10 @@
 		0A000001000000000000011B /* Signaller/Features/Boards/DepartureRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Boards/DepartureRow.swift; sourceTree = "<group>"; };
 		0A000001000000000000011C /* Signaller/Features/Service/ServiceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Service/ServiceDetailView.swift; sourceTree = "<group>"; };
 		0A000001000000000000011D /* Signaller/Features/Status/StatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Status/StatusView.swift; sourceTree = "<group>"; };
+		0A000001000000000000011E /* Signaller/App/DeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/App/DeepLink.swift; sourceTree = "<group>"; };
+		0A000001000000000000011F /* Signaller/Networking/AuthClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Networking/AuthClient.swift; sourceTree = "<group>"; };
+		0A0000010000000000000120 /* Signaller/Features/Account/SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Account/SignInView.swift; sourceTree = "<group>"; };
+		0A0000010000000000000121 /* Signaller/Features/Account/AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Account/AccountView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -138,6 +146,7 @@
 				0A0000010000000000000014 /* Signaller/App/LiveActivityController.swift */,
 				0A0000010000000000000110 /* Signaller/App/AppEnvironment.swift */,
 				0A0000010000000000000111 /* Signaller/App/RootView.swift */,
+				0A000001000000000000011E /* Signaller/App/DeepLink.swift */,
 				0A0000010000000000000017 /* Signaller/App/Info.plist */,
 				0A000001000000000000001A /* Signaller/App/Signaller.entitlements */,
 			);
@@ -206,6 +215,9 @@
 		0A0000010000000000000069 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				0A000001000000000000011F /* Signaller/Networking/AuthClient.swift */,
+				0A0000010000000000000120 /* Signaller/Features/Account/SignInView.swift */,
+				0A0000010000000000000121 /* Signaller/Features/Account/AccountView.swift */,
 				0A0000010000000000000115 /* Signaller/Features/Stations/StationSearchField.swift */,
 				0A0000010000000000000116 /* Signaller/Features/Plan/PlanModel.swift */,
 				0A0000010000000000000117 /* Signaller/Features/Plan/PlanView.swift */,
@@ -321,6 +333,10 @@
 				0A0000010000000000000001 /* Signaller/App/SignallerApp.swift in Sources */,
 				0A0000010000000000000004 /* Signaller/App/LiveActivityController.swift in Sources */,
 				0A0000010000000000000005 /* Signaller/Shared/JourneyActivityAttributes.swift in Sources */,
+				0A000001000000000000016E /* Signaller/App/DeepLink.swift in Sources */,
+				0A000001000000000000016F /* Signaller/Networking/AuthClient.swift in Sources */,
+				0A0000010000000000000170 /* Signaller/Features/Account/SignInView.swift in Sources */,
+				0A0000010000000000000171 /* Signaller/Features/Account/AccountView.swift in Sources */,
 				0A0000010000000000000160 /* Signaller/App/AppEnvironment.swift in Sources */,
 				0A0000010000000000000161 /* Signaller/App/RootView.swift in Sources */,
 				0A0000010000000000000162 /* Signaller/DesignSystem/Palette.swift in Sources */,

@@ -16,6 +16,10 @@ final class AppEnvironment {
     /// Where a deep link wants the app to go, consumed by `RootView`.
     var pendingLink: DeepLink?
 
+    /// Set when a magic link fails to complete, so the sign-in screen can say
+    /// what went wrong rather than appearing to ignore the tap.
+    var signInError: String?
+
     init() {
         let auth = AuthStore()
         let api = APIClient(auth: auth)
@@ -35,11 +39,14 @@ final class AppEnvironment {
         case let .authToken(token):
             Task {
                 do {
+                    signInError = nil
                     try await authClient.completeMagicLink(token: token)
                 } catch {
-                    // The link is single-use and time-limited, so a failure
-                    // here usually means it was already used or has expired.
-                    // Leave the user on the sign-in screen to try again.
+                    // Magic links are single-use and time-limited, so this
+                    // usually means the link was already opened or has expired.
+                    // Say so — an ignored tap looks like a broken app.
+                    signInError = (error as? APIError)?.errorDescription
+                        ?? "That sign-in link didn't work. Request a new one."
                 }
             }
         case .board, .service, .commute:

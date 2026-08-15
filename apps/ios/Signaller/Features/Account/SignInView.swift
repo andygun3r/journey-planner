@@ -113,6 +113,16 @@ struct SignInView: View {
 
     @ViewBuilder
     private var statusCard: some View {
+        // A magic link that failed on open is reported by AppEnvironment, since
+        // the exchange happens outside this view.
+        if let linkError = env.signInError {
+            EmptyStateCard(
+                title: "That link didn't work",
+                message: linkError,
+                systemImage: "link.badge.plus"
+            )
+        }
+
         switch model.phase {
         case .working:
             Card {
