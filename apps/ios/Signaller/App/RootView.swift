@@ -56,10 +56,19 @@ struct RootView: View {
         .onChange(of: env.pendingLink) { _, link in
             guard let link else { return }
             switch link {
-            case .commute: selection = .commute
-            case .board: selection = .boards
-            case .service: selection = .boards
-            case .authToken: selection = .account
+            case .commute:
+                selection = .commute
+            case let .board(crs):
+                // Carry the payload, not just the destination: selecting the
+                // tab and discarding the CRS is what made every board
+                // notification open an empty screen.
+                env.pendingBoardCRS = crs
+                selection = .boards
+            case let .service(id):
+                env.pendingServiceID = id
+                selection = .boards
+            case .authToken:
+                selection = .account
             }
             env.pendingLink = nil
         }

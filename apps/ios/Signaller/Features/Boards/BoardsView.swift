@@ -10,6 +10,11 @@ final class BoardModel {
         case loaded(Board)
         case empty(reason: String?)
         case failed(APIError)
+
+        var isIdle: Bool {
+            if case .idle = self { return true }
+            return false
+        }
     }
 
     var station: JourneyEndpoint?
@@ -21,11 +26,32 @@ final class BoardModel {
     /// and the UI must say so out loud.
     private(set) var servedFromCache: Date?
 
+    /// Which station the board currently on screen belongs to.
+    ///
+    /// Needed to tell a refresh of the same station (keep showing it) from a
+    /// switch to a new one (never show the old station's trains under the new
+    /// station's name).
+    private(set) var loadedCRS: String?
+
     /// Only a station can have a departure board. Gates the button so a
     /// non-station selection can't produce a tap that does nothing.
     var canLoad: Bool {
         if case .station? = station { return true }
         return false
+    }
+
+    /// Puts the last stored board for this station on screen, if there is one.
+    /// Leaves `.loading` showing when there isn't.
+    private func showCached(crs: String, using cache: ResponseCache?) async {
+        phase = .loading
+        servedFromCache = nil
+        guard let cache,
+              let cached = await cache.load(BoardResponse.self, for: .board(crs: crs)),
+              let board = cached.value.board,
+              !board.departures.isEmpty
+        else { return }
+        phase = .loaded(board)
+        servedFromCache = cached.storedAt
     }
 
     func load(using api: APIClient, cache: ResponseCache? = nil) async {
@@ -38,14 +64,15 @@ final class BoardModel {
 
         // Show the last known board immediately, so the screen has content
         // while the network is tried — and something to keep if it fails.
-        if case .idle = phase {
-            phase = .loading
-            if let cache, let cached = await cache.load(BoardResponse.self, for: .board(crs: crs)),
-               let board = cached.value.board, !board.departures.isEmpty {
-                phase = .loaded(board)
-                servedFromCache = cached.storedAt
-            }
+        //
+        // Also runs when the station changed, not only from idle: otherwise
+        // asking for a second station left the *first* station's departures on
+        // screen under the new station's name until the network answered.
+        if phase.isIdle || crs != loadedCRS {
+            await showCached(crs: crs, using: cache)
         }
+
+        loadedCRS = crs
 
         do {
             let response = try await api.board(crs: crs)
@@ -77,28 +104,51 @@ final class BoardModel {
 struct BoardsView: View {
     @State private var model = BoardModel()
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Which row is open, if any. View state, not model state: a refresh that
+    /// replaces the board must not carry a stale expansion with it, and this
+    /// dies with the screen rather than surviving in `BoardModel`.
+    @State private var expanded: Departure.ID?
+
+    /// Whether the full search card is showing. Collapses to a one-line station
+    /// chip once a board loads — the search occupied 123pt of a 686pt screen
+    /// permanently, on the one surface that exists to show a list.
+    @State private var searching = true
+
+    /// Station messages and disruptions, folded away unless asked for. They
+    /// matter when they exist, but they were pushing departures off the fold
+    /// on every board that had a routine notice.
+    @State private var showingNotices = false
+
+    /// A service pushed by a deep link rather than by tapping a row.
+    @State private var pushedService: Departure?
 
     var body: some View {
         AppChrome(title: "Departures", lazy: true) {
-            Card {
-                // Stations only: a departure board for a postcode is
-                // meaningless, and offering one produced an enabled button
-                // that silently did nothing.
-                StationSearchField(
-                    label: "Station",
-                    selection: $model.station,
-                    includePlaces: false
-                )
-                Button("Show departures") {
-                    Task { await model.load(using: env.api, cache: env.cache) }
-                }
-                .buttonStyle(PrimaryButtonStyle())
-                .disabled(!model.canLoad)
-            }
+            searchSection
             content
         }
         .refreshable { await model.load(using: env.api, cache: env.cache) }
         .navigationDestination(for: Departure.self) { departure in
+            ServiceDetailView(departure: departure)
+        }
+        // A deep link or notification tap naming a station opens that board.
+        //
+        // Deliberately `onChange` + `Task`, not `.task(id: pendingBoardCRS)`:
+        // consuming the link clears the CRS, which would change that id and
+        // cancel the very load it started (URLError -999, an empty board).
+        .onChange(of: env.pendingBoardCRS, initial: true) { _, crs in
+            guard crs != nil else { return }
+            Task { await openPendingBoard() }
+        }
+        .onChange(of: env.pendingServiceID) { _, id in
+            guard let id else { return }
+            // Only the rid is known; the service screen fetches the rest.
+            pushedService = Departure.placeholder(rid: id, destination: "Service")
+            env.pendingServiceID = nil
+        }
+        .navigationDestination(item: $pushedService) { departure in
             ServiceDetailView(departure: departure)
         }
         // Boards go stale fast; a quiet 30s refresh keeps the times honest
@@ -125,6 +175,79 @@ struct BoardsView: View {
         return "none"
     }
 
+    /// Opens the board a deep link asked for.
+    ///
+    /// The name comes from the bundled station index, so a notification tap
+    /// shows "London Waterloo" rather than "WAT" — and still works with no
+    /// signal, since the index is on disk.
+    private func openPendingBoard() async {
+        guard let crs = env.pendingBoardCRS else { return }
+        env.pendingBoardCRS = nil
+
+        let name = env.stations.stations.first { $0.crs == crs }?.name ?? crs
+        model.station = .station(crs: crs, name: name)
+        searching = false
+        expanded = nil
+        await model.load(using: env.api, cache: env.cache)
+    }
+
+    // MARK: - Search
+
+    /// Full card while choosing; a single row once a board is on screen.
+    @ViewBuilder
+    private var searchSection: some View {
+        if searching {
+            Card {
+                // Stations only: a departure board for a postcode is
+                // meaningless, and offering one produced an enabled button
+                // that silently did nothing.
+                StationSearchField(
+                    label: "Station",
+                    selection: $model.station,
+                    includePlaces: false
+                )
+                Button("Show departures") {
+                    searching = false
+                    Task { await model.load(using: env.api, cache: env.cache) }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(!model.canLoad)
+            }
+        } else if case let .loaded(board) = model.phase {
+            stationChip(board)
+        }
+    }
+
+    /// The collapsed search: which station, whether it's live, and a way back.
+    private func stationChip(_ board: Board) -> some View {
+        Button {
+            searching = true
+        } label: {
+            HStack(spacing: 8) {
+                Text(board.stationName)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Palette.ink)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Palette.inkMuted)
+                    .accessibilityHidden(true)
+                Spacer(minLength: 4)
+                StatusPill(
+                    model.servedFromCache != nil ? "Saved" : (board.live ? "Live" : "Timetable"),
+                    tone: model.servedFromCache != nil ? .warn : (board.live ? .good : .neutral)
+                )
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(board.stationName), change station")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    // MARK: - Content
+
     @ViewBuilder
     private var content: some View {
         switch model.phase {
@@ -142,13 +265,15 @@ struct BoardsView: View {
                 }
             }
         case let .loaded(board):
-            boardHeader(board)
-            ForEach(board.departures) { departure in
-                NavigationLink(value: departure) {
-                    DepartureRow(departure: departure)
-                }
-                .buttonStyle(.plain)
+            staleNotice
+            noticesSection(board)
+
+            // The next train, answered without reading the list.
+            if let next = board.departures.first {
+                NextDepartureHero(departure: next) { toggle(next.id) }
             }
+
+            departureList(board)
         case let .empty(reason):
             EmptyStateCard(
                 title: reason == "no-departures"
@@ -171,36 +296,128 @@ struct BoardsView: View {
         }
     }
 
-    private func boardHeader(_ board: Board) -> some View {
-        Card {
-            HStack {
-                Text(board.stationName).font(.title3.weight(.bold))
-                Spacer()
-                // Says whether these are live times or the timetable — the
-                // board must not imply real-time data it hasn't got.
-                StatusPill(
-                    model.servedFromCache != nil ? "Saved" : (board.live ? "Live" : "Timetable"),
-                    tone: model.servedFromCache != nil ? .warn : (board.live ? .good : .neutral)
-                )
+    /// The departures themselves, as lines rather than cards.
+    ///
+    /// One `Card` wraps the whole list instead of one per row: the rows are
+    /// separated by hairlines, which is what lets eight trains fit where three
+    /// did. The first departure is already in the hero above, so it is not
+    /// repeated here.
+    private func departureList(_ board: Board) -> some View {
+        let rest = Array(board.departures.dropFirst())
+        // Zero padding: `DepartureLine` carries its own 16pt insets so the
+        // hairlines run the full width of the card rather than stopping short.
+        return Card(spacing: 0, padding: 0) {
+            if rest.isEmpty {
+                Text("Nothing else scheduled from here right now.")
+                    .font(.callout)
+                    .foregroundStyle(Palette.inkMuted)
+                    .padding(16)
+            } else {
+                ForEach(rest) { departure in
+                    DepartureLine(
+                        departure: departure,
+                        isExpanded: expanded == departure.id
+                    ) {
+                        toggle(departure.id)
+                    }
+                    if departure.id != rest.last?.id { RowDivider() }
+                }
             }
-            // A board served from disk states its age. Showing a stored board
-            // as though it were current is the one thing this must not do.
-            if let storedAt = model.servedFromCache {
+        }
+    }
+
+    /// One row open at a time — a second tap on another row closes the first.
+    private func toggle(_ id: Departure.ID) {
+        // Live boards reorder themselves as trains are retimed; animating that
+        // is exactly what `accessibilityReduceMotion` exists to prevent.
+        if reduceMotion {
+            expanded = expanded == id ? nil : id
+        } else {
+            withAnimation(.easeOut(duration: 0.18)) {
+                expanded = expanded == id ? nil : id
+            }
+        }
+    }
+
+    /// A board served from disk states its age. Showing a stored board as
+    /// though it were current is the one thing this must not do.
+    @ViewBuilder
+    private var staleNotice: some View {
+        if let storedAt = model.servedFromCache {
+            HStack(spacing: 6) {
+                Image(systemName: "wifi.slash")
+                    .font(.caption)
+                    .accessibilityHidden(true)
                 Text(StatusFormatting.staleBoardNotice(secondsAgo: -storedAt.timeIntervalSinceNow))
                     .font(.caption)
-                    .foregroundStyle(Palette.signalAmber)
             }
-            if let filter = board.filterName {
-                Text("Calling at \(filter)").font(.callout).foregroundStyle(Palette.inkMuted)
-            }
-            ForEach(board.messages, id: \.self) { message in
-                Text(message.strippingHTML)
-                    .font(.callout)
-                    .foregroundStyle(Palette.signalAmber)
-            }
-            ForEach(board.disruptions) { disruption in
-                if let title = disruption.title {
-                    Text(title).font(.callout.weight(.semibold)).foregroundStyle(Palette.signalAmber)
+            .foregroundStyle(Palette.signalAmber)
+        }
+    }
+
+    /// Station messages, disruptions and any "calling at" filter.
+    ///
+    /// Collapsed by default and counted in the summary, so a board with three
+    /// routine NRCC notices doesn't push every departure below the fold — but
+    /// the notices are never hidden outright, only folded.
+    @ViewBuilder
+    private func noticesSection(_ board: Board) -> some View {
+        let messages = board.messages.map(\.strippingHTML).filter { !$0.isEmpty }
+        let count = messages.count + board.disruptions.count
+
+        if count > 0 || board.filterName != nil {
+            Card {
+                if let filter = board.filterName {
+                    Text("Calling at \(filter)")
+                        .font(.callout)
+                        .foregroundStyle(Palette.inkMuted)
+                }
+
+                if count > 0 {
+                    Button {
+                        showingNotices.toggle()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.caption)
+                                .accessibilityHidden(true)
+                            Text(count == 1 ? "1 notice at this station" : "\(count) notices at this station")
+                                .font(.callout.weight(.semibold))
+                            Spacer(minLength: 0)
+                            Image(systemName: showingNotices ? "chevron.up" : "chevron.down")
+                                .font(.caption.weight(.semibold))
+                                .accessibilityHidden(true)
+                        }
+                        .foregroundStyle(Palette.signalAmber)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(showingNotices ? "Collapse" : "Expand")
+
+                    if showingNotices {
+                        ForEach(messages, id: \.self) { message in
+                            Text(message)
+                                .font(.caption)
+                                .foregroundStyle(Palette.inkMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        ForEach(board.disruptions) { disruption in
+                            VStack(alignment: .leading, spacing: 2) {
+                                if let title = disruption.title {
+                                    Text(title)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(Palette.signalAmber)
+                                }
+                                if let summary = disruption.summary {
+                                    Text(summary)
+                                        .font(.caption)
+                                        .foregroundStyle(Palette.inkMuted)
+                                }
+                            }
+                            .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
         }

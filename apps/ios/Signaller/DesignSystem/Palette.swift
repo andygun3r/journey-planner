@@ -55,6 +55,13 @@ enum Palette {
 
     /// #2E7D46 — on time / good service.
     static let signalGreen = Color(hex: 0x2E7D46)
+    /// #26683A — green *text* on a near-white ground.
+    ///
+    /// The same trap `signalRedText` exists for. Signal Green clears AA on a
+    /// white card (5.07:1) and on the page ground (4.62:1), but only just — and
+    /// on the light pill ground used inside a `HeroCard` (#EDEDF0) it drops to
+    /// **4.34:1 and fails**. This variant is 5.75:1 there and 6.72:1 on a card.
+    static let signalGreenText = Color(hex: 0x26683A)
     /// #A05500 — minor delay. The darkened amber, not the brand's #E4B676:
     /// that lighter tone is a status *dot* colour and fails contrast as text.
     static let signalAmber = Color(hex: 0xA05500)
@@ -112,6 +119,15 @@ enum PillTone {
     /// Full-strength Signal Red keeps its spotlight job wherever it isn't text.
     var fillColor: Color {
         self == .bad ? Palette.signalRed : color
+    }
+
+    /// Text colour when the pill sits on a `HeroCard`'s navy ground.
+    ///
+    /// The pill there is a near-white capsule (#EDEDF0), which is darker than a
+    /// card and enough to push Signal Green under 4.5:1 — so `.good` takes the
+    /// deep variant. The others already clear AA and keep their usual colour.
+    var onNavyColor: Color {
+        self == .good ? Palette.signalGreenText : color
     }
 
     /// A shape cue to pair with the colour, for anyone who can't rely on hue.

@@ -23,6 +23,17 @@ final class AppEnvironment {
     /// Where a deep link wants the app to go, consumed by `RootView`.
     var pendingLink: DeepLink?
 
+    /// A station whose board a deep link asked for, consumed by `BoardsView`.
+    ///
+    /// `RootView` used to select the Boards tab and drop the CRS on the floor,
+    /// so tapping a board notification landed on an empty "Pick a station"
+    /// screen. The tab selection was never the payload — this is.
+    var pendingBoardCRS: String?
+
+    /// A train a deep link asked for, consumed by `BoardsView`'s navigation
+    /// stack. Same defect as `pendingBoardCRS`.
+    var pendingServiceID: String?
+
     /// Set when a magic link fails to complete, so the sign-in screen can say
     /// what went wrong rather than appearing to ignore the tap.
     var signInError: String?
