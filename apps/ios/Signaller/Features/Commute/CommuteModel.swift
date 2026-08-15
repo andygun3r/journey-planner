@@ -48,8 +48,15 @@ final class CommuteModel {
     }
 
     func markAlertsSeen(using api: APIClient) async {
-        try? await api.markAlertsSeen()
-        await loadAlerts(using: api)
+        do {
+            actionError = nil
+            try await api.markAlertsSeen()
+            await loadAlerts(using: api)
+        } catch {
+            // Swallowing this meant the reload put the alerts straight back as
+            // unseen: the action visibly undid itself with no explanation.
+            actionError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
     }
 
     // MARK: - Runs

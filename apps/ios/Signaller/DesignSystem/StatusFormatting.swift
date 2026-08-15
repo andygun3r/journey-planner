@@ -77,6 +77,7 @@ enum StatusFormatting {
         switch reason {
         case "unknown-station": return "Unknown station"
         case "engine-offline": return "Board source offline"
+        case "not-a-station": return "Pick a station"
         default: return "Couldn't load that board"
         }
     }
@@ -87,6 +88,10 @@ enum StatusFormatting {
             return "No station matched that code. Try searching by name."
         case "engine-offline":
             return "The live board source isn't answering. Try again in a moment."
+        case "not-a-station":
+            // Only reachable if a place gets selected some other way; the
+            // picker no longer offers them here.
+            return "Departure boards are per station — search for one by name."
         default:
             return "Something went wrong loading that board."
         }

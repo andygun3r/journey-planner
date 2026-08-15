@@ -1,0 +1,224 @@
+{
+  "ok": true,
+  "service": {
+    "stationName": "London Waterloo",
+    "crs": "WAT",
+    "operator": "South Western Railway",
+    "operatorCode": "SW",
+    "scheduledDeparture": "12:45",
+    "expectedDeparture": "Delayed",
+    "cancelled": false,
+    "delayReason": "This service has been delayed by a fault on a train earlier",
+    "coaches": [],
+    "calls": [
+      {
+        "crs": "WAT",
+        "name": "London Waterloo",
+        "scheduled": "12:45",
+        "expected": "Delayed",
+        "platform": "17",
+        "cancelled": false,
+        "isThisStop": true,
+        "scheduledIso": "2026-08-15T11:45:00.000Z",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T11:58:00.000Z"
+      },
+      {
+        "crs": "WOK",
+        "name": "Woking",
+        "scheduled": "13:13",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T12:13:00.000Z",
+        "platform": "5",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T12:25:00.000Z"
+      },
+      {
+        "crs": "WPL",
+        "name": "Worplesdon",
+        "scheduled": "13:18",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T12:18:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T12:30:00.000Z"
+      },
+      {
+        "crs": "GLD",
+        "name": "Guildford",
+        "scheduled": "13:24",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T12:24:00.000Z",
+        "platform": "4",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T12:36:00.000Z"
+      },
+      {
+        "crs": "FNC",
+        "name": "Farncombe",
+        "scheduled": "13:31",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T12:31:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T12:42:00.000Z"
+      },
+      {
+        "crs": "GOD",
+        "name": "Godalming",
+        "scheduled": "13:34",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T12:34:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T12:45:00.000Z"
+      },
+      {
+        "crs": "MLF",
+        "name": "Milford (Surrey)",
+        "scheduled": "13:38",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T12:38:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T12:49:00.000Z"
+      },
+      {
+        "crs": "WTY",
+        "name": "Witley",
+        "scheduled": "13:42",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T12:42:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T12:53:00.000Z"
+      },
+      {
+        "crs": "HSL",
+        "name": "Haslemere",
+        "scheduled": "13:50",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T12:50:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T13:00:00.000Z"
+      },
+      {
+        "crs": "LIP",
+        "name": "Liphook",
+        "scheduled": "14:02",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T13:02:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T13:06:00.000Z"
+      },
+      {
+        "crs": "LIS",
+        "name": "Liss",
+        "scheduled": "14:08",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T13:08:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T13:11:00.000Z"
+      },
+      {
+        "crs": "PTR",
+        "name": "Petersfield",
+        "scheduled": "14:13",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T13:13:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T13:16:00.000Z"
+      },
+      {
+        "crs": "RLN",
+        "name": "Rowlands Castle",
+        "scheduled": "14:23",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T13:23:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T13:26:00.000Z"
+      },
+      {
+        "crs": "HAV",
+        "name": "Havant",
+        "scheduled": "14:28",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T13:28:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T13:31:00.000Z"
+      },
+      {
+        "crs": "BDH",
+        "name": "Bedhampton",
+        "scheduled": "14:31",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T13:31:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T13:34:00.000Z"
+      },
+      {
+        "crs": "HLS",
+        "name": "Hilsea",
+        "scheduled": "14:37",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T13:37:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T13:40:00.000Z"
+      },
+      {
+        "crs": "FTN",
+        "name": "Fratton",
+        "scheduled": "14:41",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T13:41:00.000Z",
+        "platform": "2",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T13:44:00.000Z"
+      },
+      {
+        "crs": "PMS",
+        "name": "Portsmouth & Southsea",
+        "scheduled": "14:44",
+        "expected": "Delayed",
+        "cancelled": false,
+        "scheduledIso": "2026-08-15T13:44:00.000Z",
+        "platform": "4",
+        "progress": "upcoming",
+        "estimatedArrivalIso": "2026-08-15T13:47:00.000Z"
+      }
+    ],
+    "portions": [],
+    "progress": {
+      "tracking": true,
+      "positionState": "awaiting-report",
+      "nextStopName": "London Waterloo",
+      "arrived": false,
+      "networkRail": false
+    },
+    "rid": "202608157683924"
+  }
+}

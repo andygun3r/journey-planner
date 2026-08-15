@@ -15,8 +15,20 @@ final class BoardModel {
     var station: JourneyEndpoint?
     private(set) var phase: Phase = .idle
 
+    /// Only a station can have a departure board. Gates the button so a
+    /// non-station selection can't produce a tap that does nothing.
+    var canLoad: Bool {
+        if case .station? = station { return true }
+        return false
+    }
+
     func load(using api: APIClient) async {
-        guard case let .station(crs, _)? = station else { return }
+        guard case let .station(crs, _)? = station else {
+            // Unreachable via the UI now that `canLoad` gates the button, but
+            // a silent return here is what made the original bug invisible.
+            phase = .empty(reason: "not-a-station")
+            return
+        }
         if case .idle = phase { phase = .loading }
         do {
             let response = try await api.board(crs: crs)
@@ -44,12 +56,19 @@ struct BoardsView: View {
     var body: some View {
         AppChrome(title: "Departures") {
             Card {
-                StationSearchField(label: "Station", selection: $model.station)
+                // Stations only: a departure board for a postcode is
+                // meaningless, and offering one produced an enabled button
+                // that silently did nothing.
+                StationSearchField(
+                    label: "Station",
+                    selection: $model.station,
+                    includePlaces: false
+                )
                 Button("Show departures") {
                     Task { await model.load(using: env.api) }
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .disabled(model.station == nil)
+                .disabled(!model.canLoad)
             }
             content
         }
@@ -59,18 +78,26 @@ struct BoardsView: View {
         }
         // Boards go stale fast; a quiet 30s refresh keeps the times honest
         // without the user pulling.
-        .task(id: refreshTicker) {
-            guard case .loaded = model.phase else { return }
-            try? await Task.sleep(for: .seconds(30))
-            guard !Task.isCancelled else { return }
-            await model.load(using: env.api)
+        //
+        // Keyed on the station, and loops. The previous version keyed
+        // `.task(id:)` on the board's `generatedAt` and slept once: if the
+        // server ever returned the same timestamp twice — a cached board, or a
+        // quiet station — the id didn't change, the task never re-fired, and
+        // refresh stopped for good while the board still looked live.
+        .task(id: refreshKey) {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled else { return }
+                await model.load(using: env.api)
+            }
         }
     }
 
-    /// Changes whenever a load completes, restarting the refresh timer.
-    private var refreshTicker: String {
-        if case let .loaded(board) = model.phase { return board.generatedAt.description }
-        return "idle"
+    /// The station being shown. Changing station restarts the refresh loop;
+    /// a repeated `generatedAt` no longer stops it.
+    private var refreshKey: String {
+        if case let .station(crs, _)? = model.station { return crs }
+        return "none"
     }
 
     @ViewBuilder

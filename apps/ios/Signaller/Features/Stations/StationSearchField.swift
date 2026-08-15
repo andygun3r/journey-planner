@@ -29,6 +29,13 @@ struct StationSearchField: View {
     let label: String
     @Binding var selection: JourneyEndpoint?
 
+    /// Whether addresses and postcodes are offered alongside stations.
+    ///
+    /// Off for the departure board, which can only show a station — offering a
+    /// postcode there produced a selection the board then silently refused to
+    /// load, leaving an enabled button that did nothing.
+    var includePlaces = true
+
     @State private var query = ""
     @State private var results = StationSearchResponse(stations: [], places: [])
     @State private var searching = false
@@ -41,7 +48,13 @@ struct StationSearchField: View {
         VStack(alignment: .leading, spacing: 6) {
             LabelText(label)
 
-            TextField("Station, postcode or address", text: $query)
+            // The placeholder has to match what the field will actually
+            // accept — promising postcodes on a stations-only field is the
+            // same broken promise as the button that did nothing.
+            TextField(
+                includePlaces ? "Station, postcode or address" : "Station name or code",
+                text: $query
+            )
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.words)
                 .font(.title3.weight(.semibold))
@@ -55,6 +68,16 @@ struct StationSearchField: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .focused($focused)
                 .onChange(of: query) { _, newValue in scheduleSearch(newValue) }
+                // `searching` used to be set and never read, so on a slow
+                // connection the field looked inert for 250ms plus a round trip.
+                .overlay(alignment: .trailing) {
+                    if searching {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(.trailing, 14)
+                            .accessibilityLabel("Searching")
+                    }
+                }
 
             if focused, !results.isEmpty {
                 resultsList
@@ -154,7 +177,8 @@ struct StationSearchField: View {
             defer { searching = false }
             // A failed lookup shouldn't clear what's on screen or shout at the
             // user mid-keystroke; the field just stops offering suggestions.
-            if let found = try? await env.api.stations(query: trimmed), !Task.isCancelled {
+            if let found = try? await env.api.stations(query: trimmed, includePlaces: includePlaces),
+               !Task.isCancelled {
                 results = found
             }
         }

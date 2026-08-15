@@ -105,6 +105,8 @@ struct PlanView: View {
                 favouriteButton
             }
             .padding(.top, 4)
+
+            favouriteError
         }
     }
 
@@ -130,6 +132,21 @@ struct PlanView: View {
         }
     }
 
+    /// Why a star didn't stick. The toggle is optimistic and rolls back on
+    /// failure, so without this the star would silently snap back.
+    @ViewBuilder
+    private var favouriteError: some View {
+        if let error = env.favourites.toggleError {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .accessibilityHidden(true)
+                Text(error).font(.caption)
+            }
+            .foregroundStyle(Palette.signalRedText)
+        }
+    }
+
     private var departureTimeRow: some View {
         HStack {
             LabelText("Departing")
@@ -145,7 +162,12 @@ struct PlanView: View {
                 Button {
                     model.departAt = nil
                 } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.inkMuted)
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Palette.inkMuted)
+                        // The glyph is ~22pt; the tap target must be 44pt.
+                        // PRODUCT.md calls out gloved, one-handed platform use.
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Depart now instead")
             }

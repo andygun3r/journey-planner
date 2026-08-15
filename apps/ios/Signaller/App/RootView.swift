@@ -10,6 +10,10 @@ struct RootView: View {
         case plan, map, boards, commute, account
     }
 
+    /// The visible tab, published so live streams can stand down when their
+    /// screen is no longer on top. A `TabView` keeps sibling tabs alive, so
+    /// `onDisappear` never fires on a tab switch and can't be used for this.
+
     var body: some View {
         TabView(selection: $selection) {
             NavigationStack {
@@ -45,6 +49,7 @@ struct RootView: View {
             .tabItem { Label("Account", systemImage: "person.crop.circle") }
             .tag(Tab.account)
         }
+        .environment(\.selectedTab, selection)
         .tint(Palette.railNavy)
         // A deep link or a notification tap selects the tab it belongs to.
         // Consumed here (and cleared) so the same link can arrive twice.
@@ -58,5 +63,20 @@ struct RootView: View {
             }
             env.pendingLink = nil
         }
+    }
+}
+
+/// The tab currently on screen.
+///
+/// Read by screens that own a live stream, so they can stop it when the user
+/// switches away — `onDisappear` doesn't fire for a `TabView`'s siblings.
+private struct SelectedTabKey: EnvironmentKey {
+    static let defaultValue: RootView.Tab = .plan
+}
+
+extension EnvironmentValues {
+    var selectedTab: RootView.Tab {
+        get { self[SelectedTabKey.self] }
+        set { self[SelectedTabKey.self] = newValue }
     }
 }

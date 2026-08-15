@@ -16,6 +16,7 @@ struct LiveMapView: View {
 
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.selectedTab) private var selectedTab
 
     /// Opening view: the whole network.
     private static let greatBritain = MKCoordinateRegion(
@@ -59,6 +60,18 @@ struct LiveMapView: View {
             if model.shouldPoll { await model.poll(using: env.api) }
         }
         .onDisappear { model.stop() }
+        // A TabView keeps its sibling tabs alive, so `onDisappear` is not a
+        // reliable signal that this screen was left — switching tabs could
+        // leave the national train stream (~1,700 trains, snapshot plus
+        // deltas) running and decoding indefinitely. The tab selection is the
+        // authoritative signal, so stop on anything that isn't this tab.
+        .onChange(of: selectedTab) { _, tab in
+            if tab == .map {
+                model.start(api: env.api, auth: env.auth)
+            } else {
+                model.stop()
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active: model.start(api: env.api, auth: env.auth)
@@ -69,19 +82,14 @@ struct LiveMapView: View {
     }
 
     /// Says how much is being shown, and how fresh it is. Silently drawing a
-    /// subset of a national feed would misrepresent it.
+    /// subset of a national feed would misrepresent it — and so would
+    /// reporting a count we never actually received.
     private var statusBar: some View {
-        let total = model.totalInView(in: visibleRegion)
-        let thinned = model.hiddenCount(in: visibleRegion) > 0
-        return HStack(spacing: 6) {
+        HStack(spacing: 6) {
             Circle()
-                .fill(model.live?.state == .live ? Palette.signalGreen : Palette.inkMuted)
+                .fill(statusColor)
                 .frame(width: 6, height: 6)
-            // Leads with the true count in view. Saying "250 shown" first
-            // reads as though that's all there is.
-            Text(thinned
-                 ? "\(total) trains · zoom in for all"
-                 : "\(total) trains")
+            Text(statusText)
                 .font(.caption.weight(.medium))
         }
         .padding(.horizontal, 12)
@@ -89,6 +97,37 @@ struct LiveMapView: View {
         .background(.regularMaterial)
         .clipShape(Capsule())
         .padding(.top, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(statusText)
+    }
+
+    /// What the bar actually says. Three distinct states — a count is only ever
+    /// shown for data that genuinely arrived.
+    private var statusText: String {
+        switch model.feed {
+        case .idle:
+            return model.live?.state == .connecting ? "Connecting…" : "Waiting for the live feed"
+        case .failed:
+            return "Live feed unavailable"
+        case .loaded:
+            let total = model.totalInView(in: visibleRegion)
+            let thinned = model.hiddenCount(in: visibleRegion) > 0
+            // Leads with the true count in view. Saying "250 shown" first
+            // reads as though that's all there is.
+            let count = total == 1 ? "1 train" : "\(total) trains"
+            if case .reconnecting = model.live?.state {
+                return "\(count) · reconnecting"
+            }
+            return thinned ? "\(count) · zoom in for all" : count
+        }
+    }
+
+    private var statusColor: Color {
+        switch model.feed {
+        case .failed: return Palette.signalRed
+        case .idle: return Palette.inkMuted
+        case .loaded: return model.live?.state == .live ? Palette.signalGreen : Palette.signalAmber
+        }
     }
 }
 

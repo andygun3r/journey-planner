@@ -119,7 +119,13 @@ struct Departure: Decodable, Identifiable, Hashable {
 }
 
 struct Coach: Decodable, Hashable, Identifiable {
-    var id: String { number ?? UUID().uuidString }
+    /// Stable for the life of the value.
+    ///
+    /// This was `number ?? UUID().uuidString` — a *computed* property, so an
+    /// unnumbered coach minted a fresh id on every access. In a `ForEach` that
+    /// destroys and rebuilds the row every render. Not reachable today (the
+    /// formation strip renders `ServiceCoach`), but a trap for the next caller.
+    let id: String
     let number: String?
     let coachClass: String?
     let toilet: String?
@@ -129,6 +135,17 @@ struct Coach: Decodable, Hashable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case number, toilet, loading
         case coachClass = "class"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        number = try container.decodeIfPresent(String.self, forKey: .number)
+        coachClass = try container.decodeIfPresent(String.self, forKey: .coachClass)
+        toilet = try container.decodeIfPresent(String.self, forKey: .toilet)
+        loading = try container.decodeIfPresent(Int.self, forKey: .loading)
+        // Assigned once at decode. An unnumbered coach still gets a stable id
+        // for the lifetime of the value, which is what `ForEach` needs.
+        id = number ?? UUID().uuidString
     }
 }
 

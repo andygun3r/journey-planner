@@ -7,6 +7,10 @@ final class ServiceModel {
     enum Phase {
         case loading
         case loaded(ServiceDetail)
+        /// The board row carries neither a rid nor a trip id, so there is
+        /// nothing to look up. Distinct from `.failed`: nothing went wrong,
+        /// this train simply isn't trackable yet.
+        case untrackable
         case failed(APIError)
     }
 
@@ -39,6 +43,11 @@ final class ServiceModel {
     func stopLive() {
         live?.stop()
         live = nil
+    }
+
+    /// No rid and no trip id — there is nothing to fetch.
+    func markUntrackable() {
+        phase = .untrackable
     }
 
     func load(serviceId: String, using api: APIClient) async {
@@ -108,8 +117,12 @@ struct ServiceDetailView: View {
 
     private func load() async {
         // A rid is the better identifier when the live overlay has matched the
-        // trip; tripId is the timetable fallback.
+        // trip; tripId is the timetable fallback. A row can legitimately have
+        // neither — `Departure.id` falls back to scheduled time + destination
+        // precisely for that case — and returning here used to leave `phase`
+        // at `.loading`, so the user watched a spinner that could never resolve.
         guard let id = departure.rid.map({ "rid:\($0)" }) ?? departure.tripId else {
+            model.markUntrackable()
             return
         }
         await model.load(serviceId: id, using: env.api)
@@ -131,6 +144,18 @@ struct ServiceDetailView: View {
             progressCard(service.progress)
             callsCard(service)
             if !service.coaches.isEmpty { formationCard(service) }
+        case .untrackable:
+            // Say what's actually true rather than showing a failure: the
+            // board knows this train runs, it just has no id to follow it by.
+            EmptyStateCard(
+                title: "No details for this train yet",
+                message: """
+                    It's on the board, but the live feed hasn't matched it to a \
+                    service yet — so there's no calling pattern to show. Check \
+                    the board again closer to departure.
+                    """,
+                systemImage: "clock.badge.questionmark"
+            )
         case let .failed(error):
             EmptyStateCard(
                 title: "Service details unavailable",

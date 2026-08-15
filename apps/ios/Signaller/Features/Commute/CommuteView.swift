@@ -5,6 +5,7 @@ struct CommuteView: View {
     @State private var model = CommuteModel()
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.selectedTab) private var selectedTab
 
     var body: some View {
         Group {
@@ -87,6 +88,15 @@ struct CommuteView: View {
         }
         .refreshable { await model.load(using: env.api) }
         .onDisappear { model.stopLive() }
+        // As on the map: a TabView keeps siblings alive, so `onDisappear`
+        // alone would leave this stream open after switching tabs.
+        .onChange(of: selectedTab) { _, tab in
+            if tab == .commute {
+                model.startLive(api: env.api, auth: env.auth)
+            } else {
+                model.stopLive()
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
