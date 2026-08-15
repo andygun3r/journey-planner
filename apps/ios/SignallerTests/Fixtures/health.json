@@ -1,0 +1,1 @@
+{"ok":true,"postgres":true,"redis":true,"schema":true,"timetable":{"lastSuccessAt":"2026-08-14T19:12:14.073Z","lastSuccessVersion":"timetable_full","hoursSinceSuccess":11.6,"lastAttemptFailed":false,"lastFailureAt":null,"lastFailureDetail":null,"stale":false,"ok":true},"service":"signaller-web"}

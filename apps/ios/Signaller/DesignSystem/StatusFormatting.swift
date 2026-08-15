@@ -97,8 +97,12 @@ enum StatusFormatting {
     /// Returns nil rather than a negative countdown: a departure in the past is
     /// not information, it's noise.
     static func countdown(to date: Date, now: Date = Date()) -> String? {
-        let minutes = Int((date.timeIntervalSince(now) / 60).rounded())
-        if minutes < 0 { return nil }
+        let seconds = date.timeIntervalSince(now)
+        if seconds < 0 { return nil }
+        // Round *down*, not to nearest. Rounding to nearest turns 30 seconds
+        // into "in 1 min", which tells someone they have a minute longer than
+        // they do — on a departure board that's the wrong direction to be wrong.
+        let minutes = Int(seconds / 60)
         if minutes == 0 { return "now" }
         if minutes == 1 { return "in 1 min" }
         if minutes < 60 { return "in \(minutes) min" }

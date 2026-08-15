@@ -54,6 +54,13 @@
 		0A000001000000000000017D /* Signaller/Models/LiveTrain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000012D /* Signaller/Models/LiveTrain.swift */; };
 		0A000001000000000000017E /* Signaller/Features/Map/MapModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000012E /* Signaller/Features/Map/MapModel.swift */; };
 		0A000001000000000000017F /* Signaller/Features/Map/LiveMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000012F /* Signaller/Features/Map/LiveMapView.swift */; };
+		0A0000010000000000000180 /* SignallerTests/ISO8601Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000130 /* SignallerTests/ISO8601Tests.swift */; };
+		0A0000010000000000000181 /* SignallerTests/SSEClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000131 /* SignallerTests/SSEClientTests.swift */; };
+		0A0000010000000000000182 /* SignallerTests/StatusFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000132 /* SignallerTests/StatusFormattingTests.swift */; };
+		0A0000010000000000000183 /* SignallerTests/ModelDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000133 /* SignallerTests/ModelDecodingTests.swift */; };
+		0A0000010000000000000184 /* SignallerTests/MapModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000134 /* SignallerTests/MapModelTests.swift */; };
+		0A0000010000000000000185 /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000135 /* Fixtures */; };
+		0A0000010000000000000186 /* SignallerTests/Fixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000136 /* SignallerTests/Fixtures.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -63,6 +70,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 0A0000010000000000000202;
 			remoteInfo = SignallerLiveActivity;
+		};
+		0A0000010000000000000034 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0A0000010000000000000100 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0A0000010000000000000201;
+			remoteInfo = Signaller;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -132,6 +146,14 @@
 		0A000001000000000000012D /* Signaller/Models/LiveTrain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/LiveTrain.swift; sourceTree = "<group>"; };
 		0A000001000000000000012E /* Signaller/Features/Map/MapModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Map/MapModel.swift; sourceTree = "<group>"; };
 		0A000001000000000000012F /* Signaller/Features/Map/LiveMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Map/LiveMapView.swift; sourceTree = "<group>"; };
+		0A0000010000000000000130 /* SignallerTests/ISO8601Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/ISO8601Tests.swift; sourceTree = "<group>"; };
+		0A0000010000000000000131 /* SignallerTests/SSEClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/SSEClientTests.swift; sourceTree = "<group>"; };
+		0A0000010000000000000132 /* SignallerTests/StatusFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/StatusFormattingTests.swift; sourceTree = "<group>"; };
+		0A0000010000000000000133 /* SignallerTests/ModelDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/ModelDecodingTests.swift; sourceTree = "<group>"; };
+		0A0000010000000000000134 /* SignallerTests/MapModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/MapModelTests.swift; sourceTree = "<group>"; };
+		0A0000010000000000000135 /* Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SignallerTests/Fixtures; sourceTree = "<group>"; };
+		0A0000010000000000000023 /* SignallerTests.xctest */ = {isa = PBXFileReference; explicitFileType = "wrapper.cfbundle"; includeInIndex = 0; path = SignallerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0A0000010000000000000136 /* SignallerTests/Fixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/Fixtures.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -143,6 +165,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		0A0000010000000000000052 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0A0000010000000000000053 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -163,6 +192,7 @@
 				0A0000010000000000000063 /* Shared */,
 				0A0000010000000000000064 /* LiveActivity */,
 				0A0000010000000000000019 /* Signaller.xcconfig */,
+				0A000001000000000000006A /* SignallerTests */,
 				0A0000010000000000000065 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -204,6 +234,7 @@
 			children = (
 				0A0000010000000000000021 /* Signaller.app */,
 				0A0000010000000000000022 /* SignallerLiveActivity.appex */,
+				0A0000010000000000000023 /* SignallerTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -273,6 +304,20 @@
 			name = Features;
 			sourceTree = "<group>";
 		};
+		0A000001000000000000006A /* SignallerTests */ = {
+			isa = PBXGroup;
+			children = (
+				0A0000010000000000000130 /* SignallerTests/ISO8601Tests.swift */,
+				0A0000010000000000000131 /* SignallerTests/SSEClientTests.swift */,
+				0A0000010000000000000132 /* SignallerTests/StatusFormattingTests.swift */,
+				0A0000010000000000000133 /* SignallerTests/ModelDecodingTests.swift */,
+				0A0000010000000000000134 /* SignallerTests/MapModelTests.swift */,
+				0A0000010000000000000136 /* SignallerTests/Fixtures.swift */,
+				0A0000010000000000000135 /* Fixtures */,
+			);
+			name = SignallerTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -311,6 +356,24 @@
 			productReference = 0A0000010000000000000022 /* SignallerLiveActivity.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		0A0000010000000000000203 /* SignallerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0A0000010000000000000303 /* Build configuration list for PBXNativeTarget "SignallerTests" */;
+			buildPhases = (
+				0A0000010000000000000073 /* Sources */,
+				0A0000010000000000000053 /* Frameworks */,
+				0A0000010000000000000074 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0A0000010000000000000033 /* PBXTargetDependency */,
+			);
+			name = SignallerTests;
+			productName = SignallerTests;
+			productReference = 0A0000010000000000000023 /* SignallerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -345,6 +408,7 @@
 			targets = (
 				0A0000010000000000000201 /* Signaller */,
 				0A0000010000000000000202 /* SignallerLiveActivity */,
+				0A0000010000000000000203 /* SignallerTests */,
 			);
 		};
 /* End PBXProject section */
@@ -366,6 +430,17 @@
 			shellScript = "if [ \"$CONFIGURATION\" != \"Release\" ]; then exit 0; fi\ncase \"$SIGNALLER_API_BASE_URL\" in\n  \"\"|*signaller.example*|http:|https:)\n    echo \"error: SIGNALLER_API_BASE_URL is not usable in a Release build (got: [$SIGNALLER_API_BASE_URL]).\"\n    echo \"note: set SIGNALLER_API_BASE_URL_RELEASE in apps/ios/Signaller.xcconfig to a real https host\"\n    echo \"note: a double-slash starts a comment in xcconfig - build URLs via the SLASHES variable\"\n    exit 1 ;;\nesac\n";
 		};
 /* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0A0000010000000000000074 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0A0000010000000000000185 /* Fixtures in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		0A0000010000000000000071 /* Sources */ = {
@@ -428,6 +503,19 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		0A0000010000000000000073 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0A0000010000000000000186 /* SignallerTests/Fixtures.swift in Sources */,
+				0A0000010000000000000180 /* SignallerTests/ISO8601Tests.swift in Sources */,
+				0A0000010000000000000181 /* SignallerTests/SSEClientTests.swift in Sources */,
+				0A0000010000000000000182 /* SignallerTests/StatusFormattingTests.swift in Sources */,
+				0A0000010000000000000183 /* SignallerTests/ModelDecodingTests.swift in Sources */,
+				0A0000010000000000000184 /* SignallerTests/MapModelTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -435,6 +523,11 @@
 			isa = PBXTargetDependency;
 			target = 0A0000010000000000000202 /* SignallerLiveActivity */;
 			targetProxy = 0A0000010000000000000031 /* PBXContainerItemProxy */;
+		};
+		0A0000010000000000000033 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0A0000010000000000000201 /* Signaller */;
+			targetProxy = 0A0000010000000000000034 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -647,6 +740,40 @@
 			};
 			name = Release;
 		};
+		0A0000010000000000000407 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "$(SIGNALLER_DEV_TEAM)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.signaller.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Signaller.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Signaller";
+			};
+			name = Debug;
+		};
+		0A0000010000000000000408 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "$(SIGNALLER_DEV_TEAM)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = uk.signaller.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Signaller.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Signaller";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -673,6 +800,15 @@
 			buildConfigurations = (
 				0A0000010000000000000405 /* Debug */,
 				0A0000010000000000000406 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0A0000010000000000000303 /* Build configuration list for PBXNativeTarget "SignallerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0A0000010000000000000407 /* Debug */,
+				0A0000010000000000000408 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

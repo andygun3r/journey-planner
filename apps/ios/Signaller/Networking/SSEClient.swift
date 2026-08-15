@@ -38,6 +38,45 @@ struct SSEClient {
         self.session = session
     }
 
+    /// Accumulates `event:` / `data:` lines and emits a frame on each blank
+    /// line.
+    ///
+    /// Split out from the read loop so it can be driven by a plain array of
+    /// lines in tests — the alternative is a real socket, which makes the
+    /// interesting cases (a frame split across chunks, a stray heartbeat)
+    /// awkward to provoke.
+    struct FrameParser {
+        private var name: String?
+        private var dataLines: [String] = []
+
+        /// Feeds one line. Returns a frame when that line completes one.
+        mutating func consume(_ line: String) -> SSEEvent? {
+            // A blank line dispatches whatever has accumulated.
+            if line.isEmpty {
+                guard !dataLines.isEmpty || name != nil else { return nil }
+                let event = SSEEvent(
+                    name: name ?? "message",
+                    data: dataLines.joined(separator: "\n")
+                )
+                name = nil
+                dataLines.removeAll()
+                return event
+            }
+
+            // ": ping" and friends are comments — the heartbeat that stops a
+            // proxy closing an idle connection.
+            if line.hasPrefix(":") { return nil }
+
+            if let value = line.strippingFieldPrefix("event:") {
+                name = value
+            } else if let value = line.strippingFieldPrefix("data:") {
+                dataLines.append(value)
+            }
+            // Other fields (id:, retry:) are unused by this backend.
+            return nil
+        }
+    }
+
     /// Opens the stream and yields events until it ends or the task is cancelled.
     func events(for request: URLRequest) -> AsyncThrowingStream<Element, Error> {
         AsyncThrowingStream { continuation in
@@ -58,41 +97,18 @@ struct SSEClient {
                         throw APIError.http(status: http.statusCode, reason: nil)
                     }
 
-                    var name: String?
-                    var dataLines: [String] = []
+                    var parser = FrameParser()
 
                     for try await line in bytes.lines {
                         if Task.isCancelled { break }
+                        guard let event = parser.consume(line) else { continue }
 
-                        // A blank line dispatches whatever has accumulated.
-                        if line.isEmpty {
-                            guard !dataLines.isEmpty || name != nil else { continue }
-                            let event = SSEEvent(
-                                name: name ?? "message",
-                                data: dataLines.joined(separator: "\n")
-                            )
-                            name = nil
-                            dataLines.removeAll()
-
-                            if event.name == "unavailable" {
-                                continuation.yield(.ended(.unavailable))
-                                continuation.finish()
-                                return
-                            }
-                            continuation.yield(.event(event))
-                            continue
+                        if event.name == "unavailable" {
+                            continuation.yield(.ended(.unavailable))
+                            continuation.finish()
+                            return
                         }
-
-                        // ": ping" and friends are comments — the heartbeat
-                        // that keeps proxies from closing an idle connection.
-                        if line.hasPrefix(":") { continue }
-
-                        if let value = line.strippingFieldPrefix("event:") {
-                            name = value
-                        } else if let value = line.strippingFieldPrefix("data:") {
-                            dataLines.append(value)
-                        }
-                        // Other fields (id:, retry:) are unused by this backend.
+                        continuation.yield(.event(event))
                     }
 
                     continuation.yield(.ended(.disconnected))

@@ -112,6 +112,12 @@ final class MapModel {
         }
     }
 
+    /// Feeds one stream event straight in, so tests exercise the real
+    /// snapshot/delta path rather than a reimplementation of it.
+    func applyForTesting(_ event: SSEEvent) {
+        apply(event)
+    }
+
     /// One-shot poll, for when the server has no Redis and the stream reported
     /// `unavailable`.
     func poll(using api: APIClient) async {

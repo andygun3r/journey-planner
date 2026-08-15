@@ -1,0 +1,59 @@
+{
+  "generatedAt": "2026-08-15T06:53:56.392Z",
+  "count": 1672,
+  "upserted": [
+    {
+      "id": "082F56MB15",
+      "lat": 55.63387,
+      "lon": -4.78428,
+      "headcode": "2F56",
+      "operator": "ScotRail",
+      "latenessMinutes": 0,
+      "reportedAgoSeconds": 0,
+      "rid": "202608158768558",
+      "atName": "Saltcoats",
+      "atCrs": "SLT",
+      "event": "ARRIVAL",
+      "towardName": "Stevenston",
+      "destName": "Glasgow Central",
+      "nextLat": 55.63427,
+      "nextLon": -4.7507825
+    },
+    {
+      "id": "TD:1N09",
+      "lat": 50.84208,
+      "lon": -1.06755,
+      "headcode": "1N09",
+      "operator": "Southern",
+      "reportedAgoSeconds": 1,
+      "rid": "202608157188566",
+      "atName": "Cosham",
+      "atCrs": "CSA",
+      "event": "DEPARTURE",
+      "towardName": "Bedhampton",
+      "destName": "Brighton",
+      "nextLat": 50.853943,
+      "nextLon": -0.9958237
+    },
+    {
+      "id": "TD:2K62",
+      "lat": 53.52902,
+      "lon": -2.47818,
+      "headcode": "2K62",
+      "operator": "Northern",
+      "reportedAgoSeconds": 1,
+      "rid": "202608157689693",
+      "atName": "Atherton",
+      "atCrs": "ATN",
+      "event": "DEPARTURE",
+      "towardName": "Hag Fold",
+      "destName": "Headbolt Lane",
+      "nextLat": 53.533867,
+      "nextLon": -2.494829
+    }
+  ],
+  "removed": [
+    "TD:2F56",
+    "861N09MA15"
+  ]
+}
