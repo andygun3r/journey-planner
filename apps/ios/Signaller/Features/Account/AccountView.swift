@@ -1,10 +1,12 @@
 import SwiftUI
 import UserNotifications
 
-/// Account tab: the sign-in screen when signed out, account details when in.
+/// Account tab: sign-in, notification settings, and the way through to
+/// network status.
 ///
-/// Commute, favourites and alert settings land here in Phase 7 — for now it's
-/// the entry point that makes sign-in reachable at all.
+/// Signed out it shows the sign-in screen — but network status is still
+/// reachable from there, since it needs no account and is one of the things
+/// people open the app for.
 struct AccountView: View {
     @Environment(AppEnvironment.self) private var env
 
@@ -30,6 +32,25 @@ struct AccountView: View {
             }
 
             notificationsCard
+
+            Card {
+                NavigationLink {
+                    StatusView()
+                } label: {
+                    HStack {
+                        Label("Network status", systemImage: "waveform.path.ecg")
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(Palette.ink)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Palette.inkMuted)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
 
             Card {
                 Button("Sign out") {

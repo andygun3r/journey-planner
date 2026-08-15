@@ -51,6 +51,9 @@
 		0A000001000000000000017A /* Signaller/Features/Commute/CommuteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000012A /* Signaller/Features/Commute/CommuteView.swift */; };
 		0A000001000000000000017B /* Signaller/Features/Alerts/AlertsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000012B /* Signaller/Features/Alerts/AlertsView.swift */; };
 		0A000001000000000000017C /* Signaller/Features/Plan/FavouritesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000012C /* Signaller/Features/Plan/FavouritesModel.swift */; };
+		0A000001000000000000017D /* Signaller/Models/LiveTrain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000012D /* Signaller/Models/LiveTrain.swift */; };
+		0A000001000000000000017E /* Signaller/Features/Map/MapModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000012E /* Signaller/Features/Map/MapModel.swift */; };
+		0A000001000000000000017F /* Signaller/Features/Map/LiveMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000012F /* Signaller/Features/Map/LiveMapView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -126,6 +129,9 @@
 		0A000001000000000000012A /* Signaller/Features/Commute/CommuteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Commute/CommuteView.swift; sourceTree = "<group>"; };
 		0A000001000000000000012B /* Signaller/Features/Alerts/AlertsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Alerts/AlertsView.swift; sourceTree = "<group>"; };
 		0A000001000000000000012C /* Signaller/Features/Plan/FavouritesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Plan/FavouritesModel.swift; sourceTree = "<group>"; };
+		0A000001000000000000012D /* Signaller/Models/LiveTrain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/LiveTrain.swift; sourceTree = "<group>"; };
+		0A000001000000000000012E /* Signaller/Features/Map/MapModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Map/MapModel.swift; sourceTree = "<group>"; };
+		0A000001000000000000012F /* Signaller/Features/Map/LiveMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Map/LiveMapView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -205,6 +211,7 @@
 		0A0000010000000000000066 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				0A000001000000000000012D /* Signaller/Models/LiveTrain.swift */,
 				0A0000010000000000000127 /* Signaller/Models/Commute.swift */,
 				0A0000010000000000000128 /* Signaller/Models/Alert.swift */,
 				0A0000010000000000000124 /* Signaller/Models/LivePosition.swift */,
@@ -244,6 +251,8 @@
 		0A0000010000000000000069 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				0A000001000000000000012E /* Signaller/Features/Map/MapModel.swift */,
+				0A000001000000000000012F /* Signaller/Features/Map/LiveMapView.swift */,
 				0A0000010000000000000129 /* Signaller/Features/Commute/CommuteModel.swift */,
 				0A000001000000000000012A /* Signaller/Features/Commute/CommuteView.swift */,
 				0A000001000000000000012B /* Signaller/Features/Alerts/AlertsView.swift */,
@@ -366,6 +375,9 @@
 				0A0000010000000000000001 /* Signaller/App/SignallerApp.swift in Sources */,
 				0A0000010000000000000004 /* Signaller/App/LiveActivityController.swift in Sources */,
 				0A0000010000000000000005 /* Signaller/Shared/JourneyActivityAttributes.swift in Sources */,
+				0A000001000000000000017D /* Signaller/Models/LiveTrain.swift in Sources */,
+				0A000001000000000000017E /* Signaller/Features/Map/MapModel.swift in Sources */,
+				0A000001000000000000017F /* Signaller/Features/Map/LiveMapView.swift in Sources */,
 				0A0000010000000000000177 /* Signaller/Models/Commute.swift in Sources */,
 				0A0000010000000000000178 /* Signaller/Models/Alert.swift in Sources */,
 				0A0000010000000000000179 /* Signaller/Features/Commute/CommuteModel.swift in Sources */,

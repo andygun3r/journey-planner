@@ -108,6 +108,28 @@ struct SignInView: View {
             }
 
             statusCard
+
+            // Network status needs no account, and is one of the things people
+            // open the app for — so it stays reachable from the signed-out
+            // screen rather than being locked behind sign-in.
+            Card {
+                NavigationLink {
+                    StatusView()
+                } label: {
+                    HStack {
+                        Label("Network status", systemImage: "waveform.path.ecg")
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(Palette.ink)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Palette.inkMuted)
+                    }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 

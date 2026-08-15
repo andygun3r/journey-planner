@@ -88,6 +88,34 @@ struct Departure: Decodable, Identifiable, Hashable {
         case movedFromSchedule
         case operatorName = "operator"
     }
+
+    /// A minimal stand-in built from a rid, for opening the service screen from
+    /// somewhere that has no board row — a train tapped on the map. Only `rid`
+    /// and the destination are known; the screen fetches the rest.
+    static func placeholder(rid: String, destination: String) -> Departure {
+        Departure(
+            tripId: nil,
+            rid: rid,
+            originName: nil,
+            originCrs: nil,
+            destinationName: destination,
+            destinationCrs: nil,
+            operatorName: nil,
+            scheduled: Date(),
+            live: nil,
+            platform: nil,
+            platformChanged: false,
+            status: .scheduled,
+            delayMinutes: nil,
+            reason: nil,
+            coachCount: nil,
+            coaches: nil,
+            hasLive: true,
+            position: nil,
+            operatorPunctuality: nil,
+            movedFromSchedule: nil
+        )
+    }
 }
 
 struct Coach: Decodable, Hashable, Identifiable {

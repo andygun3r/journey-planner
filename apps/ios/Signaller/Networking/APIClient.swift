@@ -101,6 +101,13 @@ final class APIClient {
         try await get("/api/health")
     }
 
+    /// One-shot poll of every tracked train. The SSE stream at
+    /// `/api/live/trains` is the normal source; this is the documented
+    /// fallback for a deployment with no Redis.
+    func liveTrains() async throws -> LiveTrainsSnapshot {
+        try await get("/api/live-trains")
+    }
+
     // MARK: - Commute (signed in)
 
     func commuteDashboard(commuteId: String? = nil) async throws -> DashboardResponse {
@@ -239,6 +246,18 @@ final class APIClient {
         do {
             (data, response) = try await session.data(for: request)
         } catch let error as URLError {
+            #if DEBUG
+            // App Transport Security rejects the request before it leaves the
+            // device, so there is no server-side trace and the UI just shows
+            // "couldn't reach Signaller". Name it in the console instead of
+            // letting it look like the backend is down.
+            if error.code == .appTransportSecurityRequiresSecureConnection {
+                print("""
+                [APIClient] ATS blocked \(request.url?.absoluteString ?? "?").
+                Use https, or add the host to NSAppTransportSecurity in Info.plist.
+                """)
+            }
+            #endif
             throw APIError.transport(error.localizedDescription)
         }
 

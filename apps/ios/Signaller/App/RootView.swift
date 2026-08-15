@@ -7,7 +7,7 @@ struct RootView: View {
     @State private var selection: Tab = .plan
 
     enum Tab: Hashable {
-        case plan, boards, commute, status, account
+        case plan, map, boards, commute, account
     }
 
     var body: some View {
@@ -17,6 +17,12 @@ struct RootView: View {
             }
             .tabItem { Label("Plan", systemImage: "tram") }
             .tag(Tab.plan)
+
+            NavigationStack {
+                LiveMapView()
+            }
+            .tabItem { Label("Map", systemImage: "map") }
+            .tag(Tab.map)
 
             NavigationStack {
                 BoardsView()
@@ -30,12 +36,9 @@ struct RootView: View {
             .tabItem { Label("Commute", systemImage: "calendar") }
             .tag(Tab.commute)
 
-            NavigationStack {
-                StatusView()
-            }
-            .tabItem { Label("Status", systemImage: "waveform.path.ecg") }
-            .tag(Tab.status)
-
+            // Five is the most a bottom bar holds without collapsing into
+            // "More", so network status lives under Account — it's a
+            // check-occasionally screen, not a daily one.
             NavigationStack {
                 AccountView()
             }
