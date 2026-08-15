@@ -1,9 +1,17 @@
-import { alert, commute, commuteCorridor, commuteHoliday, getSharedDb, user } from "@signaller/db";
+import {
+  alert,
+  commute,
+  commuteCorridor,
+  commuteHoliday,
+  deviceToken,
+  getSharedDb,
+  user,
+} from "@signaller/db";
 import { isDateInHolidayRange } from "@signaller/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Redis } from "ioredis";
 import type { ParsedSchedule, ParsedTS } from "./pushport.js";
-import { sendPush } from "./push.js";
+import { apnsConfigured, sendAPNs, sendPush } from "./push.js";
 import { hhmmDeltaMinutes } from "./train-status.js";
 
 /**
@@ -140,16 +148,38 @@ export async function publishAndPush({
     await redis.publish(`commute:alert:${userId}`, JSON.stringify(payload));
   }
 
-  if (pushSubscription && categoryEnabled) {
-    const failStatus = await sendPush(pushSubscription, {
+  if (categoryEnabled) {
+    const pushPayload = {
       title: headline,
       body: detail ?? commuteLabel,
       url: "/commute",
       tag: `commute-${commuteId}-${serviceDate}`,
-    });
-    if (failStatus === 404 || failStatus === 410) {
-      // Subscription is gone — clear it so we stop trying.
-      await db.update(user).set({ pushSubscription: null }).where(eq(user.id, userId));
+    };
+
+    if (pushSubscription) {
+      const failStatus = await sendPush(pushSubscription, pushPayload);
+      if (failStatus === 404 || failStatus === 410) {
+        // Subscription is gone — clear it so we stop trying.
+        await db.update(user).set({ pushSubscription: null }).where(eq(user.id, userId));
+      }
+    }
+
+    // The same alert to any iOS devices. Fetched here rather than joined into
+    // the caller's commute query: a user has many devices, so aggregating them
+    // into that join would multiply the commute rows.
+    if (apnsConfigured()) {
+      const devices = await db
+        .select({ token: deviceToken.token, environment: deviceToken.environment })
+        .from(deviceToken)
+        .where(eq(deviceToken.userId, userId));
+
+      if (devices.length > 0) {
+        const { deadTokens } = await sendAPNs(devices, pushPayload);
+        // APNs saying a token is dead is the equivalent of a 404/410 above.
+        if (deadTokens.length > 0) {
+          await db.delete(deviceToken).where(inArray(deviceToken.token, deadTokens));
+        }
+      }
     }
   }
   void category; // reserved for future per-category diagnostics/metrics

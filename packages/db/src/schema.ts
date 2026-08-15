@@ -1199,6 +1199,38 @@ export const user = pgTable("user", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * APNs device tokens for the native iOS app (apps/ios).
+ *
+ * A separate table rather than another column on `user`, because the shapes
+ * genuinely differ: `user.pushSubscription` is one Web Push endpoint per
+ * account, but a person can have the app on a phone and an iPad and expects
+ * alerts on both. One row per device.
+ *
+ * `environment` distinguishes sandbox (development builds) from production
+ * (TestFlight/App Store) — a token is only valid against the APNs host it was
+ * issued for, and sending to the wrong one fails with BadDeviceToken.
+ */
+export const deviceToken = pgTable(
+  "device_token",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** The APNs token, hex-encoded. Unique across users: a device that signs
+     *  into a different account should move, not duplicate. */
+    token: text("token").notNull().unique(),
+    /** "ios" today; here so an Android build wouldn't need a migration. */
+    platform: text("platform").notNull().default("ios"),
+    /** "sandbox" | "production" */
+    environment: text("environment").notNull().default("production"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("device_token_user_idx").on(t.userId)],
+);
+
 export const session = pgTable("session", {
   id: text("id").primaryKey(),
   userId: text("user_id")

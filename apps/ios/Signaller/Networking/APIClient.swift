@@ -101,11 +101,43 @@ final class APIClient {
         try await get("/api/health")
     }
 
+    // MARK: - Push
+
+    /// Registers this device for commute alerts. Requires a session.
+    func registerDeviceToken(_ token: String, environment: String) async throws {
+        _ = try await send(
+            json: "/api/push/device",
+            method: "POST",
+            body: ["token": token, "environment": environment, "platform": "ios"]
+        ) as EmptyOK
+    }
+
+    func unregisterDeviceToken(_ token: String) async throws {
+        _ = try await send(
+            json: "/api/push/device",
+            method: "DELETE",
+            body: ["token": token]
+        ) as EmptyOK
+    }
+
     // MARK: - Transport
 
     private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
         var request = URLRequest(url: try url(path: path, query: query))
         request.httpMethod = "GET"
+        return try await send(request)
+    }
+
+    /// A JSON-bodied request, for the write endpoints.
+    private func send<T: Decodable>(
+        json path: String,
+        method: String,
+        body: [String: Any]
+    ) async throws -> T {
+        var request = URLRequest(url: try url(path: path, query: []))
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await send(request)
     }
 

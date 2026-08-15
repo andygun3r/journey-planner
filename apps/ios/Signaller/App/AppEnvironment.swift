@@ -12,6 +12,7 @@ final class AppEnvironment {
     let api: APIClient
     let authClient: AuthClient
     let liveActivities: LiveActivityController
+    let push: PushRegistrar
 
     /// Where a deep link wants the app to go, consumed by `RootView`.
     var pendingLink: DeepLink?
@@ -27,6 +28,15 @@ final class AppEnvironment {
         self.api = api
         self.authClient = AuthClient(baseURL: api.baseURL, store: auth)
         self.liveActivities = LiveActivityController()
+        self.push = PushRegistrar(api: api, auth: auth)
+    }
+
+    /// Signs out and stops alerts reaching this device.
+    func signOut() async {
+        // Unregister first: after signOut() there's no token to authenticate
+        // the request with, so the row would be left behind.
+        await push.unregister()
+        await authClient.signOut()
     }
 
     /// Entry point for `signaller://` and universal links.

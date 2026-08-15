@@ -78,3 +78,8 @@ struct APIFailureEnvelope: Decodable {
     let reason: String?
     let error: String?
 }
+
+/// For endpoints whose success body is just `{ ok: true }`.
+struct EmptyOK: Decodable {
+    let ok: Bool
+}

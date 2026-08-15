@@ -43,6 +43,8 @@
 		0A0000010000000000000172 /* Signaller/Networking/SSEClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000122 /* Signaller/Networking/SSEClient.swift */; };
 		0A0000010000000000000173 /* Signaller/Networking/LiveChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000123 /* Signaller/Networking/LiveChannel.swift */; };
 		0A0000010000000000000174 /* Signaller/Models/LivePosition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000124 /* Signaller/Models/LivePosition.swift */; };
+		0A0000010000000000000175 /* Signaller/App/AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000125 /* Signaller/App/AppDelegate.swift */; };
+		0A0000010000000000000176 /* Signaller/Networking/PushRegistrar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000126 /* Signaller/Networking/PushRegistrar.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -110,6 +112,8 @@
 		0A0000010000000000000122 /* Signaller/Networking/SSEClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Networking/SSEClient.swift; sourceTree = "<group>"; };
 		0A0000010000000000000123 /* Signaller/Networking/LiveChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Networking/LiveChannel.swift; sourceTree = "<group>"; };
 		0A0000010000000000000124 /* Signaller/Models/LivePosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/LivePosition.swift; sourceTree = "<group>"; };
+		0A0000010000000000000125 /* Signaller/App/AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/App/AppDelegate.swift; sourceTree = "<group>"; };
+		0A0000010000000000000126 /* Signaller/Networking/PushRegistrar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Networking/PushRegistrar.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -153,6 +157,7 @@
 				0A0000010000000000000110 /* Signaller/App/AppEnvironment.swift */,
 				0A0000010000000000000111 /* Signaller/App/RootView.swift */,
 				0A000001000000000000011E /* Signaller/App/DeepLink.swift */,
+				0A0000010000000000000125 /* Signaller/App/AppDelegate.swift */,
 				0A0000010000000000000017 /* Signaller/App/Info.plist */,
 				0A000001000000000000001A /* Signaller/App/Signaller.entitlements */,
 			);
@@ -202,6 +207,7 @@
 		0A0000010000000000000067 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
+				0A0000010000000000000126 /* Signaller/Networking/PushRegistrar.swift */,
 				0A0000010000000000000122 /* Signaller/Networking/SSEClient.swift */,
 				0A0000010000000000000123 /* Signaller/Networking/LiveChannel.swift */,
 				0A0000010000000000000107 /* Signaller/Networking/APIError.swift */,
@@ -342,6 +348,8 @@
 				0A0000010000000000000001 /* Signaller/App/SignallerApp.swift in Sources */,
 				0A0000010000000000000004 /* Signaller/App/LiveActivityController.swift in Sources */,
 				0A0000010000000000000005 /* Signaller/Shared/JourneyActivityAttributes.swift in Sources */,
+				0A0000010000000000000175 /* Signaller/App/AppDelegate.swift in Sources */,
+				0A0000010000000000000176 /* Signaller/Networking/PushRegistrar.swift in Sources */,
 				0A0000010000000000000172 /* Signaller/Networking/SSEClient.swift in Sources */,
 				0A0000010000000000000173 /* Signaller/Networking/LiveChannel.swift in Sources */,
 				0A0000010000000000000174 /* Signaller/Models/LivePosition.swift in Sources */,

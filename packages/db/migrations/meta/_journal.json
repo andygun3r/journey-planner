@@ -239,6 +239,13 @@
       "when": 1786736490341,
       "tag": "0033_broad_black_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1786777307270,
+      "tag": "0034_low_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }

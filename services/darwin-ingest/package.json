@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@parse/node-apn": "^8.1.0",
     "@signaller/db": "workspace:*",
     "@signaller/routing-adapter": "workspace:*",
     "@signaller/shared": "workspace:*",

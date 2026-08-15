@@ -1,4 +1,4 @@
-import { user } from "@signaller/db";
+import { deviceToken, user } from "@signaller/db";
 import { eq } from "drizzle-orm";
 import webpush from "web-push";
 import { getDb } from "./db";
@@ -85,6 +85,52 @@ export async function getPushSubscription(userId: string): Promise<unknown | nul
     .where(eq(user.id, userId))
     .limit(1);
   return rows[0]?.sub ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// APNs device tokens (native iOS app)
+//
+// Separate from the Web Push subscription above: a user has one browser
+// subscription but can have the app on several devices, so these are rows not
+// a column. The sender lives in services/darwin-ingest/src/push.ts alongside
+// sendPush — this half is only registration.
+// ---------------------------------------------------------------------------
+
+/**
+ * Register (or move) an APNs token.
+ *
+ * Conflicts on the token, not the user: the same device signing into a
+ * different account must move to that account rather than leave a stale row
+ * delivering someone else's commute alerts.
+ */
+export async function saveDeviceToken(
+  userId: string,
+  token: string,
+  environment: "sandbox" | "production",
+  platform = "ios",
+): Promise<void> {
+  await getDb()
+    .insert(deviceToken)
+    .values({ userId, token, environment, platform })
+    .onConflictDoUpdate({
+      target: deviceToken.token,
+      set: { userId, environment, platform, updatedAt: new Date() },
+    });
+}
+
+/** Drop one device's token — sign-out, or APNs telling us it's dead. */
+export async function clearDeviceToken(token: string): Promise<void> {
+  await getDb().delete(deviceToken).where(eq(deviceToken.token, token));
+}
+
+/** Every device this user should be notified on. */
+export async function listDeviceTokens(
+  userId: string,
+): Promise<{ token: string; environment: string }[]> {
+  return getDb()
+    .select({ token: deviceToken.token, environment: deviceToken.environment })
+    .from(deviceToken)
+    .where(eq(deviceToken.userId, userId));
 }
 
 /** Per-category push opt-in — which kinds of alert actually buzz the user's device. */
