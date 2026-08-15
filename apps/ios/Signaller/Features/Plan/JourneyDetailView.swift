@@ -9,11 +9,61 @@ struct JourneyDetailView: View {
     let journey: Journey
     @Environment(AppEnvironment.self) private var env
 
+    @State private var fare: IndicativeFare?
+
     var body: some View {
         AppChrome(title: "Journey") {
             summaryCard
+            fareCard
             legsCard
             liveActivityCard
+        }
+        .task { await loadFare() }
+    }
+
+    /// Indicative fares. `/api/fares` was written for this client and had no
+    /// caller until now.
+    ///
+    /// Rail-only and station-to-station, so a journey that starts at an address
+    /// has nothing to price.
+    private func loadFare() async {
+        guard let from = journey.legs.first(where: { !$0.isWalk })?.originCrs,
+              let to = journey.legs.last(where: { !$0.isWalk })?.destCrs
+        else { return }
+        // A missing fare is normal (the feed has no flow for many pairs), so a
+        // failure here just leaves the card out.
+        guard let response = try? await env.api.fares(from: from, to: to),
+              let found = response.fare, !found.isEmpty
+        else { return }
+        fare = found
+    }
+
+    @ViewBuilder
+    private var fareCard: some View {
+        if let fare {
+            Card {
+                LabelText("Indicative fare")
+                HStack(spacing: 18) {
+                    if let single = fare.singleLabel {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Single").font(.caption).foregroundStyle(Palette.inkMuted)
+                            Text(single).font(.title3.weight(.bold)).monospacedDigit()
+                        }
+                    }
+                    if let returnFare = fare.returnLabel {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Return").font(.caption).foregroundStyle(Palette.inkMuted)
+                            Text(returnFare).font(.title3.weight(.bold)).monospacedDigit()
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                // "Indicative" is the route's own framing, and saying it
+                // plainly is the difference between a guide and a quote.
+                Text("Cheapest standard fare from the timetable feed. No railcards or advance tickets.")
+                    .font(.caption)
+                    .foregroundStyle(Palette.inkMuted)
+            }
         }
     }
 

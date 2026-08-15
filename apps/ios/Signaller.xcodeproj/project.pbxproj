@@ -30,6 +30,9 @@
 		0A000001000000000000019F /* Signaller/DesignSystem/AccessibleLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000019E /* Signaller/DesignSystem/AccessibleLabels.swift */; };
 		0A00000100000000000001A5 /* Signaller/Networking/ResponseCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001A4 /* Signaller/Networking/ResponseCache.swift */; };
 		0A00000100000000000001A7 /* Signaller/Features/Stations/StationIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001A6 /* Signaller/Features/Stations/StationIndex.swift */; };
+		0A00000100000000000001B1 /* Signaller/Models/Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001B0 /* Signaller/Models/Settings.swift */; };
+		0A00000100000000000001B3 /* Signaller/Models/Fare.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001B2 /* Signaller/Models/Fare.swift */; };
+		0A00000100000000000001B5 /* Signaller/Features/Account/SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001B4 /* Signaller/Features/Account/SettingsView.swift */; };
 		0A0000010000000000000162 /* Signaller/DesignSystem/Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */; };
 		0A0000010000000000000163 /* Signaller/DesignSystem/Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */; };
 		0A0000010000000000000164 /* Signaller/DesignSystem/StatusFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000114 /* Signaller/DesignSystem/StatusFormatting.swift */; };
@@ -136,6 +139,9 @@
 		0A00000100000000000001A4 /* Signaller/Networking/ResponseCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Networking/ResponseCache.swift; sourceTree = "<group>"; };
 		0A00000100000000000001A6 /* Signaller/Features/Stations/StationIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Stations/StationIndex.swift; sourceTree = "<group>"; };
 		0A00000100000000000001A8 /* Signaller/Resources/stations.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Signaller/Resources/stations.json; sourceTree = "<group>"; };
+		0A00000100000000000001B0 /* Signaller/Models/Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/Settings.swift; sourceTree = "<group>"; };
+		0A00000100000000000001B2 /* Signaller/Models/Fare.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/Fare.swift; sourceTree = "<group>"; };
+		0A00000100000000000001B4 /* Signaller/Features/Account/SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Account/SettingsView.swift; sourceTree = "<group>"; };
 		0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/Palette.swift; sourceTree = "<group>"; };
 		0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/Components.swift; sourceTree = "<group>"; };
 		0A0000010000000000000114 /* Signaller/DesignSystem/StatusFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/StatusFormatting.swift; sourceTree = "<group>"; };
@@ -301,6 +307,9 @@
 			isa = PBXGroup;
 			children = (
 				0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */,
+				0A00000100000000000001B4 /* Signaller/Features/Account/SettingsView.swift */,
+				0A00000100000000000001B2 /* Signaller/Models/Fare.swift */,
+				0A00000100000000000001B0 /* Signaller/Models/Settings.swift */,
 				0A00000100000000000001A8 /* Signaller/Resources/stations.json */,
 				0A00000100000000000001A6 /* Signaller/Features/Stations/StationIndex.swift */,
 				0A00000100000000000001A4 /* Signaller/Networking/ResponseCache.swift */,
@@ -523,6 +532,9 @@
 				0A0000010000000000000160 /* Signaller/App/AppEnvironment.swift in Sources */,
 				0A0000010000000000000161 /* Signaller/App/RootView.swift in Sources */,
 				0A0000010000000000000162 /* Signaller/DesignSystem/Palette.swift in Sources */,
+				0A00000100000000000001B5 /* Signaller/Features/Account/SettingsView.swift in Sources */,
+				0A00000100000000000001B3 /* Signaller/Models/Fare.swift in Sources */,
+				0A00000100000000000001B1 /* Signaller/Models/Settings.swift in Sources */,
 				0A00000100000000000001A7 /* Signaller/Features/Stations/StationIndex.swift in Sources */,
 				0A00000100000000000001A5 /* Signaller/Networking/ResponseCache.swift in Sources */,
 				0A000001000000000000019F /* Signaller/DesignSystem/AccessibleLabels.swift in Sources */,

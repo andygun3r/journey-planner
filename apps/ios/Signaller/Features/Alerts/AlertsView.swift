@@ -33,10 +33,24 @@ struct AlertRow: View {
 
             if alert.isUnseen {
                 Circle().fill(Palette.railNavy).frame(width: 8, height: 8).padding(.top, 6)
-                    .accessibilityLabel("Unread")
+                    .accessibilityHidden(true)
             }
         }
         .padding(.vertical, 4)
+        // One stop per alert, with the unread state in the sentence rather
+        // than as a separate unlabelled dot.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spokenLabel)
+    }
+
+    private var spokenLabel: String {
+        var parts: [String] = []
+        if alert.isUnseen { parts.append("Unread") }
+        parts.append(alert.headline)
+        if let detail = alert.detail, !detail.isEmpty { parts.append(detail) }
+        parts.append(alert.kindLabel)
+        parts.append(alert.createdAt.formatted(.relative(presentation: .named)))
+        return parts.joined(separator: ". ")
     }
 }
 
@@ -60,9 +74,34 @@ final class AlertsModel {
         }
     }
 
+    /// Set when an action failed, so nothing silently reverts.
+    var actionError: String?
+
     func markAllSeen(using api: APIClient) async {
-        try? await api.markAlertsSeen()
-        await load(using: api)
+        do {
+            actionError = nil
+            try await api.markAlertsSeen()
+            await load(using: api)
+        } catch {
+            // Swallowing this meant the reload put every alert back as unseen:
+            // the action visibly undid itself with no explanation.
+            actionError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    /// Marks a single alert seen.
+    ///
+    /// The blanket PATCH was the only option before, so reading one disruption
+    /// cleared the entire history — including alerts the user hadn't seen.
+    func markSeen(_ alert: AlertItem, using api: APIClient) async {
+        guard alert.isUnseen else { return }
+        do {
+            actionError = nil
+            try await api.markAlertSeen(id: alert.id)
+            await load(using: api)
+        } catch {
+            actionError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
     }
 }
 
@@ -90,10 +129,27 @@ struct AlertsView: View {
                 )
             }
 
+            if let error = model.actionError {
+                Text(error).font(.caption).foregroundStyle(Palette.signalRedText)
+            }
+
             if !model.alerts.isEmpty {
                 Card {
                     ForEach(model.alerts) { alert in
-                        AlertRow(alert: alert)
+                        // Tapping an unread alert marks just that one, rather
+                        // than clearing the whole history.
+                        if alert.isUnseen {
+                            Button {
+                                Task { await model.markSeen(alert, using: env.api) }
+                            } label: {
+                                AlertRow(alert: alert)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Marks this alert as read")
+                        } else {
+                            AlertRow(alert: alert)
+                        }
                         if alert.id != model.alerts.last?.id { Divider() }
                     }
                 }

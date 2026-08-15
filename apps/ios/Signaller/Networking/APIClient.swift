@@ -167,6 +167,68 @@ final class APIClient {
         _ = try await send(json: "/api/alerts", method: "PATCH", body: [:]) as EmptyOK
     }
 
+    /// Marks one alert seen, so reading a single disruption doesn't clear the
+    /// rest of the list.
+    func markAlertSeen(id: String) async throws {
+        let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        _ = try await send(json: "/api/alerts/\(encoded)/seen", method: "POST", body: [:]) as EmptyOK
+    }
+
+    // MARK: - Fares
+
+    /// Indicative cheapest fare between two stations.
+    ///
+    /// Public and cacheable. "Indicative" is the route's own word: cheapest
+    /// standard single/return from the DTD feed, no railcards, no routeing
+    /// guide — the UI must not imply otherwise.
+    func fares(from: String, to: String) async throws -> FaresResponse {
+        try await get("/api/fares", query: [
+            URLQueryItem(name: "from", value: from.uppercased()),
+            URLQueryItem(name: "to", value: to.uppercased()),
+        ])
+    }
+
+    // MARK: - Settings and account
+
+    func accessibilityPrefs() async throws -> AccessibilityPrefsResponse {
+        try await get("/api/settings/accessibility")
+    }
+
+    func updateAccessibilityPrefs(_ prefs: AccessibilityPrefs) async throws {
+        _ = try await send(
+            json: "/api/settings/accessibility",
+            method: "PATCH",
+            body: [
+                "reducedMotion": prefs.reducedMotion,
+                "textSize": prefs.textSize.rawValue,
+                "highContrast": prefs.highContrast,
+                "strengthenCues": prefs.strengthenCues,
+            ]
+        ) as EmptyOK
+    }
+
+    func pushPreferences() async throws -> PushPreferences {
+        try await get("/api/push/preferences")
+    }
+
+    func updatePushPreferences(_ preferences: PushPreferences) async throws {
+        _ = try await send(
+            json: "/api/push/preferences",
+            method: "PATCH",
+            body: [
+                "commuteDisruptions": preferences.commuteDisruptions,
+                "preDeparture": preferences.preDeparture,
+                "networkDisruptions": preferences.networkDisruptions,
+            ]
+        ) as EmptyOK
+    }
+
+    /// Permanently deletes the account. Irreversible, and the route does not
+    /// confirm — the caller must have asked first.
+    func deleteAccount() async throws {
+        _ = try await send(json: "/api/account", method: "DELETE", body: [:]) as EmptyOK
+    }
+
     // MARK: - Favourites
 
     func favourites() async throws -> FavouritesResponse {

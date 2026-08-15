@@ -34,22 +34,9 @@ struct AccountView: View {
             notificationsCard
 
             Card {
-                NavigationLink {
-                    StatusView()
-                } label: {
-                    HStack {
-                        Label("Network status", systemImage: "waveform.path.ecg")
-                            .font(.body.weight(.medium))
-                            .foregroundStyle(Palette.ink)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Palette.inkMuted)
-                    }
-                    .frame(minHeight: 44)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                row("Settings", systemImage: "gearshape") { SettingsView() }
+                Divider()
+                row("Network status", systemImage: "waveform.path.ecg") { StatusView() }
             }
 
             Card {
@@ -60,6 +47,29 @@ struct AccountView: View {
             }
         }
         .task { await env.push.refreshAuthorizationStatus() }
+    }
+
+    /// A navigation row with a 44pt target across its whole width.
+    private func row<Destination: View>(
+        _ title: String,
+        systemImage: String,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            HStack {
+                Label(title, systemImage: systemImage)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(Palette.ink)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Palette.inkMuted)
+                    .accessibilityHidden(true)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// Notification permission, asked for here rather than on launch — an
