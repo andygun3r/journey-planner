@@ -1,6 +1,10 @@
 import SwiftUI
 
 struct PlanView: View {
+    /// Pre-filled endpoints, when arriving from a commute quick-start or a
+    /// saved journey. Nil for the normal tab.
+    var initialQuery: JourneyQuery?
+
     @State private var model = PlanModel()
     @State private var showingTimePicker = false
     @Environment(AppEnvironment.self) private var env
@@ -8,18 +12,71 @@ struct PlanView: View {
     var body: some View {
         AppChrome(title: "Plan") {
             searchCard
+            savedSection
             resultsSection
         }
         .navigationDestination(for: Journey.self) { journey in
             JourneyDetailView(journey: journey)
         }
+        .task {
+            await env.favourites.load(using: env.api)
+            // Arriving with a pair means the user already chose — search
+            // rather than making them press the button again.
+            if let initialQuery, model.from == nil, model.to == nil {
+                model.from = .station(crs: initialQuery.from, name: initialQuery.from)
+                model.to = .station(crs: initialQuery.to, name: initialQuery.to)
+                await model.search(using: env.api)
+            }
+        }
+    }
+
+    /// Saved journeys, one tap from a fresh search.
+    @ViewBuilder
+    private var savedSection: some View {
+        if env.auth.isSignedIn, !env.favourites.favourites.isEmpty, isIdle {
+            Card {
+                LabelText("Saved")
+                ForEach(env.favourites.favourites) { favourite in
+                    Button {
+                        model.from = .station(crs: favourite.from, name: favourite.fromDisplay)
+                        model.to = .station(crs: favourite.to, name: favourite.toDisplay)
+                        Task { await model.search(using: env.api) }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "star.fill")
+                                .font(.caption)
+                                .foregroundStyle(Palette.signalAmber)
+                            Text("\(favourite.fromDisplay) to \(favourite.toDisplay)")
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(Palette.ink)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var isIdle: Bool {
+        if case .idle = model.phase { return true }
+        return false
     }
 
     private var searchCard: some View {
         Card {
-            StationSearchField(label: "From", selection: $model.from)
-            HStack {
-                StationSearchField(label: "To", selection: $model.to)
+            // The swap control sits between the two fields, level with the
+            // boundary, so it reads as acting on the pair rather than on
+            // whichever field it happens to sit beside.
+            HStack(alignment: .top, spacing: 10) {
+                VStack(spacing: 10) {
+                    StationSearchField(label: "From", selection: $model.from)
+                    StationSearchField(label: "To", selection: $model.to)
+                }
+
                 Button {
                     model.swapEnds()
                 } label: {
@@ -27,18 +84,49 @@ struct PlanView: View {
                         .font(.body.weight(.semibold))
                         .foregroundStyle(Palette.railNavy)
                         .frame(width: 44, height: 44)
+                        .background(Palette.railNavyTint)
+                        .clipShape(Circle())
                 }
                 .accessibilityLabel("Swap origin and destination")
+                // Nudged down to straddle the gap between the two fields.
+                .padding(.top, 46)
             }
 
             departureTimeRow
+                .padding(.top, 2)
 
-            Button("Find trains") {
-                Task { await model.search(using: env.api) }
+            HStack(spacing: 10) {
+                Button("Find trains") {
+                    Task { await model.search(using: env.api) }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(!model.canSearch || isLoading)
+
+                favouriteButton
             }
-            .buttonStyle(PrimaryButtonStyle())
-            .disabled(!model.canSearch || isLoading)
             .padding(.top, 4)
+        }
+    }
+
+    /// Save this pair. Only meaningful for two stations — a favourite is a
+    /// from→to CRS pair, so an address endpoint has nothing to store.
+    @ViewBuilder
+    private var favouriteButton: some View {
+        if env.auth.isSignedIn,
+           case let .station(fromCrs, _)? = model.from,
+           case let .station(toCrs, _)? = model.to {
+            let saved = env.favourites.contains(from: fromCrs, to: toCrs)
+            Button {
+                Task { await env.favourites.toggle(from: fromCrs, to: toCrs, using: env.api) }
+            } label: {
+                Image(systemName: saved ? "star.fill" : "star")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(saved ? Palette.signalAmber : Palette.railNavy)
+                    .frame(width: 48, height: 48)
+                    .background(Palette.railNavyTint)
+                    .clipShape(Circle())
+            }
+            .accessibilityLabel(saved ? "Remove saved journey" : "Save this journey")
         }
     }
 

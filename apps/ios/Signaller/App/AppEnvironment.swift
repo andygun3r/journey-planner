@@ -13,6 +13,7 @@ final class AppEnvironment {
     let authClient: AuthClient
     let liveActivities: LiveActivityController
     let push: PushRegistrar
+    let favourites = FavouritesModel()
 
     /// Where a deep link wants the app to go, consumed by `RootView`.
     var pendingLink: DeepLink?

@@ -101,6 +101,79 @@ final class APIClient {
         try await get("/api/health")
     }
 
+    // MARK: - Commute (signed in)
+
+    func commuteDashboard(commuteId: String? = nil) async throws -> DashboardResponse {
+        var items: [URLQueryItem] = []
+        if let commuteId { items.append(URLQueryItem(name: "commute", value: commuteId)) }
+        return try await get("/api/commute/dashboard", query: items)
+    }
+
+    func commutes() async throws -> CommuteListResponse {
+        try await get("/api/commute")
+    }
+
+    /// "I'm travelling now" — locks the dashboard to this direction and train.
+    func startRun(
+        commuteId: String,
+        legId: String?,
+        direction: String,
+        originCrs: String,
+        originLabel: String,
+        destCrs: String,
+        destLabel: String
+    ) async throws {
+        var body: [String: Any] = [
+            "direction": direction,
+            "originCrs": originCrs,
+            "originLabel": originLabel,
+            "destCrs": destCrs,
+            "destLabel": destLabel,
+        ]
+        if let legId { body["commuteLegId"] = legId }
+        _ = try await send(json: "/api/commute/\(commuteId)/run", method: "POST", body: body) as EmptyOK
+    }
+
+    func endRun(commuteId: String) async throws {
+        _ = try await send(json: "/api/commute/\(commuteId)/run", method: "DELETE", body: [:]) as EmptyOK
+    }
+
+    // MARK: - Alerts
+
+    func alerts(unseenOnly: Bool = false) async throws -> AlertsResponse {
+        try await get(
+            "/api/alerts",
+            query: unseenOnly ? [URLQueryItem(name: "unseen", value: "1")] : []
+        )
+    }
+
+    /// Marks every alert seen — the "clear" action on the list.
+    func markAlertsSeen() async throws {
+        _ = try await send(json: "/api/alerts", method: "PATCH", body: [:]) as EmptyOK
+    }
+
+    // MARK: - Favourites
+
+    func favourites() async throws -> FavouritesResponse {
+        try await get("/api/favourites")
+    }
+
+    func addFavourite(from: String, to: String) async throws {
+        _ = try await send(
+            json: "/api/favourites",
+            method: "POST",
+            body: ["from": from, "to": to]
+        ) as EmptyOK
+    }
+
+    func removeFavourite(from: String, to: String) async throws {
+        _ = try await send(
+            json: "/api/favourites",
+            method: "DELETE",
+            body: ["from": from, "to": to]
+        ) as EmptyOK
+    }
+
     // MARK: - Push
 
     /// Registers this device for commute alerts. Requires a session.
