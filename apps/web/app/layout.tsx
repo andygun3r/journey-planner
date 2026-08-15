@@ -78,7 +78,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <header className="topbar">
           <div className="topbar-inner">
             <Link href="/" className="wordmark" aria-label="Signaller — home">
-              <SignalMark className="wordmark-mark" />
+              {/* Inverted: the top bar is a full-bleed Rail Navy band. */}
+              <SignalMark className="wordmark-mark" inverted />
               <span className="wordmark-text">Signaller</span>
             </Link>
             <TopNav isSignedIn={sessionUser != null} isAdmin={isAdmin} />
