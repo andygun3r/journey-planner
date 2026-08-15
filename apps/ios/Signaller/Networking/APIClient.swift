@@ -153,6 +153,62 @@ final class APIClient {
         _ = try await send(json: "/api/commute/\(commuteId)/run", method: "DELETE", body: [:]) as EmptyOK
     }
 
+    // MARK: - Commute overrides and holidays
+
+    /// Per-date changes between two `YYYY-MM-DD` dates.
+    func overrides(commuteId: String, from: String, to: String) async throws -> OverridesResponse {
+        try await get("/api/commute/\(commuteId)/overrides", query: [
+            URLQueryItem(name: "from", value: from),
+            URLQueryItem(name: "to", value: to),
+        ])
+    }
+
+    /// Saves an override for one date, or for every future occurrence of that
+    /// weekday.
+    func saveOverride(
+        commuteId: String,
+        date: String,
+        scope: OverrideScope,
+        skipped: Bool? = nil,
+        note: String? = nil
+    ) async throws {
+        var input: [String: Any] = [:]
+        if let skipped { input["skipped"] = skipped }
+        if let note { input["note"] = note }
+        _ = try await send(
+            json: "/api/commute/\(commuteId)/overrides",
+            method: "POST",
+            body: ["date": date, "scope": scope.rawValue, "input": input]
+        ) as EmptyOK
+    }
+
+    /// Clears a single date's override, restoring the normal pattern.
+    func clearOverride(commuteId: String, date: String) async throws {
+        _ = try await send(
+            json: "/api/commute/\(commuteId)/overrides/\(date)",
+            method: "DELETE",
+            body: [:]
+        ) as EmptyOK
+    }
+
+    func holidays() async throws -> HolidaysResponse {
+        try await get("/api/commute/holidays")
+    }
+
+    func createHoliday(startDate: String, endDate: String, label: String?) async throws {
+        var body: [String: Any] = ["startDate": startDate, "endDate": endDate]
+        if let label, !label.isEmpty { body["label"] = label }
+        _ = try await send(json: "/api/commute/holidays", method: "POST", body: body) as EmptyOK
+    }
+
+    func deleteHoliday(id: String) async throws {
+        _ = try await send(
+            json: "/api/commute/holidays/\(id)",
+            method: "DELETE",
+            body: [:]
+        ) as EmptyOK
+    }
+
     // MARK: - Alerts
 
     func alerts(unseenOnly: Bool = false) async throws -> AlertsResponse {

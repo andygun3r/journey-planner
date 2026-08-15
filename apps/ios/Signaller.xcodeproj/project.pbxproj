@@ -33,6 +33,9 @@
 		0A00000100000000000001B1 /* Signaller/Models/Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001B0 /* Signaller/Models/Settings.swift */; };
 		0A00000100000000000001B3 /* Signaller/Models/Fare.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001B2 /* Signaller/Models/Fare.swift */; };
 		0A00000100000000000001B5 /* Signaller/Features/Account/SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001B4 /* Signaller/Features/Account/SettingsView.swift */; };
+		0A00000100000000000001B7 /* Signaller/Models/CommuteOverride.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001B6 /* Signaller/Models/CommuteOverride.swift */; };
+		0A00000100000000000001B9 /* Signaller/Features/Commute/CommuteCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001B8 /* Signaller/Features/Commute/CommuteCalendarView.swift */; };
+		0A00000100000000000001BB /* Signaller/Features/Commute/HolidaysView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001BA /* Signaller/Features/Commute/HolidaysView.swift */; };
 		0A0000010000000000000162 /* Signaller/DesignSystem/Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */; };
 		0A0000010000000000000163 /* Signaller/DesignSystem/Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */; };
 		0A0000010000000000000164 /* Signaller/DesignSystem/StatusFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000114 /* Signaller/DesignSystem/StatusFormatting.swift */; };
@@ -71,6 +74,7 @@
 		0A00000100000000000001A3 /* SignallerTests/CodableRoundTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001A2 /* SignallerTests/CodableRoundTripTests.swift */; };
 		0A00000100000000000001AB /* SignallerTests/StationIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001AA /* SignallerTests/StationIndexTests.swift */; };
 		0A00000100000000000001AD /* SignallerTests/ResponseCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001AC /* SignallerTests/ResponseCacheTests.swift */; };
+		0A00000100000000000001BD /* SignallerTests/CommuteOverrideTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001BC /* SignallerTests/CommuteOverrideTests.swift */; };
 		0A0000010000000000000180 /* SignallerTests/ISO8601Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000130 /* SignallerTests/ISO8601Tests.swift */; };
 		0A0000010000000000000181 /* SignallerTests/SSEClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000131 /* SignallerTests/SSEClientTests.swift */; };
 		0A0000010000000000000182 /* SignallerTests/StatusFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000132 /* SignallerTests/StatusFormattingTests.swift */; };
@@ -142,6 +146,9 @@
 		0A00000100000000000001B0 /* Signaller/Models/Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/Settings.swift; sourceTree = "<group>"; };
 		0A00000100000000000001B2 /* Signaller/Models/Fare.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/Fare.swift; sourceTree = "<group>"; };
 		0A00000100000000000001B4 /* Signaller/Features/Account/SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Account/SettingsView.swift; sourceTree = "<group>"; };
+		0A00000100000000000001B6 /* Signaller/Models/CommuteOverride.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/CommuteOverride.swift; sourceTree = "<group>"; };
+		0A00000100000000000001B8 /* Signaller/Features/Commute/CommuteCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Commute/CommuteCalendarView.swift; sourceTree = "<group>"; };
+		0A00000100000000000001BA /* Signaller/Features/Commute/HolidaysView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Commute/HolidaysView.swift; sourceTree = "<group>"; };
 		0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/Palette.swift; sourceTree = "<group>"; };
 		0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/Components.swift; sourceTree = "<group>"; };
 		0A0000010000000000000114 /* Signaller/DesignSystem/StatusFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/StatusFormatting.swift; sourceTree = "<group>"; };
@@ -180,6 +187,7 @@
 		0A00000100000000000001A2 /* SignallerTests/CodableRoundTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/CodableRoundTripTests.swift; sourceTree = "<group>"; };
 		0A00000100000000000001AA /* SignallerTests/StationIndexTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/StationIndexTests.swift; sourceTree = "<group>"; };
 		0A00000100000000000001AC /* SignallerTests/ResponseCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/ResponseCacheTests.swift; sourceTree = "<group>"; };
+		0A00000100000000000001BC /* SignallerTests/CommuteOverrideTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/CommuteOverrideTests.swift; sourceTree = "<group>"; };
 		0A0000010000000000000130 /* SignallerTests/ISO8601Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/ISO8601Tests.swift; sourceTree = "<group>"; };
 		0A0000010000000000000131 /* SignallerTests/SSEClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/SSEClientTests.swift; sourceTree = "<group>"; };
 		0A0000010000000000000132 /* SignallerTests/StatusFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/StatusFormattingTests.swift; sourceTree = "<group>"; };
@@ -307,6 +315,9 @@
 			isa = PBXGroup;
 			children = (
 				0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */,
+				0A00000100000000000001BA /* Signaller/Features/Commute/HolidaysView.swift */,
+				0A00000100000000000001B8 /* Signaller/Features/Commute/CommuteCalendarView.swift */,
+				0A00000100000000000001B6 /* Signaller/Models/CommuteOverride.swift */,
 				0A00000100000000000001B4 /* Signaller/Features/Account/SettingsView.swift */,
 				0A00000100000000000001B2 /* Signaller/Models/Fare.swift */,
 				0A00000100000000000001B0 /* Signaller/Models/Settings.swift */,
@@ -351,6 +362,7 @@
 			isa = PBXGroup;
 			children = (
 				0A0000010000000000000130 /* SignallerTests/ISO8601Tests.swift */,
+				0A00000100000000000001BC /* SignallerTests/CommuteOverrideTests.swift */,
 				0A00000100000000000001AC /* SignallerTests/ResponseCacheTests.swift */,
 				0A00000100000000000001AA /* SignallerTests/StationIndexTests.swift */,
 				0A00000100000000000001A2 /* SignallerTests/CodableRoundTripTests.swift */,
@@ -532,6 +544,9 @@
 				0A0000010000000000000160 /* Signaller/App/AppEnvironment.swift in Sources */,
 				0A0000010000000000000161 /* Signaller/App/RootView.swift in Sources */,
 				0A0000010000000000000162 /* Signaller/DesignSystem/Palette.swift in Sources */,
+				0A00000100000000000001BB /* Signaller/Features/Commute/HolidaysView.swift in Sources */,
+				0A00000100000000000001B9 /* Signaller/Features/Commute/CommuteCalendarView.swift in Sources */,
+				0A00000100000000000001B7 /* Signaller/Models/CommuteOverride.swift in Sources */,
 				0A00000100000000000001B5 /* Signaller/Features/Account/SettingsView.swift in Sources */,
 				0A00000100000000000001B3 /* Signaller/Models/Fare.swift in Sources */,
 				0A00000100000000000001B1 /* Signaller/Models/Settings.swift in Sources */,
@@ -577,6 +592,7 @@
 			files = (
 				0A0000010000000000000186 /* SignallerTests/Fixtures.swift in Sources */,
 				0A0000010000000000000180 /* SignallerTests/ISO8601Tests.swift in Sources */,
+				0A00000100000000000001BD /* SignallerTests/CommuteOverrideTests.swift in Sources */,
 				0A00000100000000000001AD /* SignallerTests/ResponseCacheTests.swift in Sources */,
 				0A00000100000000000001AB /* SignallerTests/StationIndexTests.swift in Sources */,
 				0A00000100000000000001A3 /* SignallerTests/CodableRoundTripTests.swift in Sources */,

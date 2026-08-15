@@ -67,6 +67,7 @@ struct CommuteView: View {
                     }
                     journeysSection(active)
                     disruptionsSection(active.disruptions)
+                    planningCard(commuteId: active.commuteId, label: active.commuteLabel)
                     switcher(active.otherCommutes)
 
                 case let .noActive(quiet):
@@ -75,6 +76,7 @@ struct CommuteView: View {
                         Text(quiet.explanation).foregroundStyle(Palette.inkMuted)
                     }
                     if let quick = quiet.quickStart { quickStartCard(quick) }
+                    planningCard(commuteId: quiet.commuteId, label: quiet.commuteLabel)
                     switcher(quiet.otherCommutes)
 
                 case .noCommute:
@@ -122,6 +124,48 @@ struct CommuteView: View {
                 break
             }
         }
+    }
+
+    /// Day-to-day commute changes: which days you're not travelling, and when
+    /// you're away. Both were web-only, and both are decided on a phone.
+    private func planningCard(commuteId: String, label: String) -> some View {
+        Card {
+            NavigationLink {
+                CommuteCalendarView(commuteId: commuteId, commuteLabel: label)
+            } label: {
+                planningRow("Calendar", detail: "Days you're not commuting", systemImage: "calendar")
+            }
+            .buttonStyle(.plain)
+
+            Divider()
+
+            NavigationLink {
+                HolidaysView()
+            } label: {
+                planningRow("Holidays", detail: "Pause alerts while you're away", systemImage: "sun.max")
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func planningRow(_ title: String, detail: String, systemImage: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .foregroundStyle(Palette.railNavy)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.body.weight(.medium)).foregroundStyle(Palette.ink)
+                Text(detail).font(.caption).foregroundStyle(Palette.inkMuted)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Palette.inkMuted)
+                .accessibilityHidden(true)
+        }
+        .frame(minHeight: 48)
+        .contentShape(Rectangle())
     }
 
     // MARK: - Active leg
