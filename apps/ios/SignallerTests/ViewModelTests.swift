@@ -137,6 +137,97 @@ struct BoardModelTests {
         }
         #expect(reason == "no-departures")
     }
+
+    /// A board response for `crs`, built from the captured Waterloo fixture so
+    /// every required field is real rather than hand-written.
+    private func boardJSON(crs: String, stationName: String) throws -> String {
+        let data = try Fixtures.data("board")
+        var object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var board = try #require(object["board"] as? [String: Any])
+        board["crs"] = crs
+        board["stationName"] = stationName
+        object["board"] = board
+        return String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+    }
+
+    private func stationName(of phase: BoardModel.Phase) -> String? {
+        if case let .loaded(board) = phase { return board.stationName }
+        return nil
+    }
+
+    /// The defect deep links made reachable.
+    ///
+    /// `load()` used to consult the cache only from `.idle`, so asking for a
+    /// second station left the *first* station's departures on screen under
+    /// the new station's name until the network answered. Restoring that
+    /// `if case .idle` guard fails this test.
+    @Test("switching station never shows the previous station's departures")
+    func switchingStationClearsTheOldBoard() async throws {
+        // A cache is essential to this test, not incidental. Without one,
+        // `servedFromCache` stays nil, the "keep what we have" guard in the
+        // catch block never fires, and the phase becomes `.failed` — which
+        // passes the assertion for the wrong reason whether the bug is
+        // present or not. With a cache, a stale Waterloo board really is on
+        // screen when Clapham Junction is asked for.
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("board-switch-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = ResponseCache(directory: directory)
+
+        // Seed the cache with Waterloo, then serve it from disk.
+        let online = StubURLProtocol.Stub()
+        online.on("/api/boards/WAT", .json(try boardJSON(crs: "WAT", stationName: "London Waterloo")))
+        let seed = BoardModel()
+        seed.station = .station(crs: "WAT", name: "London Waterloo")
+        await seed.load(using: online.client(), cache: cache)
+
+        let offline = StubURLProtocol.Stub()
+        offline.on("/api/boards/WAT", .failure(.notConnectedToInternet))
+        // The new station never answers — exactly when a stale board would be
+        // left visible under the wrong name.
+        offline.on("/api/boards/CLJ", .failure(.notConnectedToInternet))
+        let api = offline.client()
+
+        let model = BoardModel()
+        model.station = .station(crs: "WAT", name: "London Waterloo")
+        await model.load(using: api, cache: cache)
+        #expect(stationName(of: model.phase) == "London Waterloo")
+        #expect(model.servedFromCache != nil)
+
+        model.station = .station(crs: "CLJ", name: "Clapham Junction")
+        await model.load(using: api, cache: cache)
+
+        #expect(
+            stationName(of: model.phase) != "London Waterloo",
+            "Waterloo's trains must not be shown under Clapham Junction's name"
+        )
+    }
+
+    /// The other half of that rule: a *refresh* of the same station keeps the
+    /// board it already had, with its age stated.
+    @Test("a failed refresh of the same station keeps the stored board")
+    func failedRefreshKeepsStoredBoard() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("board-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = ResponseCache(directory: directory)
+
+        let online = StubURLProtocol.Stub()
+        online.on("/api/boards/WAT", .json(try boardJSON(crs: "WAT", stationName: "London Waterloo")))
+        let first = BoardModel()
+        first.station = .station(crs: "WAT", name: "London Waterloo")
+        await first.load(using: online.client(), cache: cache)
+        #expect(first.servedFromCache == nil, "fresh from the network claims no age")
+
+        let offline = StubURLProtocol.Stub()
+        offline.on("/api/boards/WAT", .failure(.notConnectedToInternet))
+        let second = BoardModel()
+        second.station = .station(crs: "WAT", name: "London Waterloo")
+        await second.load(using: offline.client(), cache: cache)
+
+        #expect(stationName(of: second.phase) == "London Waterloo")
+        #expect(second.servedFromCache != nil, "a board served from disk must state its age")
+    }
 }
 
 @Suite("Favourites", .serialized)

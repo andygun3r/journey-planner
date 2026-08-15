@@ -283,6 +283,23 @@ struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
+/// The primary action inside a `HeroCard`.
+///
+/// `PrimaryButtonStyle` is a navy capsule, which on a navy card is 1.00:1 —
+/// the button disappears entirely. This inverts it: white ground, navy text.
+struct OnNavyButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(Palette.railNavy)
+            .frame(minHeight: 48)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 18)
+            .background(Palette.onNavy.opacity(configuration.isPressed ? 0.82 : 1))
+            .clipShape(Capsule())
+    }
+}
+
 /// Standard screen chrome: scrolling content on the platform background, with
 /// the navy navigation bar.
 /// Sets a navigation title only when there is one to set.
@@ -378,8 +395,10 @@ extension EnvironmentValues {
 /// there so every `StatusPill` beneath picks it up.
 struct StrengthenCuesFromSystem: ViewModifier {
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiate
+    /// The account preference, OR'd on top so either source can turn cues on.
+    var preference = false
 
     func body(content: Content) -> some View {
-        content.environment(\.strengthenCues, differentiate)
+        content.environment(\.strengthenCues, differentiate || preference)
     }
 }

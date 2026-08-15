@@ -253,9 +253,12 @@ struct BoardsView: View {
     private var content: some View {
         switch model.phase {
         case .idle:
+            // The tab bar was the app's entire onboarding — nothing anywhere
+            // said what Signaller is before you signed in. Lead with the
+            // answer, per the brand voice: no hedging, no welcome copy.
             EmptyStateCard(
                 title: "Pick a station",
-                message: "Live departures, platforms and delays.",
+                message: "Live departures, real platforms and where each train actually is.",
                 systemImage: "clock"
             )
         case .loading:

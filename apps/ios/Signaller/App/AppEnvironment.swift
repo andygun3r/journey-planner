@@ -53,6 +53,14 @@ final class AppEnvironment {
     /// what went wrong rather than appearing to ignore the tap.
     var signInError: String?
 
+    /// The account's own "symbols with status colours" preference.
+    ///
+    /// OR'd with the system's Differentiate Without Colour at the root, so a
+    /// user can opt in from `/settings` without turning on the system toggle.
+    /// The Settings screen wrote this to the server and nothing ever read it
+    /// back, so the switch moved and the UI didn't change.
+    var strengthenCuesPreference = false
+
     init() {
         let auth = AuthStore()
         let api = APIClient(auth: auth)

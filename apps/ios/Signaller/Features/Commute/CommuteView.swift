@@ -171,8 +171,14 @@ struct CommuteView: View {
 
     // MARK: - Active leg
 
+    /// The commute you're on, or about to start.
+    ///
+    /// A `HeroCard` rather than a `Card`: this is the one thing the tab exists
+    /// to answer, and it previously carried the same weight as the "Holidays"
+    /// navigation row below it. DESIGN.md's rule — "let the personal (commute)
+    /// always outweigh the ambient (network) on a dashboard".
     private func activeCard(_ active: ActiveDashboard) -> some View {
-        Card {
+        HeroCard {
             HStack {
                 Text(active.commuteLabel).font(.title3.weight(.bold))
                 Spacer()
@@ -181,37 +187,50 @@ struct CommuteView: View {
 
             HStack(spacing: 8) {
                 Text(active.leg.originLabel).font(.body.weight(.semibold))
-                Image(systemName: "arrow.right").font(.caption).foregroundStyle(Palette.inkMuted)
+                Image(systemName: "arrow.right")
+                    .font(.caption)
+                    .foregroundStyle(Palette.onNavy.opacity(0.75))
+                    .accessibilityHidden(true)
                 Text(active.leg.destLabel).font(.body.weight(.semibold))
             }
 
             if let window = windowLabel(active.leg) {
-                Text(window).font(.callout).foregroundStyle(Palette.inkMuted)
+                Text(window).font(.callout).foregroundStyle(Palette.onNavy.opacity(0.85))
             }
 
             // A started run pins the direction so the dashboard can't switch
             // underneath someone who is already on the train.
             if let run = active.run {
+                // Signal Green is 3.03:1 on Rail Navy — it fails here, and the
+                // "Travelling" state is carried by the words and the symbol
+                // anyway, so on navy it goes white rather than a colour that
+                // can't be read.
                 HStack(spacing: 6) {
-                    Image(systemName: "figure.walk.motion").font(.caption)
+                    Image(systemName: "figure.walk.motion")
+                        .font(.caption)
+                        .accessibilityHidden(true)
                     Text("Travelling — \(run.originLabel) to \(run.destLabel)")
                         .font(.caption.weight(.semibold))
                 }
-                .foregroundStyle(Palette.signalGreen)
+                .foregroundStyle(Palette.onNavy)
 
                 Button("I've arrived") {
                     Task { await model.endRun(commuteId: active.commuteId, using: env.api) }
                 }
-                .buttonStyle(SecondaryButtonStyle())
+                .buttonStyle(OnNavyButtonStyle())
             } else {
+                // A navy button on a navy card is 1.00:1 — invisible. The
+                // action inverts to white on navy instead.
                 Button("Start commute") {
                     Task { await model.startRun(active, using: env.api) }
                 }
-                .buttonStyle(PrimaryButtonStyle())
+                .buttonStyle(OnNavyButtonStyle())
             }
 
             if let error = model.actionError {
-                Text(error).font(.caption).foregroundStyle(Palette.signalRed)
+                Text(error)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Palette.onNavy)
             }
         }
     }

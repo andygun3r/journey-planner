@@ -44,15 +44,33 @@ struct SignalMark: View {
         (78, 13, false),
     ]
 
+    /// The mark's own grid: 100 wide, 34 tall.
+    private static let gridWidth: CGFloat = 100
+    private static let gridHeight: CGFloat = 34
+
     var body: some View {
         Canvas { context, size in
-            let scale = min(size.width, size.height) / 100
+            // Fit the 100×34 grid inside whatever frame it's given, keeping
+            // the ratio and centring what's left over.
+            //
+            // This was `min(width, height) / 100`, which on the mark's natural
+            // 100:34 frame picks the *height* — so it drew at 34% scale,
+            // left-anchored and vertically off-centre. In the navigation bar
+            // that meant an 18×6pt mark in a 53×18pt slot, under the 12px
+            // minimum height the brand specifies.
+            let scale = min(size.width / Self.gridWidth, size.height / Self.gridHeight)
+            let drawnWidth = Self.gridWidth * scale
+            let drawnHeight = Self.gridHeight * scale
+            context.translateBy(
+                x: (size.width - drawnWidth) / 2,
+                y: (size.height - drawnHeight) / 2
+            )
             context.scaleBy(x: scale, y: scale)
 
             for block in Self.blocks {
                 let rect = CGRect(
-                    x: block.x - block.width / 2, y: 50 - 34 / 2,
-                    width: block.width, height: 34
+                    x: block.x - block.width / 2, y: 0,
+                    width: block.width, height: Self.gridHeight
                 )
                 context.fill(
                     Path(roundedRect: rect, cornerRadius: 4),

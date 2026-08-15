@@ -69,6 +69,19 @@ final class SettingsModel {
     }
 }
 
+/// The backend healthcheck, for the developer card at the bottom of Settings.
+@Observable
+@MainActor
+final class HealthModel {
+    private(set) var health: HealthResponse?
+
+    /// Failure leaves the rows blank rather than surfacing an error: this is
+    /// supporting detail on a preferences screen, not something a user acts on.
+    func refresh(using api: APIClient) async {
+        health = try? await api.health()
+    }
+}
+
 /// Account preferences: accessibility, which alerts to send, and account
 /// deletion.
 ///
@@ -77,6 +90,7 @@ final class SettingsModel {
 /// this screen, and until now nothing called it.
 struct SettingsView: View {
     @State private var model = SettingsModel()
+    @State private var health = HealthModel()
     @Environment(AppEnvironment.self) private var env
     @State private var confirmingDelete = false
 
@@ -88,8 +102,49 @@ struct SettingsView: View {
                 Text(error).font(.caption).foregroundStyle(Palette.signalRedText)
             }
             dangerCard
+            backendCard
         }
-        .task { await model.load(using: env.api) }
+        .task {
+            await model.load(using: env.api)
+            await health.refresh(using: env.api)
+        }
+        // Keeps the live UI in step with the stored preference — both on load
+        // and on every change, so flipping the switch visibly changes the
+        // status pills instead of only writing to the server.
+        .onChange(of: model.accessibility.strengthenCues, initial: true) { _, on in
+            env.strengthenCuesPreference = on
+        }
+    }
+
+    // MARK: - Backend health (developer detail)
+
+    /// Postgres up, Redis up. This was the whole Status screen, which told a
+    /// passenger nothing; Status now carries punctuality and disruptions, and
+    /// the healthcheck lives here where developer detail belongs.
+    private var backendCard: some View {
+        Card {
+            LabelText("App backend")
+            Text(env.api.baseURL.absoluteString)
+                .font(.caption)
+                .foregroundStyle(Palette.inkMuted)
+                .textSelection(.enabled)
+
+            if let response = health.health {
+                StatusRow(label: "Postgres", ok: response.postgres)
+                StatusRow(label: "Redis", ok: response.redis)
+                StatusRow(label: "Schema", ok: response.schema)
+                if let timetable = response.timetable {
+                    StatusRow(label: "Timetable", ok: timetable.ok)
+                    if let summary = timetable.summary {
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(
+                                timetable.stale == true ? Palette.signalAmber : Palette.inkMuted
+                            )
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Accessibility

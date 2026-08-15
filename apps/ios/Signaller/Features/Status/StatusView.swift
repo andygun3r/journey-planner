@@ -5,7 +5,6 @@ import SwiftUI
 @MainActor
 final class StatusModel {
     private(set) var status: NetworkStatus?
-    private(set) var health: HealthResponse?
     private(set) var error: APIError?
     private(set) var loading = false
 
@@ -13,8 +12,6 @@ final class StatusModel {
         loading = true
         defer { loading = false }
 
-        // Network status is the answer people came for; the healthcheck is
-        // supporting detail, so a failure in one must not hide the other.
         do {
             status = try await api.networkStatus()
             error = nil
@@ -25,8 +22,6 @@ final class StatusModel {
             status = nil
             self.error = .transport(error.localizedDescription)
         }
-
-        health = try? await api.health()
     }
 }
 
@@ -67,8 +62,6 @@ struct StatusView: View {
                     retry: error.isRetryable ? { Task { await model.refresh(using: env.api) } } : nil
                 )
             }
-
-            backendCard
         }
         .task { await model.refresh(using: env.api) }
         .refreshable { await model.refresh(using: env.api) }
@@ -226,31 +219,4 @@ struct StatusView: View {
         .foregroundStyle(Palette.inkMuted)
     }
 
-    // MARK: - Backend health (developer detail)
-
-    private var backendCard: some View {
-        Card {
-            LabelText("App backend")
-            Text(env.api.baseURL.absoluteString)
-                .font(.caption)
-                .foregroundStyle(Palette.inkMuted)
-                .textSelection(.enabled)
-
-            if let health = model.health {
-                StatusRow(label: "Postgres", ok: health.postgres)
-                StatusRow(label: "Redis", ok: health.redis)
-                StatusRow(label: "Schema", ok: health.schema)
-                if let timetable = health.timetable {
-                    StatusRow(label: "Timetable", ok: timetable.ok)
-                    if let summary = timetable.summary {
-                        Text(summary)
-                            .font(.caption)
-                            .foregroundStyle(
-                                timetable.stale == true ? Palette.signalAmber : Palette.inkMuted
-                            )
-                    }
-                }
-            }
-        }
-    }
 }
