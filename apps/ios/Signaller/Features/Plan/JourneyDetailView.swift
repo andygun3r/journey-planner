@@ -29,6 +29,12 @@ struct JourneyDetailView: View {
                     .monospacedDigit()
                 Spacer()
             }
+            // Without this VoiceOver reads "07:31, 09:14" with no relationship
+            // between the two — the arrow carries it visually and says nothing.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+                "Departs \(journey.effectiveDeparture.hhmm), arrives \(journey.effectiveArrival.hhmm)"
+            )
             HStack {
                 StatusPill(
                     StatusFormatting.journeyLabel(
@@ -64,10 +70,13 @@ struct JourneyDetailView: View {
     private func changeRow(from previous: JourneyLeg, to next: JourneyLeg) -> some View {
         let minutes = Int(next.departs.timeIntervalSince(previous.arrives) / 60)
         return HStack(spacing: 8) {
+            // The adjacent text already says "Stay on board" or "Change at…",
+            // so labelling this icon too would just make VoiceOver repeat itself.
             Image(systemName: next.staySeated ? "person.fill.checkmark" : "arrow.triangle.swap")
                 .font(.caption)
                 .foregroundStyle(Palette.inkMuted)
                 .frame(width: 16)
+                .accessibilityHidden(true)
             Text(next.staySeated
                  ? "Stay on board · \(minutes) min"
                  : "Change at \(previous.destName) · \(minutes) min")

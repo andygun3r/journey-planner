@@ -66,10 +66,14 @@ struct JourneyRow: View {
 
     private func legLine(_ leg: JourneyLeg) -> some View {
         HStack(spacing: 8) {
+            // The icon is the only thing distinguishing a walk from a train,
+            // so it has to be spoken — but as part of the line's sentence,
+            // not as a separate stop.
             Image(systemName: leg.isWalk ? "figure.walk" : "tram.fill")
                 .font(.caption)
                 .foregroundStyle(Palette.inkMuted)
                 .frame(width: 16)
+                .accessibilityHidden(true)
             Text("\(leg.departs.hhmm) \(leg.originName) to \(leg.destName)")
                 .font(.callout)
                 .monospacedDigit()
@@ -77,6 +81,14 @@ struct JourneyRow: View {
                 .foregroundStyle(leg.cancelled ? Palette.signalRed : Palette.ink)
             Spacer(minLength: 0)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(legDescription(leg))
+    }
+
+    private func legDescription(_ leg: JourneyLeg) -> String {
+        let mode = leg.isWalk ? "Walk" : "Train"
+        let base = "\(mode) at \(leg.departs.hhmm), \(leg.originName) to \(leg.destName)"
+        return leg.cancelled ? "\(base). Cancelled" : base
     }
 
     private var summaryLine: String {

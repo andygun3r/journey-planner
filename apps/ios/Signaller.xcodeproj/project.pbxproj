@@ -26,6 +26,7 @@
 		0A0000010000000000000161 /* Signaller/App/RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000111 /* Signaller/App/RootView.swift */; };
 		0A0000010000000000000192 /* Signaller/DesignSystem/SignalMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000191 /* Signaller/DesignSystem/SignalMark.swift */; };
 		0A0000010000000000000194 /* Signaller/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000193 /* Signaller/Assets.xcassets */; };
+		0A000001000000000000019F /* Signaller/DesignSystem/AccessibleLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000019E /* Signaller/DesignSystem/AccessibleLabels.swift */; };
 		0A0000010000000000000162 /* Signaller/DesignSystem/Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */; };
 		0A0000010000000000000163 /* Signaller/DesignSystem/Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */; };
 		0A0000010000000000000164 /* Signaller/DesignSystem/StatusFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000114 /* Signaller/DesignSystem/StatusFormatting.swift */; };
@@ -60,6 +61,7 @@
 		0A0000010000000000000199 /* SignallerTests/StubURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000198 /* SignallerTests/StubURLProtocol.swift */; };
 		0A000001000000000000019B /* SignallerTests/APIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000019A /* SignallerTests/APIClientTests.swift */; };
 		0A000001000000000000019D /* SignallerTests/ViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A000001000000000000019C /* SignallerTests/ViewModelTests.swift */; };
+		0A00000100000000000001A1 /* SignallerTests/AccessibleLabelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001A0 /* SignallerTests/AccessibleLabelsTests.swift */; };
 		0A0000010000000000000180 /* SignallerTests/ISO8601Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000130 /* SignallerTests/ISO8601Tests.swift */; };
 		0A0000010000000000000181 /* SignallerTests/SSEClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000131 /* SignallerTests/SSEClientTests.swift */; };
 		0A0000010000000000000182 /* SignallerTests/StatusFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000132 /* SignallerTests/StatusFormattingTests.swift */; };
@@ -124,6 +126,7 @@
 		0A0000010000000000000111 /* Signaller/App/RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/App/RootView.swift; sourceTree = "<group>"; };
 		0A0000010000000000000191 /* Signaller/DesignSystem/SignalMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/SignalMark.swift; sourceTree = "<group>"; };
 		0A0000010000000000000193 /* Signaller/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Signaller/Assets.xcassets; sourceTree = "<group>"; };
+		0A000001000000000000019E /* Signaller/DesignSystem/AccessibleLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/AccessibleLabels.swift; sourceTree = "<group>"; };
 		0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/Palette.swift; sourceTree = "<group>"; };
 		0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/Components.swift; sourceTree = "<group>"; };
 		0A0000010000000000000114 /* Signaller/DesignSystem/StatusFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/StatusFormatting.swift; sourceTree = "<group>"; };
@@ -158,6 +161,7 @@
 		0A0000010000000000000198 /* SignallerTests/StubURLProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/StubURLProtocol.swift; sourceTree = "<group>"; };
 		0A000001000000000000019A /* SignallerTests/APIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/APIClientTests.swift; sourceTree = "<group>"; };
 		0A000001000000000000019C /* SignallerTests/ViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/ViewModelTests.swift; sourceTree = "<group>"; };
+		0A00000100000000000001A0 /* SignallerTests/AccessibleLabelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/AccessibleLabelsTests.swift; sourceTree = "<group>"; };
 		0A0000010000000000000130 /* SignallerTests/ISO8601Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/ISO8601Tests.swift; sourceTree = "<group>"; };
 		0A0000010000000000000131 /* SignallerTests/SSEClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/SSEClientTests.swift; sourceTree = "<group>"; };
 		0A0000010000000000000132 /* SignallerTests/StatusFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignallerTests/StatusFormattingTests.swift; sourceTree = "<group>"; };
@@ -285,6 +289,7 @@
 			isa = PBXGroup;
 			children = (
 				0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */,
+				0A000001000000000000019E /* Signaller/DesignSystem/AccessibleLabels.swift */,
 				0A0000010000000000000191 /* Signaller/DesignSystem/SignalMark.swift */,
 				0A0000010000000000000193 /* Signaller/Assets.xcassets */,
 				0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */,
@@ -322,6 +327,7 @@
 			isa = PBXGroup;
 			children = (
 				0A0000010000000000000130 /* SignallerTests/ISO8601Tests.swift */,
+				0A00000100000000000001A0 /* SignallerTests/AccessibleLabelsTests.swift */,
 				0A000001000000000000019C /* SignallerTests/ViewModelTests.swift */,
 				0A000001000000000000019A /* SignallerTests/APIClientTests.swift */,
 				0A0000010000000000000198 /* SignallerTests/StubURLProtocol.swift */,
@@ -498,6 +504,7 @@
 				0A0000010000000000000160 /* Signaller/App/AppEnvironment.swift in Sources */,
 				0A0000010000000000000161 /* Signaller/App/RootView.swift in Sources */,
 				0A0000010000000000000162 /* Signaller/DesignSystem/Palette.swift in Sources */,
+				0A000001000000000000019F /* Signaller/DesignSystem/AccessibleLabels.swift in Sources */,
 				0A0000010000000000000192 /* Signaller/DesignSystem/SignalMark.swift in Sources */,
 				0A0000010000000000000163 /* Signaller/DesignSystem/Components.swift in Sources */,
 				0A0000010000000000000164 /* Signaller/DesignSystem/StatusFormatting.swift in Sources */,
@@ -537,6 +544,7 @@
 			files = (
 				0A0000010000000000000186 /* SignallerTests/Fixtures.swift in Sources */,
 				0A0000010000000000000180 /* SignallerTests/ISO8601Tests.swift in Sources */,
+				0A00000100000000000001A1 /* SignallerTests/AccessibleLabelsTests.swift in Sources */,
 				0A000001000000000000019D /* SignallerTests/ViewModelTests.swift in Sources */,
 				0A000001000000000000019B /* SignallerTests/APIClientTests.swift in Sources */,
 				0A0000010000000000000199 /* SignallerTests/StubURLProtocol.swift in Sources */,

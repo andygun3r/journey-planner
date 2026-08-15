@@ -27,8 +27,11 @@ struct LiveMapView: View {
     var body: some View {
         Map(position: $camera, selection: $selected) {
             ForEach(model.visibleTrains(in: visibleRegion)) { train in
+                // A headcode-or-empty-string title left unheadcoded trains as
+                // unlabelled tappable elements; the marker below carries the
+                // full spoken label.
                 Annotation(
-                    train.headcode ?? "",
+                    train.headcode ?? "Train",
                     coordinate: train.coordinate,
                     anchor: .center
                 ) {
@@ -131,13 +134,18 @@ struct LiveMapView: View {
     }
 }
 
-/// One train on the map. Colour carries lateness, but the callout always spells
-/// it out — colour is never the only cue.
+/// One train on the map.
+///
+/// Colour carries lateness, but never alone: the symbol changes with the tone
+/// too, so the map stays readable in greyscale and for anyone using
+/// Differentiate Without Colour. The old version relied on the tap-through
+/// callout to "spell it out", which is no help to a VoiceOver user who can't
+/// find an unlabelled marker to tap in the first place.
 private struct TrainMarker: View {
     let train: LiveTrain
 
     var body: some View {
-        Image(systemName: "tram.fill")
+        Image(systemName: symbolName)
             .font(.caption2.weight(.bold))
             .foregroundStyle(.white)
             .padding(5)
@@ -149,6 +157,18 @@ private struct TrainMarker: View {
             // A stale position is dimmed as well as labelled in the sheet.
             .opacity(train.isStale ? 0.5 : 1)
             .shadow(radius: 2)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(AccessibleLabels.liveTrain(train))
+            .accessibilityAddTraits(.isButton)
+    }
+
+    /// Shape as a second channel for status, alongside colour.
+    private var symbolName: String {
+        switch train.tone {
+        case .bad: return "exclamationmark.triangle.fill"
+        case .warn: return "exclamationmark.circle.fill"
+        case .good, .neutral: return "tram.fill"
+        }
     }
 }
 

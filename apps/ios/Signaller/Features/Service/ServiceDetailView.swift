@@ -335,6 +335,27 @@ private struct CallRow: View {
         }
         .padding(.vertical, 3)
         .opacity(call.progress == .departed ? 0.55 : 1)
+        // Progress through the journey was carried entirely by the icon and
+        // its colour, so VoiceOver got a station and a time but no sense of
+        // where the train actually is.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            AccessibleLabels.call(
+                stationName: call.name,
+                time: call.actual ?? call.expected ?? call.scheduled ?? "no time",
+                state: accessibleState,
+                platform: call.platform
+            )
+        )
+    }
+
+    private var accessibleState: AccessibleLabels.CallState {
+        if call.cancelled { return .cancelled }
+        switch call.progress {
+        case .departed: return .departed
+        case .current: return .current
+        default: return .upcoming
+        }
     }
 
     private var symbolName: String {

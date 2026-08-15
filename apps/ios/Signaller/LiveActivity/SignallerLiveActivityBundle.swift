@@ -13,7 +13,7 @@ struct SignallerLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: JourneyActivityAttributes.self) { context in
             LockScreenLiveActivityView(context: context)
-                .activityBackgroundTint(Color(red: 0.11, green: 0.14, blue: 0.25))
+                .activityBackgroundTint(ActivityPalette.railNavy)
                 .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in
             DynamicIsland {
@@ -38,13 +38,16 @@ struct SignallerLiveActivity: Widget {
             } compactLeading: {
                 Text(timeLabel(context.state.eta))
                     .font(.caption.weight(.bold))
+                    .accessibilityLabel("Arriving \(timeLabel(context.state.eta))")
             } compactTrailing: {
-                Circle()
-                    .fill(statusColor(context.state))
-                    .frame(width: 8, height: 8)
+                // Was a bare coloured circle — status by colour alone, on the
+                // surface the user actually sees most of the time. A delay
+                // figure is both more useful and more accessible than a dot.
+                compactStatus(context.state)
             } minimal: {
-                Circle()
-                    .fill(statusColor(context.state))
+                Image(systemName: statusSymbol(context.state))
+                    .foregroundStyle(statusColor(context.state))
+                    .accessibilityLabel(statusPhrase(context.state))
             }
         }
     }
@@ -87,11 +90,52 @@ struct LockScreenLiveActivityView: View {
     }
 }
 
+/// Delay shown as a figure where there's room, so the compact presentation
+/// carries information rather than a hue.
+@ViewBuilder
+private func compactStatus(_ state: JourneyActivityAttributes.ContentState) -> some View {
+    if let delay = state.delayMinutes, delay != 0 {
+        Text(delay > 0 ? "+\(delay)" : "\(delay)")
+            .font(.caption.weight(.bold))
+            .foregroundStyle(statusColor(state))
+            .accessibilityLabel(statusPhrase(state))
+    } else {
+        Image(systemName: statusSymbol(state))
+            .foregroundStyle(statusColor(state))
+            .accessibilityLabel(statusPhrase(state))
+    }
+}
+
+/// Shape as a second channel alongside colour.
+private func statusSymbol(_ state: JourneyActivityAttributes.ContentState) -> String {
+    guard let delay = state.delayMinutes, delay > 0 else { return "checkmark.circle.fill" }
+    return delay >= 10 ? "exclamationmark.triangle.fill" : "exclamationmark.circle.fill"
+}
+
+/// The status in words, for VoiceOver.
+private func statusPhrase(_ state: JourneyActivityAttributes.ContentState) -> String {
+    guard let delay = state.delayMinutes, delay != 0 else { return "On time" }
+    return delay > 0 ? "\(delay) minutes late" : "\(abs(delay)) minutes early"
+}
+
+/// Brand colours, matched to `Palette`.
+///
+/// These were hardcoded RGB triples that had already drifted from the brand
+/// values (0.11/0.14/0.25 against Rail Navy's #1C2340), which meant the
+/// extension bypassed the contrast tests entirely. The widget target can't see
+/// `DesignSystem/`, so they're defined once here from the same hex values.
+private enum ActivityPalette {
+    static let railNavy = Color(red: 0x1C / 255, green: 0x23 / 255, blue: 0x40 / 255)
+    static let signalRed = Color(red: 0xD6 / 255, green: 0x35 / 255, blue: 0x2C / 255)
+    static let signalAmber = Color(red: 0xA0 / 255, green: 0x55 / 255, blue: 0x00 / 255)
+    static let signalGreen = Color(red: 0x2E / 255, green: 0x7D / 255, blue: 0x46 / 255)
+}
+
 private func statusColor(_ state: JourneyActivityAttributes.ContentState) -> Color {
     if let delay = state.delayMinutes, delay > 0 {
-        return delay >= 10 ? Color(red: 0.84, green: 0.21, blue: 0.17) : Color(red: 0.63, green: 0.33, blue: 0.0)
+        return delay >= 10 ? ActivityPalette.signalRed : ActivityPalette.signalAmber
     }
-    return Color(red: 0.18, green: 0.49, blue: 0.27)
+    return ActivityPalette.signalGreen
 }
 
 private func timeLabel(_ date: Date) -> String {

@@ -192,8 +192,16 @@ struct AppChrome<Content: View>: View {
     }
 }
 
-/// Whether to pair status colours with a symbol. Mirrors the account's
-/// `strengthenCues` preference; wired to the server value in Phase 7.
+/// Whether to pair status colours with a symbol.
+///
+/// This defaulted to `false` and was never written by anything, so the symbol
+/// branch in `StatusPill` was dead code in every shipping build — the feature
+/// existed on paper only.
+///
+/// It now defaults to the system's own Differentiate Without Colour setting,
+/// which costs nothing and is immediately correct for every user who has it on.
+/// The account preference from `/api/settings/accessibility` is OR'd in on top
+/// once that screen exists, so a user can opt in without the system toggle.
 private struct StrengthenCuesKey: EnvironmentKey {
     static let defaultValue = false
 }
@@ -202,5 +210,17 @@ extension EnvironmentValues {
     var strengthenCues: Bool {
         get { self[StrengthenCuesKey.self] }
         set { self[StrengthenCuesKey.self] = newValue }
+    }
+}
+
+/// Turns on non-colour status cues when the system asks for them.
+///
+/// Applied once at the root; reads `accessibilityDifferentiateWithoutColor`
+/// there so every `StatusPill` beneath picks it up.
+struct StrengthenCuesFromSystem: ViewModifier {
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiate
+
+    func body(content: Content) -> some View {
+        content.environment(\.strengthenCues, differentiate)
     }
 }

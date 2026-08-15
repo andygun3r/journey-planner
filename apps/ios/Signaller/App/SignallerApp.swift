@@ -21,6 +21,9 @@ struct SignallerApp: App {
                 // Both are needed, and without them the app's hardcoded light
                 // surfaces met the system's white Dark Mode label colour.
                 .preferredColorScheme(.light)
+                // Status pills gain a symbol alongside their colour when the
+                // system asks for it.
+                .modifier(StrengthenCuesFromSystem())
                 // Magic-link callbacks and notification taps both land here.
                 .onOpenURL { env.handle(url: $0) }
                 .task {

@@ -46,9 +46,13 @@ struct DepartureRow: View {
                     HStack(spacing: 3) {
                         Text("Plat \(platform)").font(.callout.weight(.semibold))
                         // A platform change is the single most actionable thing
-                        // on a board — never leave it to colour alone.
+                        // on a board — never leave it to colour alone. The
+                        // row's own accessibility label says "changed" in
+                        // words, so the icon is decorative to VoiceOver.
                         if departure.platformChanged {
-                            Image(systemName: "exclamationmark.triangle.fill").font(.caption2)
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption2)
+                                .accessibilityHidden(true)
                         }
                     }
                     .foregroundStyle(departure.platformChanged ? Palette.signalAmber : Palette.ink)
@@ -70,6 +74,11 @@ struct DepartureRow: View {
                 positionLine(position)
             }
         }
+        // One VoiceOver stop per departure, not six to ten. The label is
+        // composed rather than left to `.combine`, which would read the
+        // struck-through time and the status pill in layout order.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(AccessibleLabels.departure(departure))
     }
 
     /// Where the train physically is, and how fresh that is.
