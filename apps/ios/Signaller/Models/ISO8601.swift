@@ -11,13 +11,19 @@ import Foundation
 ///
 /// Parse with fractional seconds first — that's the common case — then plain.
 enum ISO8601 {
-    private static let withFractionalSeconds: ISO8601DateFormatter = {
+    /// `ISO8601DateFormatter` isn't `Sendable`, but these two are configured
+    /// once at init and only ever read afterwards — `date(from:)` and
+    /// `string(from:)` don't mutate. `nonisolated(unsafe)` states that
+    /// deliberately rather than paying for a lock or rebuilding a formatter on
+    /// every call, which is what the previous computed-property version
+    /// effectively did.
+    nonisolated(unsafe) private static let withFractionalSeconds: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
 
-    private static let plain: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let plain: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return formatter
@@ -29,15 +35,23 @@ enum ISO8601 {
     }
 
     /// Serialises an instant for query parameters (e.g. `/api/journeys?when=`).
-    static func string(from date: Date) -> String {
-        plain.string(from: date)
+    ///
+    /// Whole seconds by default, which is what the API expects. The cache asks
+    /// for fractional seconds so a round trip preserves the exact instant.
+    static func string(from date: Date, withFractionalSeconds: Bool = false) -> String {
+        withFractionalSeconds ? self.withFractionalSeconds.string(from: date) : plain.string(from: date)
     }
 }
 
 extension JSONDecoder {
     /// A decoder that turns the backend's ISO strings into real `Date`s, so
     /// models never hold a `String` that merely looks like a time.
-    static var signaller: JSONDecoder {
+    ///
+    /// `let`, not `var`: as a computed property this built a fresh decoder and
+    /// installed a new closure on *every* access — once per API response, and
+    /// once per SSE event, which on the national train feed is several times a
+    /// second.
+    static let signaller: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
@@ -51,7 +65,23 @@ extension JSONDecoder {
             return date
         }
         return decoder
-    }
+    }()
+}
+
+extension JSONEncoder {
+    /// The mirror of `JSONDecoder.signaller`, so a cached response round-trips
+    /// back to exactly what the server sent.
+    ///
+    /// Encodes with fractional seconds because that's what the backend emits
+    /// for anything it generates itself, and the decoder tries that form first.
+    static let signaller: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(ISO8601.string(from: date, withFractionalSeconds: true))
+        }
+        return encoder
+    }()
 }
 
 extension Date {

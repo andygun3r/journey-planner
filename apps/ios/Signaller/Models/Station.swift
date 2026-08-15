@@ -7,7 +7,7 @@ import Foundation
 /// `apps/web/app/api/stations/route.ts`): this is a rail app, so a station must
 /// never lose its position in the list to a similarly-named shop. Render
 /// stations first, places under them.
-struct StationSearchResponse: Decodable {
+struct StationSearchResponse: Codable {
     let stations: [Station]
     let places: [Place]
 
@@ -28,14 +28,14 @@ struct StationSearchResponse: Decodable {
     var isEmpty: Bool { stations.isEmpty && places.isEmpty }
 }
 
-struct Station: Decodable, Identifiable, Hashable {
+struct Station: Codable, Identifiable, Hashable {
     var id: String { crs }
     let crs: String
     let name: String
 }
 
 /// A free-text address result from OS Places.
-struct Place: Decodable, Identifiable, Hashable {
+struct Place: Codable, Identifiable, Hashable {
     /// Stable OS identifier (UPRN where present).
     let id: String
     /// Full single-line address as OS formats it.

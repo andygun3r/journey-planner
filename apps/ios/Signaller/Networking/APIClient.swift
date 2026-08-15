@@ -92,6 +92,14 @@ final class APIClient {
         return StationSearchResponse(stations: stations, places: [])
     }
 
+    /// The whole station list, for the on-device typeahead index.
+    ///
+    /// Without `?q=` the route returns every station — a contract its own
+    /// comment calls "kept for callers that still embed it".
+    func allStations() async throws -> [Station] {
+        try await get("/api/stations")
+    }
+
     func service(id: String) async throws -> ServiceResponse {
         let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
         return try await get("/api/services/\(encoded)")

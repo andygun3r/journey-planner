@@ -19,18 +19,34 @@ final class CommuteModel {
 
     private var selectedCommuteId: String?
 
+    /// When the dashboard on screen was stored, if it came from disk.
+    private(set) var servedFromCache: Date?
+
     var unseenCount: Int { alerts.filter(\.isUnseen).count }
 
-    func load(using api: APIClient) async {
+    func load(using api: APIClient, cache: ResponseCache? = nil) async {
+        // Yesterday's dashboard beats an error card: the legs, times and
+        // stations are mostly the same, and it's labelled with its age.
+        if case .loading = phase, selectedCommuteId == nil, let cache,
+           let cached = await cache.load(DashboardResponse.self, for: .dashboard) {
+            phase = .loaded(cached.value.state)
+            servedFromCache = cached.storedAt
+        }
+
         do {
             let response = try await api.commuteDashboard(commuteId: selectedCommuteId)
             phase = .loaded(response.state)
+            servedFromCache = nil
+            if let cache, selectedCommuteId == nil {
+                await cache.store(response, for: .dashboard)
+            }
         } catch let error as APIError {
-            phase = .failed(error)
+            // Keep a cached dashboard rather than replacing it with a failure.
+            if servedFromCache == nil { phase = .failed(error) }
         } catch {
-            phase = .failed(.transport(error.localizedDescription))
+            if servedFromCache == nil { phase = .failed(.transport(error.localizedDescription)) }
         }
-        await loadAlerts(using: api)
+        await loadAlerts(using: api, cache: cache)
     }
 
     func select(commuteId: String, api: APIClient) async {
@@ -39,11 +55,15 @@ final class CommuteModel {
         await load(using: api)
     }
 
-    func loadAlerts(using api: APIClient) async {
+    func loadAlerts(using api: APIClient, cache: ResponseCache? = nil) async {
         // A failed alert fetch shouldn't blank the dashboard — keep whatever
-        // was last shown.
+        // was last shown, falling back to what was stored.
         if let response = try? await api.alerts() {
             alerts = response.alerts
+            if let cache { await cache.store(response, for: .alerts) }
+        } else if alerts.isEmpty, let cache,
+                  let cached = await cache.load(AlertsResponse.self, for: .alerts) {
+            alerts = cached.value.alerts
         }
     }
 

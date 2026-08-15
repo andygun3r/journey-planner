@@ -116,6 +116,32 @@ enum StatusFormatting {
         return rest == 0 ? "in \(hours)h" : "in \(hours)h \(rest)m"
     }
 
+    /// "Last updated 4 min ago" — how old cached data on screen is.
+    ///
+    /// Shown whenever the app is displaying a stored response because the
+    /// network didn't answer. Saying the age out loud is the whole reason the
+    /// cache stores a timestamp: silently serving a 40-minute-old board as
+    /// though it were live is exactly what this product must not do.
+    static func lastUpdated(secondsAgo seconds: Double) -> String {
+        let minutes = Int(seconds / 60)
+        if minutes <= 0 { return "Last updated just now" }
+        if minutes == 1 { return "Last updated 1 min ago" }
+        if minutes < 60 { return "Last updated \(minutes) min ago" }
+        let hours = minutes / 60
+        if hours == 1 { return "Last updated 1 hour ago" }
+        if hours < 24 { return "Last updated \(hours) hours ago" }
+        let days = hours / 24
+        return days == 1 ? "Last updated yesterday" : "Last updated \(days) days ago"
+    }
+
+    /// What to say when cached data is older than its screen's ceiling.
+    ///
+    /// A board past its ceiling is still worth showing — a timetable is better
+    /// than a blank screen — but it must stop implying live accuracy.
+    static func staleBoardNotice(secondsAgo seconds: Double) -> String {
+        "\(lastUpdated(secondsAgo: seconds)) · times may have changed"
+    }
+
     /// "reported 2 min ago" — how fresh a live position is.
     ///
     /// A stale position is still shown (a quiet feed isn't a vanished train),

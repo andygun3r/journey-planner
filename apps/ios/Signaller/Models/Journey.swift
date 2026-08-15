@@ -2,13 +2,13 @@ import Foundation
 
 /// Mirrors `JourneyView` / `JourneyLegView` in `apps/web/lib/journeys.ts`.
 
-struct JourneyResponse: Decodable {
+struct JourneyResponse: Codable {
     let ok: Bool
     let journeys: [Journey]?
     let reason: String?
 }
 
-struct Journey: Decodable, Identifiable, Hashable {
+struct Journey: Codable, Identifiable, Hashable {
     let id: String
     let departs: Date
     let arrives: Date
@@ -38,7 +38,7 @@ struct Journey: Decodable, Identifiable, Hashable {
 /// `status` is a closed set server-side. Decoding it as an enum with an
 /// `unknown` fallback means a new backend value degrades to "scheduled"
 /// instead of failing the whole response.
-enum JourneyStatus: String, Decodable, Hashable {
+enum JourneyStatus: String, Codable, Hashable {
     case onTime = "on-time"
     case delayed
     case cancelled
@@ -51,7 +51,7 @@ enum JourneyStatus: String, Decodable, Hashable {
     }
 }
 
-struct JourneyLeg: Decodable, Identifiable, Hashable {
+struct JourneyLeg: Codable, Identifiable, Hashable {
     /// Composite: the API doesn't give legs their own ids, and origin+dest+time
     /// is unique within a journey.
     var id: String { "\(originCrs)-\(destCrs)-\(departs.timeIntervalSince1970)" }

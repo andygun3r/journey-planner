@@ -72,7 +72,7 @@ struct AlertsView: View {
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        AppChrome(title: "Alerts") {
+        AppChrome(title: "Alerts", lazy: true) {
             if model.alerts.isEmpty, !model.loading, model.error == nil {
                 EmptyStateCard(
                     title: "No alerts",

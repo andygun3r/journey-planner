@@ -159,17 +159,30 @@ struct SecondaryButtonStyle: ButtonStyle {
 /// the navy navigation bar.
 struct AppChrome<Content: View>: View {
     private let title: String
+    private let lazy: Bool
     private let content: Content
 
-    init(title: String = "Signaller", @ViewBuilder content: () -> Content) {
+    /// `lazy: true` for screens with an unbounded list — alerts, a board's
+    /// departures, a service's calling points. Those built every row eagerly,
+    /// including offscreen ones, each a `Card` with its own shadow.
+    ///
+    /// Opt-in rather than the default: `LazyVStack` changes when `onAppear`
+    /// fires on children, which fixed-size screens don't need and shouldn't
+    /// have to think about.
+    init(title: String = "Signaller", lazy: Bool = false, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.lazy = lazy
         self.content = content()
     }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                content
+            Group {
+                if lazy {
+                    LazyVStack(alignment: .leading, spacing: 16) { content }
+                } else {
+                    VStack(alignment: .leading, spacing: 16) { content }
+                }
             }
             .padding(16)
         }

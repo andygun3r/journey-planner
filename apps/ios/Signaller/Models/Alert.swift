@@ -1,11 +1,11 @@
 import Foundation
 
-struct AlertsResponse: Decodable {
+struct AlertsResponse: Codable {
     let alerts: [AlertItem]
 }
 
 /// One commute alert. Mirrors the `alert` table.
-struct AlertItem: Decodable, Identifiable, Hashable {
+struct AlertItem: Codable, Identifiable, Hashable {
     let id: String
     let commuteId: String?
     /// cancellation | delay | kb_incident | pin_stale | pre_departure | network_disruption
@@ -53,12 +53,12 @@ struct AlertItem: Decodable, Identifiable, Hashable {
     }
 }
 
-struct FavouritesResponse: Decodable {
+struct FavouritesResponse: Codable {
     let favourites: [Favourite]
 }
 
 /// A saved from→to pair.
-struct Favourite: Decodable, Identifiable, Hashable {
+struct Favourite: Codable, Identifiable, Hashable {
     var id: String { "\(from)-\(to)" }
     let from: String
     let to: String

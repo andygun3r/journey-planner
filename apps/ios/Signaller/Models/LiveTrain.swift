@@ -2,7 +2,7 @@ import CoreLocation
 import Foundation
 
 /// A train on the live map, from `/api/live/trains`.
-struct LiveTrain: Decodable, Identifiable, Hashable {
+struct LiveTrain: Codable, Identifiable, Hashable {
     let id: String
     let lat: Double
     let lon: Double
@@ -57,14 +57,14 @@ struct LiveTrain: Decodable, Identifiable, Hashable {
 }
 
 /// The `snapshot` event: the full set, sent on connect and every reconnect.
-struct LiveTrainsSnapshot: Decodable {
+struct LiveTrainsSnapshot: Codable {
     let generatedAt: Date
     let count: Int
     let trains: [LiveTrain]
 }
 
 /// The `delta` event: what changed since the last message.
-struct LiveTrainsDelta: Decodable {
+struct LiveTrainsDelta: Codable {
     let generatedAt: Date
     let count: Int
     let upserted: [LiveTrain]

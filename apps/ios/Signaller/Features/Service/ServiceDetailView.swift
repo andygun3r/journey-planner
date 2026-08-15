@@ -78,7 +78,7 @@ struct ServiceDetailView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        AppChrome(title: departure.destinationName) {
+        AppChrome(title: departure.destinationName, lazy: true) {
             content
         }
         .task { await load() }

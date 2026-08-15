@@ -15,6 +15,12 @@ final class BoardModel {
     var station: JourneyEndpoint?
     private(set) var phase: Phase = .idle
 
+    /// When the board on screen was stored, if it came from the cache.
+    ///
+    /// Non-nil means "this is what we had last time, not what's true now" —
+    /// and the UI must say so out loud.
+    private(set) var servedFromCache: Date?
+
     /// Only a station can have a departure board. Gates the button so a
     /// non-station selection can't produce a tap that does nothing.
     var canLoad: Bool {
@@ -22,28 +28,47 @@ final class BoardModel {
         return false
     }
 
-    func load(using api: APIClient) async {
+    func load(using api: APIClient, cache: ResponseCache? = nil) async {
         guard case let .station(crs, _)? = station else {
             // Unreachable via the UI now that `canLoad` gates the button, but
             // a silent return here is what made the original bug invisible.
             phase = .empty(reason: "not-a-station")
             return
         }
-        if case .idle = phase { phase = .loading }
+
+        // Show the last known board immediately, so the screen has content
+        // while the network is tried — and something to keep if it fails.
+        if case .idle = phase {
+            phase = .loading
+            if let cache, let cached = await cache.load(BoardResponse.self, for: .board(crs: crs)),
+               let board = cached.value.board, !board.departures.isEmpty {
+                phase = .loaded(board)
+                servedFromCache = cached.storedAt
+            }
+        }
+
         do {
             let response = try await api.board(crs: crs)
             guard response.ok, let board = response.board else {
                 phase = .empty(reason: response.reason)
+                servedFromCache = nil
                 return
             }
             guard !board.departures.isEmpty else {
                 phase = .empty(reason: "no-departures")
+                servedFromCache = nil
                 return
             }
             phase = .loaded(board)
+            servedFromCache = nil
+            if let cache { await cache.store(response, for: .board(crs: crs)) }
         } catch let error as APIError {
+            // A failed refresh must not throw away a board the user can still
+            // use. Keep it, and let the age be stated rather than implied.
+            if case .loaded = phase, servedFromCache != nil { return }
             phase = .failed(error)
         } catch {
+            if case .loaded = phase, servedFromCache != nil { return }
             phase = .failed(.transport(error.localizedDescription))
         }
     }
@@ -54,7 +79,7 @@ struct BoardsView: View {
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        AppChrome(title: "Departures") {
+        AppChrome(title: "Departures", lazy: true) {
             Card {
                 // Stations only: a departure board for a postcode is
                 // meaningless, and offering one produced an enabled button
@@ -65,14 +90,14 @@ struct BoardsView: View {
                     includePlaces: false
                 )
                 Button("Show departures") {
-                    Task { await model.load(using: env.api) }
+                    Task { await model.load(using: env.api, cache: env.cache) }
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(!model.canLoad)
             }
             content
         }
-        .refreshable { await model.load(using: env.api) }
+        .refreshable { await model.load(using: env.api, cache: env.cache) }
         .navigationDestination(for: Departure.self) { departure in
             ServiceDetailView(departure: departure)
         }
@@ -88,7 +113,7 @@ struct BoardsView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
                 guard !Task.isCancelled else { return }
-                await model.load(using: env.api)
+                await model.load(using: env.api, cache: env.cache)
             }
         }
     }
@@ -134,14 +159,14 @@ struct BoardsView: View {
                     : StatusFormatting.boardFailureMessage(reason: reason),
                 systemImage: "clock.badge.questionmark"
             ) {
-                Task { await model.load(using: env.api) }
+                Task { await model.load(using: env.api, cache: env.cache) }
             }
         case let .failed(error):
             EmptyStateCard(
                 title: "Couldn't load that board",
                 message: error.errorDescription ?? "Something went wrong.",
                 systemImage: "exclamationmark.triangle",
-                retry: error.isRetryable ? { Task { await model.load(using: env.api) } } : nil
+                retry: error.isRetryable ? { Task { await model.load(using: env.api, cache: env.cache) } } : nil
             )
         }
     }
@@ -153,7 +178,17 @@ struct BoardsView: View {
                 Spacer()
                 // Says whether these are live times or the timetable — the
                 // board must not imply real-time data it hasn't got.
-                StatusPill(board.live ? "Live" : "Timetable", tone: board.live ? .good : .neutral)
+                StatusPill(
+                    model.servedFromCache != nil ? "Saved" : (board.live ? "Live" : "Timetable"),
+                    tone: model.servedFromCache != nil ? .warn : (board.live ? .good : .neutral)
+                )
+            }
+            // A board served from disk states its age. Showing a stored board
+            // as though it were current is the one thing this must not do.
+            if let storedAt = model.servedFromCache {
+                Text(StatusFormatting.staleBoardNotice(secondsAgo: -storedAt.timeIntervalSinceNow))
+                    .font(.caption)
+                    .foregroundStyle(Palette.signalAmber)
             }
             if let filter = board.filterName {
                 Text("Calling at \(filter)").font(.callout).foregroundStyle(Palette.inkMuted)

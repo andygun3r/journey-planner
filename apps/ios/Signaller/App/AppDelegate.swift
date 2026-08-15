@@ -35,7 +35,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     /// Show alerts even while the app is open. A commute disruption is exactly
     /// as urgent when you happen to be looking at the app as when you aren't.
-    func userNotificationCenter(
+    ///
+    /// `nonisolated` because `UNUserNotificationCenterDelegate` is: the system
+    /// calls these from its own context, and the parameters aren't `Sendable`,
+    /// so inheriting the class's main-actor isolation is what Swift 6 rejects.
+    /// The work that needs the main actor hops there explicitly.
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
@@ -43,7 +48,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     /// Tapping a notification opens what it's about.
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {

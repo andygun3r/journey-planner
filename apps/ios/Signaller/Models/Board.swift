@@ -7,13 +7,13 @@ import Foundation
 /// `position` — which is most of what makes the web board useful. They're all
 /// here now.
 
-struct BoardResponse: Decodable {
+struct BoardResponse: Codable {
     let ok: Bool
     let board: Board?
     let reason: String?
 }
 
-struct Board: Decodable, Hashable {
+struct Board: Codable, Hashable {
     let crs: String
     let stationName: String
     let generatedAt: Date
@@ -29,14 +29,14 @@ struct Board: Decodable, Hashable {
     let arrivals: [Departure]
 }
 
-struct Disruption: Decodable, Hashable, Identifiable {
+struct Disruption: Codable, Hashable, Identifiable {
     var id: String { (title ?? "") + (summary ?? "") }
     let title: String?
     let summary: String?
     let url: String?
 }
 
-struct Departure: Decodable, Identifiable, Hashable {
+struct Departure: Codable, Identifiable, Hashable {
     /// The API gives no stable row id, so fall back through the identifiers it
     /// does provide.
     var id: String {
@@ -118,7 +118,7 @@ struct Departure: Decodable, Identifiable, Hashable {
     }
 }
 
-struct Coach: Decodable, Hashable, Identifiable {
+struct Coach: Codable, Hashable, Identifiable {
     /// Stable for the life of the value.
     ///
     /// This was `number ?? UUID().uuidString` — a *computed* property, so an
@@ -150,7 +150,7 @@ struct Coach: Decodable, Hashable, Identifiable {
 }
 
 /// Live "where is it right now", from the Network Rail overlay.
-struct BoardPosition: Decodable, Hashable {
+struct BoardPosition: Codable, Hashable {
     let label: String
     /// Minutes late (+) / early (−) at the last report.
     let latenessMinutes: Double?

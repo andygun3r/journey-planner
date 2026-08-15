@@ -8,13 +8,13 @@ import Foundation
 /// display strings as `String` — `expected` is often not a time at all, so
 /// decoding it as a `Date` would throw on perfectly valid data.
 
-struct ServiceResponse: Decodable {
+struct ServiceResponse: Codable {
     let ok: Bool
     let service: ServiceDetail?
     let reason: String?
 }
 
-struct ServiceDetail: Decodable, Hashable {
+struct ServiceDetail: Codable, Hashable {
     let stationName: String
     let crs: String
     let operatorName: String?
@@ -45,7 +45,7 @@ struct ServiceDetail: Decodable, Hashable {
     }
 }
 
-struct ServiceCoach: Decodable, Hashable, Identifiable {
+struct ServiceCoach: Codable, Hashable, Identifiable {
     var id: String { number }
     let number: String
     let first: Bool
@@ -56,7 +56,7 @@ struct ServiceCoach: Decodable, Hashable, Identifiable {
 }
 
 /// Where a stop sits relative to the train's live progress.
-enum CallProgress: String, Decodable, Hashable {
+enum CallProgress: String, Codable, Hashable {
     case departed, current, upcoming, unknown
 
     init(from decoder: Decoder) throws {
@@ -65,7 +65,7 @@ enum CallProgress: String, Decodable, Hashable {
     }
 }
 
-struct ServiceCall: Decodable, Hashable, Identifiable {
+struct ServiceCall: Codable, Hashable, Identifiable {
     var id: String { (crs ?? name) + (scheduled ?? "") }
 
     let crs: String?
@@ -90,7 +90,7 @@ struct ServiceCall: Decodable, Hashable, Identifiable {
     let estimatedArrivalIso: Date?
 }
 
-struct ServicePortion: Decodable, Hashable, Identifiable {
+struct ServicePortion: Codable, Hashable, Identifiable {
     var id: String { kind + (terminusName ?? "") }
     /// `divides`: an onward portion. `joins`: one that merges into this.
     let kind: String
@@ -106,7 +106,7 @@ struct ServicePortion: Decodable, Hashable, Identifiable {
 /// `awaitingReport` is the important one: it separates "running but nothing has
 /// reported yet" from "we couldn't identify this train at all". Correlation is
 /// strict, so absence is routine and has to read as honest, not broken.
-enum PositionState: String, Decodable, Hashable {
+enum PositionState: String, Codable, Hashable {
     case tracked
     case awaitingReport = "awaiting-report"
     case notTracked = "not-tracked"
@@ -117,7 +117,7 @@ enum PositionState: String, Decodable, Hashable {
     }
 }
 
-struct ServiceProgress: Decodable, Hashable {
+struct ServiceProgress: Codable, Hashable {
     /// True when we resolved this service to a live Darwin train run.
     let tracking: Bool
     let positionState: PositionState

@@ -28,7 +28,13 @@ final class MapModel {
     }
 
     /// Everything the feed knows about, keyed by id for cheap delta updates.
-    private(set) var trains: [String: LiveTrain] = [:]
+    ///
+    /// The observer invalidates the thinning cache structurally, so a new
+    /// mutation site can't forget to — which would leave the map drawing a
+    /// stale set of markers.
+    private(set) var trains: [String: LiveTrain] = [:] {
+        didSet { version &+= 1 }
+    }
     private(set) var live: LiveChannel?
     private(set) var feed: Feed = .idle
 
@@ -51,36 +57,85 @@ final class MapModel {
     /// the national picture honest, and cells only get smaller as you zoom in,
     /// so detail arrives where you're looking.
     func visibleTrains(in region: MKCoordinateRegion) -> [LiveTrain] {
-        let inside = trainsInside(region)
-        guard inside.count > Self.visibleLimit else { return inside }
-
-        // Grid fine enough that a full grid is roughly the display cap.
-        let cells = max(1, Int(Double(Self.visibleLimit).squareRoot()))
-        let latStep = region.span.latitudeDelta / Double(cells)
-        let lonStep = region.span.longitudeDelta / Double(cells)
-
-        var chosen: [GridKey: LiveTrain] = [:]
-        for train in inside {
-            let key = GridKey(
-                x: Int32((train.lat / latStep).rounded(.down)),
-                y: Int32((train.lon / lonStep).rounded(.down))
-            )
-            // Within a cell, prefer the most disrupted train — if only one
-            // marker can be drawn there, it should be the one worth seeing.
-            if let existing = chosen[key],
-               (existing.latenessMinutes ?? 0) >= (train.latenessMinutes ?? 0) {
-                continue
-            }
-            chosen[key] = train
-        }
-        // Sorted before truncating: `Dictionary.values` has no defined order,
-        // so the drawn subset used to change between renders even when the
-        // data hadn't, and markers visibly flickered in and out.
-        return chosen.values
-            .sorted { $0.id < $1.id }
-            .prefix(Self.visibleLimit)
-            .map { $0 }
+        thinned(in: region).drawn
     }
+
+    /// What's drawn, and how many are in view altogether.
+    ///
+    /// Computed once and memoised. The view body calls `visibleTrains`,
+    /// `totalInView` and `hiddenCount` on every render, and `hiddenCount`
+    /// itself called the other two — so a single frame ran the region filter
+    /// four times and the grid pass three times over ~1,700 trains.
+    private func thinned(in region: MKCoordinateRegion) -> Thinned {
+        let key = CacheKey(region: region, version: version)
+        if let cached = thinnedCache, cached.key == key { return cached.value }
+
+        let inside = trainsInside(region)
+        let value: Thinned
+
+        if inside.count <= Self.visibleLimit {
+            value = Thinned(drawn: inside.sorted { $0.id < $1.id }, totalInView: inside.count)
+        } else {
+            // Grid fine enough that a full grid is roughly the display cap.
+            let cells = max(1, Int(Double(Self.visibleLimit).squareRoot()))
+            let latStep = region.span.latitudeDelta / Double(cells)
+            let lonStep = region.span.longitudeDelta / Double(cells)
+
+            var chosen: [GridKey: LiveTrain] = [:]
+            for train in inside {
+                let gridKey = GridKey(
+                    x: Int32((train.lat / latStep).rounded(.down)),
+                    y: Int32((train.lon / lonStep).rounded(.down))
+                )
+                // Within a cell, prefer the most disrupted train — if only one
+                // marker can be drawn there, it should be the one worth seeing.
+                if let existing = chosen[gridKey],
+                   (existing.latenessMinutes ?? 0) >= (train.latenessMinutes ?? 0) {
+                    continue
+                }
+                chosen[gridKey] = train
+            }
+            // Sorted before truncating: `Dictionary.values` has no defined
+            // order, so the drawn subset used to change between renders even
+            // when the data hadn't, and markers visibly flickered in and out.
+            let drawn = chosen.values
+                .sorted { $0.id < $1.id }
+                .prefix(Self.visibleLimit)
+                .map { $0 }
+            value = Thinned(drawn: drawn, totalInView: inside.count)
+        }
+
+        thinnedCache = (key, value)
+        return value
+    }
+
+    private struct Thinned {
+        let drawn: [LiveTrain]
+        let totalInView: Int
+    }
+
+    /// Invalidation: the visible region plus a counter bumped on every data
+    /// change. Comparing the train dictionary itself would cost more than the
+    /// work it saves.
+    private struct CacheKey: Equatable {
+        let latitude: Double
+        let longitude: Double
+        let latitudeDelta: Double
+        let longitudeDelta: Double
+        let version: Int
+
+        init(region: MKCoordinateRegion, version: Int) {
+            latitude = region.center.latitude
+            longitude = region.center.longitude
+            latitudeDelta = region.span.latitudeDelta
+            longitudeDelta = region.span.longitudeDelta
+            self.version = version
+        }
+    }
+
+    private var thinnedCache: (key: CacheKey, value: Thinned)?
+    /// Bumped whenever `trains` changes.
+    private var version = 0
 
     /// A grid cell. Replaces interpolating a `String` key per train per
     /// render — the hottest line in the app at national zoom.
@@ -103,12 +158,13 @@ final class MapModel {
     /// them out. The UI says so rather than silently showing a subset of a
     /// national feed.
     func hiddenCount(in region: MKCoordinateRegion) -> Int {
-        max(0, trainsInside(region).count - visibleTrains(in: region).count)
+        let result = thinned(in: region)
+        return max(0, result.totalInView - result.drawn.count)
     }
 
     /// Every train in view, drawn or not — the honest total for the status bar.
     func totalInView(in region: MKCoordinateRegion) -> Int {
-        trainsInside(region).count
+        thinned(in: region).totalInView
     }
 
     // MARK: - Live feed

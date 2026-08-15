@@ -14,6 +14,11 @@ final class AppEnvironment {
     let liveActivities: LiveActivityController
     let push: PushRegistrar
     let favourites = FavouritesModel()
+    /// Last-known-good responses, so a cold launch without signal still has
+    /// something to show.
+    let cache = ResponseCache()
+    /// The on-device station list, so the typeahead works offline.
+    let stations = StationIndex()
 
     /// Where a deep link wants the app to go, consumed by `RootView`.
     var pendingLink: DeepLink?
@@ -32,12 +37,27 @@ final class AppEnvironment {
         self.push = PushRegistrar(api: api, auth: auth)
     }
 
+    /// Loads the station index and clears out anything long-expired.
+    ///
+    /// Both are local and fast; the network refresh is fire-and-forget so a
+    /// dead connection never delays a launch.
+    func prepare() async {
+        await stations.load(cache: cache)
+        await cache.purge(olderThan: CacheAge.purge)
+        Task { await stations.refresh(using: api, cache: cache) }
+    }
+
     /// Signs out and stops alerts reaching this device.
     func signOut() async {
         // Unregister first: after signOut() there's no token to authenticate
         // the request with, so the row would be left behind.
         await push.unregister()
         await authClient.signOut()
+        // Cached dashboards, alerts and favourites belong to the account that
+        // fetched them — they must not survive into the next sign-in.
+        await cache.remove(.dashboard)
+        await cache.remove(.alerts)
+        await cache.remove(.favourites)
     }
 
     /// Entry point for `signaller://` and universal links.

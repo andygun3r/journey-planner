@@ -39,6 +39,9 @@ struct StationSearchField: View {
     @State private var query = ""
     @State private var results = StationSearchResponse(stations: [], places: [])
     @State private var searching = false
+    /// Set when the address lookup failed, so the missing places section is
+    /// explained rather than silently absent.
+    @State private var placesUnavailable = false
     @State private var searchTask: Task<Void, Never>?
     @FocusState private var focused: Bool
 
@@ -79,7 +82,7 @@ struct StationSearchField: View {
                     }
                 }
 
-            if focused, !results.isEmpty {
+            if focused, !results.isEmpty || placesUnavailable {
                 resultsList
             }
         }
@@ -114,6 +117,23 @@ struct StationSearchField: View {
                         choose(.place(id: place.id, label: place.shortLabel), display: place.shortLabel)
                     }
                 }
+            } else if placesUnavailable, includePlaces {
+                // Places come from a live, metered API and can't be bundled.
+                // Say the section is missing rather than letting it look as
+                // though no addresses matched.
+                if !results.stations.isEmpty { Divider().padding(.leading, 44) }
+                HStack(spacing: 12) {
+                    Image(systemName: "wifi.slash")
+                        .foregroundStyle(Palette.inkMuted)
+                        .frame(width: 20)
+                        .accessibilityHidden(true)
+                    Text("Addresses need a connection")
+                        .font(.caption)
+                        .foregroundStyle(Palette.inkMuted)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 40)
             }
         }
         .background(Palette.surface)
@@ -170,16 +190,32 @@ struct StationSearchField: View {
             return
         }
 
+        // Stations come from the on-device index immediately — no debounce, no
+        // round trip. This is what makes the field work with no signal, and
+        // it's also why it now feels instant when online.
+        let localStations = env.stations.search(trimmed)
+        results = StationSearchResponse(stations: localStations, places: [])
+
+        // Only places need the network, so only they wait.
+        guard includePlaces else { return }
+
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             searching = true
             defer { searching = false }
             // A failed lookup shouldn't clear what's on screen or shout at the
-            // user mid-keystroke; the field just stops offering suggestions.
-            if let found = try? await env.api.stations(query: trimmed, includePlaces: includePlaces),
-               !Task.isCancelled {
+            // user mid-keystroke; the local stations stay, and `placesOffline`
+            // says why the address section is missing rather than omitting it
+            // silently.
+            do {
+                let found = try await env.api.stations(query: trimmed, includePlaces: true)
+                guard !Task.isCancelled else { return }
                 results = found
+                placesUnavailable = false
+            } catch {
+                guard !Task.isCancelled else { return }
+                placesUnavailable = true
             }
         }
     }

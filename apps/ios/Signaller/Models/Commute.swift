@@ -6,12 +6,12 @@ import Foundation
 /// too: there's a leg running now, there's a commute but nothing scheduled, or
 /// there's no commute at all. Collapsing them would lose the *reason* nothing
 /// is showing, which is the most useful thing on the screen when it's empty.
-struct DashboardResponse: Decodable {
+struct DashboardResponse: Codable {
     let ok: Bool
     let state: DashboardState
 }
 
-enum DashboardState: Decodable {
+enum DashboardState: Codable {
     case active(ActiveDashboard)
     case noActive(NoActiveDashboard)
     case noCommute
@@ -29,9 +29,26 @@ enum DashboardState: Decodable {
             self = .noCommute
         }
     }
+
+    /// Re-emits the discriminator alongside the payload, in the same container
+    /// the decoder reads it from — so a cached dashboard round-trips back to
+    /// the same case rather than collapsing to `.noCommute`.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case let .active(dashboard):
+            try container.encode("active", forKey: .kind)
+            try dashboard.encode(to: encoder)
+        case let .noActive(dashboard):
+            try container.encode("no-active", forKey: .kind)
+            try dashboard.encode(to: encoder)
+        case .noCommute:
+            try container.encode("no-commute", forKey: .kind)
+        }
+    }
 }
 
-struct ActiveDashboard: Decodable {
+struct ActiveDashboard: Codable {
     let commuteId: String
     let commuteLabel: String
     let leg: ActiveLeg
@@ -48,11 +65,11 @@ struct ActiveDashboard: Decodable {
     let run: CommuteRun?
 }
 
-struct PinStaleNotice: Decodable {
+struct PinStaleNotice: Codable {
     let headline: String
 }
 
-struct NoActiveDashboard: Decodable {
+struct NoActiveDashboard: Codable {
     let commuteId: String
     let commuteLabel: String
     /// Why nothing is scheduled: rest-of-day, holiday, no-leg-today, skipped.
@@ -73,19 +90,19 @@ struct NoActiveDashboard: Decodable {
     }
 }
 
-struct QuickStart: Decodable {
+struct QuickStart: Codable {
     let homeCrs: String
     let homeLabel: String
     let workCrs: String
     let workLabel: String
 }
 
-struct OtherCommute: Decodable, Identifiable, Hashable {
+struct OtherCommute: Codable, Identifiable, Hashable {
     let id: String
     let label: String
 }
 
-struct ActiveLeg: Decodable {
+struct ActiveLeg: Codable {
     let legId: String?
     let dayOfWeek: Int
     /// "am" or "pm".
@@ -104,7 +121,7 @@ struct ActiveLeg: Decodable {
     var directionLabel: String { direction == "am" ? "To work" : "Home" }
 }
 
-struct PinnedLeg: Decodable, Identifiable, Hashable {
+struct PinnedLeg: Codable, Identifiable, Hashable {
     let id: String
     let direction: String
     let sequence: Int
@@ -122,7 +139,7 @@ struct PinnedLeg: Decodable, Identifiable, Hashable {
 
 /// A started commute — see the `commute_run` table for why the dashboard can't
 /// simply re-resolve the schedule once someone is travelling.
-struct CommuteRun: Decodable, Hashable {
+struct CommuteRun: Codable, Hashable {
     let id: String
     let commuteId: String
     let commuteLegId: String?
@@ -137,7 +154,7 @@ struct CommuteRun: Decodable, Hashable {
 }
 
 /// A commute, as returned by `GET /api/commute`.
-struct CommuteSummary: Decodable, Identifiable, Hashable {
+struct CommuteSummary: Codable, Identifiable, Hashable {
     let id: String
     let label: String
     let homeCrs: String
@@ -146,7 +163,7 @@ struct CommuteSummary: Decodable, Identifiable, Hashable {
     let legs: [CommuteLeg]
 }
 
-struct CommuteLeg: Decodable, Identifiable, Hashable {
+struct CommuteLeg: Codable, Identifiable, Hashable {
     let id: String?
     /// 0 = Monday … 6 = Sunday.
     let dayOfWeek: Int
@@ -163,7 +180,7 @@ struct CommuteLeg: Decodable, Identifiable, Hashable {
     }
 }
 
-struct CommuteWindow: Decodable, Hashable {
+struct CommuteWindow: Codable, Hashable {
     let start: String?
     let end: String?
 
@@ -173,7 +190,7 @@ struct CommuteWindow: Decodable, Hashable {
     }
 }
 
-struct CommuteListResponse: Decodable {
+struct CommuteListResponse: Codable {
     let ok: Bool
     let commutes: [CommuteSummary]
 }

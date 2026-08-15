@@ -5,7 +5,7 @@ import Foundation
 /// The payload is `null` when the train isn't correlated to a live run — which
 /// is routine, not a failure, so the model keeps that distinction rather than
 /// treating absence as an error.
-struct LivePosition: Decodable, Hashable {
+struct LivePosition: Codable, Hashable {
     /// Where the train is, in words.
     let label: String?
     let latitude: Double?
@@ -41,6 +41,24 @@ struct LivePosition: Decodable, Hashable {
         lastStopName = try c.decodeIfPresent(String.self, forKey: .lastStopName)
         nextStopName = try c.decodeIfPresent(String.self, forKey: .nextStopName)
         estimatedArrival = try c.decodeIfPresent(Date.self, forKey: .estimatedArrival)
+    }
+
+    /// Writes the canonical `latitude`/`longitude` spelling.
+    ///
+    /// The decoder accepts both that and the feed's `lat`/`lon`; there's no
+    /// reason to preserve which one arrived, so encoding settles on one.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(label, forKey: .label)
+        try c.encodeIfPresent(latitude, forKey: .latitude)
+        try c.encodeIfPresent(longitude, forKey: .longitude)
+        try c.encodeIfPresent(latenessMinutes, forKey: .latenessMinutes)
+        try c.encodeIfPresent(reportedAgoSeconds, forKey: .reportedAgoSeconds)
+        try c.encodeIfPresent(approaching, forKey: .approaching)
+        try c.encodeIfPresent(stale, forKey: .stale)
+        try c.encodeIfPresent(lastStopName, forKey: .lastStopName)
+        try c.encodeIfPresent(nextStopName, forKey: .nextStopName)
+        try c.encodeIfPresent(estimatedArrival, forKey: .estimatedArrival)
     }
 
     /// Status text for a Live Activity, honest about lateness either way.

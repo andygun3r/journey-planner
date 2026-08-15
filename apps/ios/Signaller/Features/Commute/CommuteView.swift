@@ -35,6 +35,20 @@ struct CommuteView: View {
 
     private var dashboard: some View {
         AppChrome(title: "Commute") {
+            // Shown when the dashboard came from disk because the network
+            // didn't answer — the legs are probably still right, but the
+            // times and disruptions may not be, and that has to be said.
+            if let storedAt = model.servedFromCache {
+                HStack(spacing: 6) {
+                    Image(systemName: "wifi.slash")
+                        .font(.caption)
+                        .accessibilityHidden(true)
+                    Text(StatusFormatting.lastUpdated(secondsAgo: -storedAt.timeIntervalSinceNow))
+                        .font(.caption)
+                }
+                .foregroundStyle(Palette.signalAmber)
+            }
+
             switch model.phase {
             case .loading:
                 Card {
@@ -76,17 +90,17 @@ struct CommuteView: View {
                     title: "Couldn't load your commute",
                     message: error.errorDescription ?? "Something went wrong.",
                     systemImage: "exclamationmark.triangle",
-                    retry: error.isRetryable ? { Task { await model.load(using: env.api) } } : nil
+                    retry: error.isRetryable ? { Task { await model.load(using: env.api, cache: env.cache) } } : nil
                 )
             }
 
             alertsSection
         }
         .task {
-            await model.load(using: env.api)
+            await model.load(using: env.api, cache: env.cache)
             model.startLive(api: env.api, auth: env.auth)
         }
-        .refreshable { await model.load(using: env.api) }
+        .refreshable { await model.load(using: env.api, cache: env.cache) }
         .onDisappear { model.stopLive() }
         // As on the map: a TabView keeps siblings alive, so `onDisappear`
         // alone would leave this stream open after switching tabs.
@@ -101,7 +115,7 @@ struct CommuteView: View {
             switch phase {
             case .active:
                 model.startLive(api: env.api, auth: env.auth)
-                Task { await model.load(using: env.api) }
+                Task { await model.load(using: env.api, cache: env.cache) }
             case .background, .inactive:
                 model.stopLive()
             @unknown default:
@@ -171,7 +185,7 @@ struct CommuteView: View {
                 message: "Can't work out your trains right now. Live alerts still apply.",
                 systemImage: "exclamationmark.triangle"
             ) {
-                Task { await model.load(using: env.api) }
+                Task { await model.load(using: env.api, cache: env.cache) }
             }
         } else if active.journeys.isEmpty {
             EmptyStateCard(

@@ -28,6 +28,8 @@ struct SignallerApp: App {
                 .onOpenURL { env.handle(url: $0) }
                 .task {
                     AppDelegate.environment = env
+                    // Station index and cache housekeeping, both local.
+                    await env.prepare()
                     await env.push.refreshAuthorizationStatus()
                     // A token that arrived before sign-in, or whose upload
                     // failed, gets another go on every launch.
