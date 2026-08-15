@@ -180,13 +180,12 @@ struct AppChrome<Content: View>: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         // The mark rides in the navigation bar's trailing corner: the brand is
         // present on every screen without a second header band eating vertical
-        // space that belongs to departure times. Inverted, because the bar is
-        // Rail Navy — a navy arm on a navy ground merges with it and the mark
-        // stops reading as a signal.
+        // space that belongs to departure times. Sized by height at the mark's
+        // own 100:34 ratio — a square frame would letterbox it.
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                SignalMark(inverted: true)
-                    .frame(width: 32, height: 32)
+                SignalMark()
+                    .frame(width: 18 * (100.0 / 34.0), height: 18)
                     .accessibilityHidden(true)
             }
         }

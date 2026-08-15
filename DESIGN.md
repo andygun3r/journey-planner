@@ -1,6 +1,6 @@
 ---
 name: Signaller
-description: A UK rail planner built around a real banner-repeater signal — Platform White ground, Rail Navy for authority and structure, Signal Red as the one spotlight colour reserved for action and live alert.
+description: A UK rail planner built around block sections of a running line — Platform White ground, Rail Navy for authority and structure, Signal Red as the one spotlight colour reserved for action, live alert, and the occupied block in the mark.
 colors:
   rail-navy: "#1c2340"
   rail-navy-deep: "#14161f"
@@ -89,11 +89,22 @@ components:
 **Creative North Star: "The Signal, Not the Chevron"**
 
 Signaller is named for the person who tells trains where to go — calm, precise,
-always in control. The mark follows the name literally: a real UK rail banner
-repeater signal, a white disc rimmed in navy with a solid navy arm fixed at the
-"off"/clear angle. That single honest object — not an abstract logotype, not a
-borrowed heritage symbol — sets the whole register: direct, unambiguous, built
-around signage rather than software chrome.
+always in control. The mark follows the name literally: three block sections of
+a running line, the middle one occupied. That is the signaller's core mental
+model — the line divided into blocks, one train per block, and the job is
+knowing which block is occupied. Direct, unambiguous, built around the
+instrument rather than software chrome.
+
+**The mark was replaced in August 2026.** The brand handoff's original mark was
+a banner repeater signal — a white disc rimmed in navy, arm fixed at the
+"off"/clear angle. Faithful to a real piece of rail equipment, and it worked in
+the website header where the wordmark and rail context sat beside it. As an app
+icon it failed: a circle with a 45° bar through it is the universal negation
+glyph, so with no supporting context it read as "no entry" — the opposite of a
+signal at clear. Clipping the arm at the disc edge made it worse, an
+unmistakable prohibition sign; extending the arm past the disc was the only
+thing keeping it legible at all. The block sections carry the same idea without
+a shape that says the opposite of what it means.
 
 This is the second visual world this project has worn. The first (Mainline: a
 red/blue duotone evoking the incoming Great British Railways double-arrow) is
@@ -225,19 +236,34 @@ about them needs elevation, they *are* the ground for that region.
 ## Shapes
 
 Cards and panels: 18px radius. Small chips and inputs: 10px. Primary buttons
-and status chips: fully pill-shaped (999px). The signal mark itself is a
-circle — the one shape in the system with no radius token, because it's a
-literal disc, not a rounded rectangle.
+and status chips: fully pill-shaped (999px). The signal mark's blocks carry a
+radius of 4 on their own 100-unit grid — proportionally the same generous
+rounding as everything else, so the mark belongs to the system's form language
+rather than sitting outside it.
 
 ## Components
 
 ### The Signal Mark (signature)
-A real UK rail banner repeater: a white disc, rimmed in navy (5% of diameter),
-with a solid navy arm (13% of diameter thick, 130% of diameter wide) fixed at
-45° — the "off"/clear position, the only angle it is ever shown at. Never
-recoloured, stretched, rotated off-angle, or thinned. Minimum size 24px
-digital; below that, the icon carries alone with no wordmark.
-[components/signal-mark.tsx](apps/web/components/signal-mark.tsx)
+Three block sections of a running line, the middle one occupied. Drawn on a
+100×34 grid: blocks are full height with a radius of 4; the clear blocks are 13
+wide at x=15 and x=78, and the occupied block is 26 wide at x=41.
+
+The occupied block is wider because a train occupies a section, not a point,
+and it sits slightly forward of centre so the mark reads left-to-right as
+travel rather than as a symmetrical ornament. Clear blocks take Rail Navy on
+light grounds and white on navy; the occupied block is Signal Red — the one
+place red appears without being an alert, because occupancy *is* the subject.
+A `showsOccupancy: false` variant drops to single-colour where red would break
+the Spotlight Rule.
+
+Never squashed into a square frame: size it by height and let the 100:34 ratio
+follow. Minimum height 12px digital; below that it stops separating into three
+blocks.
+
+Kept identical across three implementations, so it can never drift:
+[signal-mark.tsx](apps/web/components/signal-mark.tsx) ·
+[SignalMark.swift](apps/ios/Signaller/DesignSystem/SignalMark.swift) ·
+[generate-icon.py](apps/ios/Tools/generate-icon.py) (app icon + launch mark)
 
 ### Buttons
 - **Shape:** Pill (999px radius), 48px min height.
@@ -311,7 +337,7 @@ in one glance.
 - **Do** give mobile a fixed bottom tab bar with icon + label and a Signal Red
   live-alert dot.
 - **Do** round every corner generously — pill buttons/chips, 18px cards, 10px
-  inputs — except the mark itself, which is a true circle.
+  inputs, and the mark's own blocks.
 - **Do** keep every signal chip paired with text stating the condition.
 - **Do** let the personal (commute) always outweigh the ambient (network) on
   a dashboard — network-wide status reads as a quiet log beneath the user's
@@ -322,8 +348,9 @@ in one glance.
   pointing; Rail Navy is structure, not decoration.
 - **Don't** ship a dark theme, a `prefers-color-scheme` switch, or a toggle —
   there is exactly one theme.
-- **Don't** show the signal mark's arm at any angle but 45°, recolour it, or
-  thin its stroke.
+- **Don't** squash the mark into a square frame, recolour its clear blocks, or
+  change the occupied block's position or width — the wider block forward of
+  centre is what makes it read as a train in a section.
 - **Don't** reintroduce the double-arrow mark or Rail Blue from the previous
   (Mainline) world — this is a full replacement, not a re-tint.
 - **Don't** square off corners; 18px/10px/pill is the form language.

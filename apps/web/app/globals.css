@@ -138,8 +138,10 @@ a {
 }
 
 .wordmark-mark {
-  width: 1.6rem;
-  height: 1.6rem;
+  /* The mark is 100x34, so it's sized by height and given its own ratio —
+     a square frame letterboxes it. */
+  height: 1.1rem;
+  width: calc(1.1rem * (100 / 34));
   flex: none;
   position: relative;
 }
