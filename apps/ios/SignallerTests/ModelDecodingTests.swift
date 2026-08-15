@@ -156,3 +156,77 @@ struct LiveTrainTests {
         #expect(try train(1200).isStale)
     }
 }
+
+/// Network status: the passenger-facing counterpart to the healthcheck.
+///
+/// Decoded against a real capture, which is how the shape gets pinned — the
+/// `timetable`-as-object mismatch in the parity work was found exactly this way.
+@Suite("Network status")
+struct NetworkStatusTests {
+    @Test("the status payload decodes")
+    func decodes() throws {
+        let status = try Fixtures.load("status", as: NetworkStatus.self)
+        #expect(status.national.code == "NATIONAL")
+        #expect(!status.operators.isEmpty)
+        #expect(!status.tflLines.isEmpty)
+    }
+
+    @Test("status maps to a tone and words, never colour alone")
+    func toneAndWording() throws {
+        let status = try Fixtures.load("status", as: NetworkStatus.self)
+        for performance in status.operators {
+            #expect(!performance.statusLabel.isEmpty)
+        }
+        // An unknown status must not silently read as good.
+        let unknown = try JSONDecoder.signaller.decode(
+            OperatorPerformance.self,
+            from: Data(#"{"code":"XX","name":"Test"}"#.utf8)
+        )
+        #expect(unknown.tone == .neutral)
+        #expect(unknown.statusLabel == "No data")
+        #expect(unknown.ppmLabel == nil)
+    }
+
+    @Test("a PPM always carries its sample size")
+    func sampleSize() throws {
+        let status = try Fixtures.load("status", as: NetworkStatus.self)
+        // A percentage from five trains is not the same claim as one from
+        // eight thousand, so the UI states the sample.
+        #expect(status.national.sampleLabel != nil)
+        let tiny = try JSONDecoder.signaller.decode(
+            OperatorPerformance.self,
+            from: Data(#"{"code":"XX","name":"Test","total":1,"ppm":40}"#.utf8)
+        )
+        #expect(tiny.sampleLabel == "1 train")
+    }
+
+    @Test("TfL severity maps to a tone")
+    func tflSeverity() throws {
+        func line(_ severity: Int) throws -> TflLineStatus {
+            try JSONDecoder.signaller.decode(
+                TflLineStatus.self,
+                from: Data(#"""
+                {"lineId":"x","lineName":"X","statusSeverity":\#(severity),
+                "statusSeverityDescription":"D"}
+                """#.utf8)
+            )
+        }
+        #expect(try line(10).isGood)
+        #expect(try line(10).tone == .good)
+        #expect(try !line(6).isGood)
+        #expect(try line(6).tone == .warn)
+        #expect(try line(2).tone == .bad)
+    }
+
+    @Test("engineering works keep a stable identity without a server id")
+    func engineeringIdentity() throws {
+        let work = try JSONDecoder.signaller.decode(
+            EngineeringWork.self,
+            from: Data(#"{"summary":"Track renewal","startDate":"2026-08-20"}"#.utf8)
+        )
+        // Must not be a fresh UUID per access — that's the Coach.id mistake,
+        // which breaks ForEach identity on every render.
+        #expect(work.id == work.id)
+        #expect(!work.id.isEmpty)
+    }
+}

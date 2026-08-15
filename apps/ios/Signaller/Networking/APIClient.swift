@@ -109,6 +109,12 @@ final class APIClient {
         try await get("/api/health")
     }
 
+    /// Network-wide punctuality, operator performance, engineering works and
+    /// TfL line status — the passenger-facing counterpart to `/api/health`.
+    func networkStatus() async throws -> NetworkStatus {
+        try await get("/api/status")
+    }
+
     /// One-shot poll of every tracked train. The SSE stream at
     /// `/api/live/trains` is the normal source; this is the documented
     /// fallback for a deployment with no Redis.

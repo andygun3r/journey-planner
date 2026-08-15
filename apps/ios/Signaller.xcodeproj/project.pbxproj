@@ -36,6 +36,7 @@
 		0A00000100000000000001B7 /* Signaller/Models/CommuteOverride.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001B6 /* Signaller/Models/CommuteOverride.swift */; };
 		0A00000100000000000001B9 /* Signaller/Features/Commute/CommuteCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001B8 /* Signaller/Features/Commute/CommuteCalendarView.swift */; };
 		0A00000100000000000001BB /* Signaller/Features/Commute/HolidaysView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001BA /* Signaller/Features/Commute/HolidaysView.swift */; };
+		0A00000100000000000001BF /* Signaller/Models/NetworkStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A00000100000000000001BE /* Signaller/Models/NetworkStatus.swift */; };
 		0A0000010000000000000162 /* Signaller/DesignSystem/Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */; };
 		0A0000010000000000000163 /* Signaller/DesignSystem/Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */; };
 		0A0000010000000000000164 /* Signaller/DesignSystem/StatusFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A0000010000000000000114 /* Signaller/DesignSystem/StatusFormatting.swift */; };
@@ -149,6 +150,7 @@
 		0A00000100000000000001B6 /* Signaller/Models/CommuteOverride.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/CommuteOverride.swift; sourceTree = "<group>"; };
 		0A00000100000000000001B8 /* Signaller/Features/Commute/CommuteCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Commute/CommuteCalendarView.swift; sourceTree = "<group>"; };
 		0A00000100000000000001BA /* Signaller/Features/Commute/HolidaysView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Features/Commute/HolidaysView.swift; sourceTree = "<group>"; };
+		0A00000100000000000001BE /* Signaller/Models/NetworkStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/Models/NetworkStatus.swift; sourceTree = "<group>"; };
 		0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/Palette.swift; sourceTree = "<group>"; };
 		0A0000010000000000000113 /* Signaller/DesignSystem/Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/Components.swift; sourceTree = "<group>"; };
 		0A0000010000000000000114 /* Signaller/DesignSystem/StatusFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signaller/DesignSystem/StatusFormatting.swift; sourceTree = "<group>"; };
@@ -315,6 +317,7 @@
 			isa = PBXGroup;
 			children = (
 				0A0000010000000000000112 /* Signaller/DesignSystem/Palette.swift */,
+				0A00000100000000000001BE /* Signaller/Models/NetworkStatus.swift */,
 				0A00000100000000000001BA /* Signaller/Features/Commute/HolidaysView.swift */,
 				0A00000100000000000001B8 /* Signaller/Features/Commute/CommuteCalendarView.swift */,
 				0A00000100000000000001B6 /* Signaller/Models/CommuteOverride.swift */,
@@ -544,6 +547,7 @@
 				0A0000010000000000000160 /* Signaller/App/AppEnvironment.swift in Sources */,
 				0A0000010000000000000161 /* Signaller/App/RootView.swift in Sources */,
 				0A0000010000000000000162 /* Signaller/DesignSystem/Palette.swift in Sources */,
+				0A00000100000000000001BF /* Signaller/Models/NetworkStatus.swift in Sources */,
 				0A00000100000000000001BB /* Signaller/Features/Commute/HolidaysView.swift in Sources */,
 				0A00000100000000000001B9 /* Signaller/Features/Commute/CommuteCalendarView.swift in Sources */,
 				0A00000100000000000001B7 /* Signaller/Models/CommuteOverride.swift in Sources */,
